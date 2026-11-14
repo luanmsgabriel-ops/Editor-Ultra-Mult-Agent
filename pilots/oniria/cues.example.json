@@ -1,0 +1,17 @@
+{
+  "cues": [
+    {
+      "id": "arquivo_ID",
+      "root_id": "pasta_ID",
+      "source": "drive",
+      "name": "Efeito localizado no acervo",
+      "sequence_frame": 211,
+      "source_range_s": [0.15, 0.64],
+      "fade_s": [0.026, 0.085],
+      "anchor_type": "max_rms_10ms",
+      "filter": "highpass=f=160,lowpass=f=6000",
+      "target_rms_vs_bed_db": -15,
+      "rationale": "Acompanhar o flare com um efeito curto."
+    }
+  ]
+}

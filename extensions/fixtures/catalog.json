@@ -1,0 +1,7 @@
+{
+  "assets": [
+    {"id":"fx-01","source":"drive","root_id":"pasta-autorizada-fixture","family":"overlay","license_status":"approved","uses":["web"],"engines":["ffmpeg"],"mime_type":"video/quicktime","alpha":true,"tags":["passagem","dourado","contraluz"],"intensity":2,"duration_ms":530},
+    {"id":"fx-02","source":"drive","root_id":"pasta-autorizada-fixture","family":"overlay","license_status":"pending","uses":["web"],"engines":["ffmpeg"],"mime_type":"video/quicktime","alpha":true,"tags":["passagem"],"intensity":4,"duration_ms":660},
+    {"id":"fx-03","source":"drive","root_id":"pasta-nao-autorizada-fixture","family":"overlay","license_status":"approved","uses":["web"],"engines":["ffmpeg"],"mime_type":"video/quicktime","alpha":true,"tags":["passagem","dourado","contraluz"],"intensity":2,"duration_ms":630}
+  ]
+}

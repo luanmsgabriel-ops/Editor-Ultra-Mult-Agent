@@ -1,0 +1,12 @@
+{
+  "families": ["overlay"],
+  "engines": ["ffmpeg"],
+  "mime_types": ["video/quicktime"],
+  "use": "web",
+  "require_alpha": true,
+  "min_duration_ms": 500,
+  "required_tags": ["passagem"],
+  "preferred_tags": ["dourado"],
+  "shot_tags": ["contraluz"],
+  "intensity": 2
+}

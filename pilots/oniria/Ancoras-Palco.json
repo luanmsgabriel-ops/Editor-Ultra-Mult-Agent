@@ -1,0 +1,13 @@
+{
+  "origem": "328376.mp4",
+  "origem_frames": [0, 83],
+  "relogio": "24/1",
+  "resolucao": [720, 1280],
+  "quadro": "quatro cantos na ordem superior esquerdo, superior direito, inferior direito, inferior esquerdo",
+  "keyframes": {
+    "0": [[227, 873], [492, 873], [502, 988], [217, 988]],
+    "47": [[214, 865], [493, 865], [501, 987], [204, 987]],
+    "82": [[201, 859], [514, 859], [526, 997], [189, 997]]
+  },
+  "nota": "As posições 2D são manuais. O CG extrudado usa uma vista local estimada, sem solve de câmera da filmagem, holdout ou sombra física na plate."
+}

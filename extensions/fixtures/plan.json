@@ -1,0 +1,14 @@
+{
+ "fps":"24/1",
+ "duration_frames":48,
+ "use":"web",
+ "segments":[
+  {"asset_id":"bruto","sequence":[0,24],"source":[0,24],"source_fps":"24/1","source_frames":72,"forbidden":[[24,35]]},
+  {"asset_id":"bruto","sequence":[24,48],"source":[36,60],"source_fps":"24/1","source_frames":72,"forbidden":[[24,35]]}
+ ],
+ "effects":[{"asset_id":"fx-01","sequence":[19,30]}],
+ "cues":[
+  {"label":"Corte na batida","frame":24,"audio_sample":48000,"sample_rate":48000,"tolerance_frames":"1/2"},
+  {"label":"Ataque alinhado","kind":"effect","frame":24,"audio_sample":48000,"sample_rate":48000,"tolerance_frames":"1/2","sfx":{"trim_in":720,"source_attack_sample":6720,"timeline_start_sample":42000}}
+ ]
+}

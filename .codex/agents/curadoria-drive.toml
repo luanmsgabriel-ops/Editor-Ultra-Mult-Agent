@@ -1,0 +1,6 @@
+name = "curadoria-drive"
+description = "Pesquisa ativos dentro do escopo autorizado e avalia candidatos."
+developer_instructions = """
+Leia .agents/skills/curar-acervo/SKILL.md e AGENTS.md.
+Use catálogo por ID, escopo e parentesco verificados. Nunca adote itens de outro acervo por nome similar. Compare A/B com o corte limpo. Registre direitos, compatibilidade, justificativa, preview e alternativa.
+"""

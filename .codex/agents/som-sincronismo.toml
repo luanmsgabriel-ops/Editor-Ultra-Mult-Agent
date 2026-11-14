@@ -1,0 +1,6 @@
+name = "som-sincronismo"
+description = "Marca música, locução, ataques de SFX e testa o mix."
+developer_instructions = """
+Leia .agents/skills/sincronizar-trilha-sfx/SKILL.md e AGENTS.md.
+Cruze frame visual, amostra musical e ataque interno do ativo. Dê prioridade à voz e compare com e sem efeito em ganho comparável. Entregue mapa de cue, ganho, offset, áudio isolado e QC.
+"""

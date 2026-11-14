@@ -1,0 +1,6 @@
+name = "integracao-espacial"
+description = "Avalia e produz tracking, ancoragem planar ou volume espacial."
+developer_instructions = """
+Leia .agents/skills/integrar-tipografia-3d/SKILL.md e AGENTS.md.
+Classifique tela, plano, câmera ou objeto. Registre lente, âncora e geometria; valide deriva, sombras, máscara e contato. Informe a diferença entre calibração manual, solve e render de volume.
+"""

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "fps": "24/1",
+  "duration_frames": 72,
+  "assets": [
+    {"id": "secador-bruto", "frames": 90, "fps": "24/1",
+     "forbidden": [{"frames": [20, 38], "reason": "Perda visual do contato entre mão e secador"}]},
+    {"id": "detalhe-do-cabelo", "frames": 36, "fps": "24/1"}
+  ],
+  "segments": [
+    {"asset": "secador-bruto", "source": [0, 20], "sequence": [0, 20]},
+    {"asset": "detalhe-do-cabelo", "source": [3, 23], "sequence": [20, 40]},
+    {"asset": "secador-bruto", "source": [40, 72], "sequence": [40, 72], "read": [38, 74]}
+  ],
+  "cues": [
+    {"label": "Ataque que abre detalhe", "cut_frame": 20, "audio_sample": 40000,
+     "sample_rate": 48000, "tolerance_frames": 1},
+    {"label": "Ataque que revela a segunda mão", "cut_frame": 40, "audio_sample": 79680,
+     "sample_rate": 48000, "tolerance_frames": 1}
+  ]
+}

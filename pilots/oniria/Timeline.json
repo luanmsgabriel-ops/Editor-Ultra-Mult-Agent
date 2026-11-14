@@ -1,0 +1,564 @@
+{
+  "timeline_fps": "24/1",
+  "width": 1080,
+  "height": 1920,
+  "frames": 700,
+  "shots": [
+    {
+      "id": 328354,
+      "start": 0,
+      "in": 18,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Olho fechado. Abertura sem clarão para a ideia de sonho.",
+      "sync_cue": null,
+      "end": 19,
+      "out": 37
+    },
+    {
+      "id": 328397,
+      "start": 19,
+      "in": 29,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Pálpebra abre. Usar o gesto como acento; verificar a continuidade macro.",
+      "sync_cue": {
+        "second": 0.79,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 38,
+      "out": 48
+    },
+    {
+      "id": 328363,
+      "start": 38,
+      "in": 37,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Olhar firme. Entrega do gancho.",
+      "sync_cue": {
+        "second": 1.59,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 48,
+      "out": 47
+    },
+    {
+      "id": 328360,
+      "start": 48,
+      "in": 17,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Raccord de textura com os fios e o reflexo.",
+      "sync_cue": {
+        "second": 1.99,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 67,
+      "out": 36
+    },
+    {
+      "id": 328383,
+      "start": 67,
+      "in": 31,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Batom em macro. Primeira ação de preparação.",
+      "sync_cue": {
+        "second": 2.79,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 77,
+      "out": 41
+    },
+    {
+      "id": 328382,
+      "start": 77,
+      "in": 34,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Retrato dourado responde ao detalhe.",
+      "sync_cue": {
+        "second": 3.19,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 96,
+      "out": 53
+    },
+    {
+      "id": 328372,
+      "start": 96,
+      "in": 37,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Brinco e giro de cabeça.",
+      "sync_cue": {
+        "second": 3.99,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 105,
+      "out": 46
+    },
+    {
+      "id": 328358,
+      "start": 105,
+      "in": 36,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "A mão coloca o gesto em primeiro plano.",
+      "sync_cue": {
+        "second": 4.39,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 125,
+      "out": 56
+    },
+    {
+      "id": 328373,
+      "start": 125,
+      "in": 36,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Raccord de mão e textura da roupa.",
+      "sync_cue": {
+        "second": 5.19,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 134,
+      "out": 45
+    },
+    {
+      "id": 328378,
+      "start": 134,
+      "in": 26,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Detalhe da camisa bordada.",
+      "sync_cue": null,
+      "end": 144,
+      "out": 36
+    },
+    {
+      "id": 328377,
+      "start": 144,
+      "in": 38,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Revelar o rosto da camisa.",
+      "sync_cue": {
+        "second": 5.99,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 163,
+      "out": 57
+    },
+    {
+      "id": 328389,
+      "start": 163,
+      "in": 39,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Perfil com contraluz. O brilho conduz a segunda virada.",
+      "sync_cue": {
+        "second": 6.78,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 172,
+      "out": 48
+    },
+    {
+      "id": 328391,
+      "start": 172,
+      "in": 33,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Preservar o tempo do olhar lateral.",
+      "sync_cue": {
+        "second": 7.185,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 192,
+      "out": 53
+    },
+    {
+      "id": 328380,
+      "start": 192,
+      "in": 48,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Retrato com neon. Breve sorriso antes da imersão.",
+      "sync_cue": {
+        "second": 7.985,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 211,
+      "out": 67
+    },
+    {
+      "id": 328394,
+      "start": 211,
+      "in": 4,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Flare do próprio bruto. Passagem de rosto para luz.",
+      "sync_cue": {
+        "second": 8.785,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 220,
+      "out": 13
+    },
+    {
+      "id": 328374,
+      "start": 220,
+      "in": 20,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Tubos verticais em profundidade.",
+      "sync_cue": {
+        "second": 9.185,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 230,
+      "out": 30
+    },
+    {
+      "id": 328388,
+      "start": 230,
+      "in": 30,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Barras diagonais prolongam o motivo.",
+      "sync_cue": {
+        "second": 9.58,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 240,
+      "out": 40
+    },
+    {
+      "id": 328357,
+      "start": 240,
+      "in": 30,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Painéis âmbar, compartilhar a direção das linhas.",
+      "sync_cue": {
+        "second": 9.98,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 249,
+      "out": 39
+    },
+    {
+      "id": 328384,
+      "start": 249,
+      "in": 24,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Detalhe de mesa de luz.",
+      "sync_cue": {
+        "second": 10.38,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 259,
+      "out": 34
+    },
+    {
+      "id": 328387,
+      "start": 259,
+      "in": 40,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Contraplano de estrutura e holofotes.",
+      "sync_cue": {
+        "second": 10.78,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 268,
+      "out": 49
+    },
+    {
+      "id": 328356,
+      "start": 268,
+      "in": 22,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Primeiro plano de geometrias luminosas.",
+      "sync_cue": {
+        "second": 11.18,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 278,
+      "out": 32
+    },
+    {
+      "id": 328381,
+      "start": 278,
+      "in": 28,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Raccord das formas suspensas.",
+      "sync_cue": {
+        "second": 11.58,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 288,
+      "out": 38
+    },
+    {
+      "id": 328390,
+      "start": 288,
+      "in": 25,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Contraste de textura facetada e temperatura azul.",
+      "sync_cue": {
+        "second": 11.98,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 297,
+      "out": 34
+    },
+    {
+      "id": 328386,
+      "start": 297,
+      "in": 28,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Escultura de mãos. Raccord para o gesto humano.",
+      "sync_cue": {
+        "second": 12.38,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 316,
+      "out": 47
+    },
+    {
+      "id": 328379,
+      "start": 316,
+      "in": 31,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Silhueta em dança, braços levantados.",
+      "sync_cue": {
+        "second": 13.18,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 336,
+      "out": 51
+    },
+    {
+      "id": 328396,
+      "start": 336,
+      "in": 27,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "A multidão retribui com o braço levantado.",
+      "sync_cue": {
+        "second": 13.98,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 355,
+      "out": 46
+    },
+    {
+      "id": 328395,
+      "start": 355,
+      "in": 18,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Fumaça magenta anuncia primeira pirotecnia.",
+      "sync_cue": {
+        "second": 14.78,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 364,
+      "out": 27
+    },
+    {
+      "id": 328375,
+      "start": 364,
+      "in": 22,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Explosão rosa. Se houver matte, curto e sem mascarar o gesto.",
+      "sync_cue": {
+        "second": 15.18,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 374,
+      "out": 32
+    },
+    {
+      "id": 328393,
+      "start": 374,
+      "in": 22,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Letras douradas do bruto vistas como textura.",
+      "sync_cue": {
+        "second": 15.58,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 384,
+      "out": 32
+    },
+    {
+      "id": 328361,
+      "start": 384,
+      "in": 9,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Raccord diagonal para faíscas douradas.",
+      "sync_cue": {
+        "second": 15.98,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 393,
+      "out": 18
+    },
+    {
+      "id": 328362,
+      "start": 393,
+      "in": 13,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Coluna de fogo ascendente em dois tempos.",
+      "sync_cue": {
+        "second": 16.38,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 412,
+      "out": 32
+    },
+    {
+      "id": 328359,
+      "start": 412,
+      "in": 67,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "As partículas expandem em direção à câmera.",
+      "sync_cue": {
+        "second": 17.18,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 422,
+      "out": 77
+    },
+    {
+      "id": 328392,
+      "start": 422,
+      "in": 31,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Primeira escala máxima com leques e palco.",
+      "sync_cue": {
+        "second": 17.585,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 451,
+      "out": 60
+    },
+    {
+      "id": 328355,
+      "start": 451,
+      "in": 27,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Uma respiração de fumaça funciona como raccord.",
+      "sync_cue": {
+        "second": 18.785,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 460,
+      "out": 36
+    },
+    {
+      "id": 328400,
+      "start": 460,
+      "in": 26,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Clímax do festival, feixes e fogos.",
+      "sync_cue": {
+        "second": 19.185,
+        "band": "agudo",
+        "signal": "PYTI: tramo principal"
+      },
+      "end": 499,
+      "out": 65
+    },
+    {
+      "id": 328385,
+      "start": 499,
+      "in": 29,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Queda de energia em macro dourado.",
+      "sync_cue": null,
+      "end": 518,
+      "out": 48
+    },
+    {
+      "id": 328398,
+      "start": 518,
+      "in": 20,
+      "look": "native_rec709",
+      "stage_composite": false,
+      "direction": "Plano longo para locução completa, sem sincronismo labial.",
+      "sync_cue": null,
+      "end": 617,
+      "out": 119
+    },
+    {
+      "id": 328376,
+      "start": 617,
+      "in": 0,
+      "look": "native_rec709",
+      "stage_composite": true,
+      "direction": "Letreiro Oníria planar no palco limpo, marca e assinatura.",
+      "sync_cue": {
+        "second": 25.7,
+        "signal": "entrada do novo trecho da música"
+      },
+      "end": 700,
+      "out": 83
+    }
+  ],
+  "overlays": [],
+  "audio_splice_s": 25.7,
+  "title_attack_s": 26.035
+}
