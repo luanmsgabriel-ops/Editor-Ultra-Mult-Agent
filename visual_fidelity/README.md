@@ -110,3 +110,37 @@ python -m visual_fidelity blender-anchors cena.blend /projeto/projecao.json \
 ```
 
 Use `{"mode":"world","projection":"projecao.json"}`. Para COLMAP, use o modelo de texto PINHOLE sem distorção e JSON que mapeia nome de cada imagem para quadro no vídeo. Converta com `python -m visual_fidelity anchor colmap MODELO mapa.json cameras.json`. A âncora usa `{"mode":"world","cameras":"cameras.json","corners_3d":[...quatro pontos XYZ...]}`. As projeções se referem às mesmas imagens pinhole usadas para resolver a câmera. Dê novo intervalo após o corte. O motor não infere qual objeto da cena a direção quer selecionar.
+
+## Âncoras no corpo e órbita
+
+As âncoras corporais acompanham uma pessoa por plano. Use pontos como `head`, `left_shoulder`, `right_elbow`, `body_center`, `left_hip`, `right_knee`, `left_ankle`, `left_foot_index`, `right_wrist`, `right_palm` e `left_index_tip`. Os últimos pontos especializados de mão dependem do modelo complementar. Escolha uma pessoa por ID ou deixe o motor escolher um ID estável por plano. A resolução de identidade é local ao plano. O editor reinicia o vínculo após um corte.
+
+```sh
+python -m pip install mediapipe
+python -m visual_fidelity anchor render bruto.mp4 out/orbita.mp4 \
+  --plan examples/ancoras-corpo.json --font /assets/Roboto.ttf --fps 24 \
+  --body-model /modelos/pose_landmarker_lite.task
+```
+
+O [MediaPipe Pose Landmarker](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker) fornece pontos e máscara corporal. A opção `--gesture-model /modelos/gesture_recognizer.task` adiciona mãos detalhadas e gestos. Os modelos ficam no ambiente local. O comando abaixo serve para extrair e revisar pontos e máscaras sem renderizar.
+
+```sh
+python -m visual_fidelity body-pose bruto.mp4 /projeto/pose.json \
+  --fps 24 --persons 4 --model /modelos/pose_landmarker_lite.task \
+  --gesture-model /modelos/gesture_recognizer.task --masks /projeto/mascaras
+```
+
+Uma camada pode usar `"anchor":{"mode":"body","pose":"pose.json","landmark":"right_palm","relation":"above"}`. Use `trigger` para disparar a entrada só quando a mão abrir ou quando a articulação se mover. Exemplo: `"trigger":{"gesture":"Open_Palm","side":"right","min_frames":2}`. Para movimento numérico use `"trigger":{"motion":"rise","min_speed":0.3}`, com velocidade em fração de imagem por segundo. `"follow":false` fixa a camada na posição do disparo até o fim do plano ou intervalo. O relatório identifica o quadro do evento e os intervalos sem suporte.
+
+Com `"mode":"orbit"`, o motor usa um ponto do corpo como centro de uma órbita projetada. `layout:"ribbon"` distribui as letras na trajetória e `layout:"label"` gira uma legenda inteira. Ativos PNG com transparência também orbitam como unidade. Os mapas de opacidade permitem que o corpo esconda o trecho de trás. Com o MediaPipe integrado, as máscaras são produzidas automaticamente; para um JSON já extraído, inclua `"masks":"mascaras"` na âncora. Máscaras externas como as do SAM 2 usam o mesmo formato de arquivos. Na ausência de máscara, o motor mostra a parte da frente e registra necessidade de revisão. A órbita usa uma projeção parametrizada e a pose 2D em cada quadro.
+
+### Alternativa 2D com RTMW
+
+```sh
+python -m visual_fidelity body-rtmw --fps 24 run bruto.mp4 /projeto/pose.json \
+  --detector /modelos/yolox.onnx --pose /modelos/rtmw.onnx
+python -m visual_fidelity body-rtmw --fps 24 import predicoes.json /projeto/pose.json \
+  --size 720 1280
+```
+
+Instale `rtmlib` e `onnxruntime` no ambiente que executa `run`. Use pesos compatíveis de [OpenMMLab RTMW](https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose). O importador aceita a saída do MMPose WholeBody. Essas rotas fornecem pontos 2D; para gestos classificados e recorte, use MediaPipe ou máscaras locais. Exporte todos os dados no FPS usado na composição.

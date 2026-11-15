@@ -8,7 +8,7 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('typography','cap','asset','reconstruct','origins','measure','anchor','blender-anchors','glyph-profile'),
+    parser.add_argument('command', choices=('typography','cap','asset','reconstruct','origins','measure','anchor','blender-anchors','glyph-profile','body-pose','body-rtmw'),
                         help='Escolha a operação; use COMANDO --help para ver as opções.')
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -20,7 +20,7 @@ def main():
         command = [blender, '--background', '--factory-startup', '--threads', '6',
                    '--python-exit-code', '1', '--python', str(script), '--', *args.arguments]
     else:
-        module = {'origins':'origins.render','measure':'origins.measure','anchor':'video_anchor','glyph-profile':'glyph_profile'}.get(args.command,args.command)
+        module = {'origins':'origins.render','measure':'origins.measure','anchor':'video_anchor','glyph-profile':'glyph_profile','body-pose':'body_pose','body-rtmw':'body_rtmw'}.get(args.command,args.command)
         command = [sys.executable,'-m',f'visual_fidelity.{module}',*args.arguments]
     raise SystemExit(subprocess.call(command))
 

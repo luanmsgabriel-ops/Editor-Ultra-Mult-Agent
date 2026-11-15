@@ -1,11 +1,12 @@
 """Plan and render visual anchors on a new video using a local editing plan."""
 import argparse
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 import json
 from pathlib import Path
 import subprocess
+import sys
 from tempfile import TemporaryDirectory
 
 import cv2
@@ -16,6 +17,7 @@ from .anchor_graphics import composite, make_art, motion
 from .anchor_tracking import track_planar
 from .anchor_ocr import contains, detect, engine
 from .auto_placement import choose_anchor
+from .body_anchors import build_orbit_art, follow_quad, orbit_geometry, render_orbit, track_sidecar
 
 
 def load(path):
@@ -137,6 +139,10 @@ class Prepared:
     size: tuple
     glyph_profile: dict
     profile_aspect: float | None
+    body: dict = field(default_factory=dict)
+    body_spec: dict = field(default_factory=dict)
+    body_events: list = field(default_factory=list)
+    body_masks: Path | None = None
 
 
 def validate_effect(effect, root):
@@ -151,7 +157,7 @@ def validate_effect(effect, root):
         raise ValueError('color precisa ser uma lista RGB de três inteiros entre 0 e 255.')
 
 
-def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None):
+def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None, body_default=None):
     validate_effect(effect,root)
     first,last=interval(effect,fps)
     last=min(last,len(frames))
@@ -161,7 +167,7 @@ def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None):
     pixels=tuple(max(4,round(s*dimension)) for s,dimension in zip(size,resolution))
     requested=effect.get('anchor',{})
     mode=requested.get('mode','screen')
-    if mode not in {'screen','planar','world'}:
+    if mode not in {'screen','planar','world','body','orbit'}:
         raise ValueError(f'Modo de âncora desconhecido: {mode}')
     style=effect.get('animation','pop')
     profile_data=load(root/effect['glyph_profile']) if effect.get('glyph_profile') else {}
@@ -170,8 +176,34 @@ def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None):
     if aspect is not None and (not np.isfinite(aspect) or aspect<=0):
         raise ValueError('aspect em perfil tipográfico precisa ser positivo.')
     corners,palette={},{}
+    body,events={},[]
+    masks=None
     audit={'mode':mode,'frames':[first,last],'shots':[]}
-    if mode=='screen':
+    if mode in {'body','orbit'}:
+        pose=requested.get('pose')
+        if not pose and not body_default:
+            raise ValueError('Informe anchor.pose ou --body-model para rastreamento corporal.')
+        path=root/pose if pose else body_default[0]
+        masks_spec=effect.get('occlusion') or requested.get('masks')
+        masks=root/masks_spec if masks_spec else (body_default[1] if not pose and body_default else None)
+        data=load(path)
+        body,events=track_sidecar(data,first,last,cuts,fps,requested)
+        audit.update({'provider':data.get('provider','landmarks_json'),'landmark':requested.get('landmark','body_center'),
+                      'events':events,'persons':sorted({sample.person_id for sample in body.values()})})
+        if mode=='body':
+            for i,item in body.items():
+                mapped=follow_quad(item,resolution,size,requested)
+                if mapped is not None:
+                    corners[i]=mapped
+        else:
+            mask_frames=0
+            for i,item in body.items():
+                center,rx,ry=orbit_geometry(item,resolution,requested)
+                corners[i]=screen_quad(center/np.asarray(resolution),[2*rx/resolution[0],2*ry/resolution[1]])
+                mask_frames+=int(masks is not None and (masks/f'{i:06d}.png').is_file())
+            audit.update({'frames_with_occlusion_mask':mask_frames,
+                          'review_required':mask_frames<len(body)})
+    elif mode=='screen':
         previous=None
         boundaries=[first]+[index for index in cuts if first<index<last]+[last]
         for start,stop in zip(boundaries,boundaries[1:]):
@@ -258,13 +290,13 @@ def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None):
                   'animation':style,'tracked_frames':len(corners),'missing_frames':last-first-len(corners),
                   'sample_centers':{str(i): np.round(corners[i].mean(axis=0),5).tolist()
                                     for i in sorted(corners)[::max(1,len(corners)//6)]}})
-    if mode!='screen' and corners:
+    if mode in {'planar','world'} and corners:
         initial=corners[min(corners)]*resolution
         widths=[np.linalg.norm(initial[1]-initial[0]),np.linalg.norm(initial[2]-initial[3])]
         heights=[np.linalg.norm(initial[3]-initial[0]),np.linalg.norm(initial[2]-initial[1])]
         pixels=(max(4,min(resolution[0],round(np.mean(widths)))),
                 max(4,min(resolution[1],round(np.mean(heights)))))
-    return Prepared(effect,first,last,corners,palette,audit,pixels,glyph_profile,aspect)
+    return Prepared(effect,first,last,corners,palette,audit,pixels,glyph_profile,aspect,body,requested,events,masks)
 
 
 def occlusion_at(root, spec, index, shape):
@@ -294,18 +326,28 @@ def render(picture, destination, resolution, fps, layers, font, root):
                     continue
                 effect=layer.effect
                 color=tuple(effect.get('color',layer.palette.get(index,[246,248,249])))
-                profile_index=index-layer.first
+                starts=[n for n in layer.body_events if n<=index]
+                origin=starts[-1] if starts else layer.first
+                speed=max(1,round(float(effect.get('entrance_seconds',.23))*fps))
+                key=(layer_id,color)
+                if layer.report['mode']=='orbit':
+                    if key not in cache:
+                        cache[key]=build_orbit_art(effect,layer.body_spec,font,color,root)
+                    mask=occlusion_at(root,layer.body_masks,index,frame.shape[:2]) if layer.body_masks is not None else None
+                    opacity=1-(1-min(1.,(index-origin+1)/speed))**3
+                    render_orbit(frame,layer.body[index],layer.body_spec,cache[key],
+                                 (index-origin)/fps,color,mask,opacity)
+                    continue
+                profile_index=index-origin
                 roll=layer.glyph_profile
                 poses=poses_at(roll,profile_index,layer.last-layer.first)
-                key=(layer_id,color)
                 if poses is not None:
                     art=make_art(effect,layer.size,font,color,root,poses,layer.profile_aspect)
                 else:
                     if key not in cache:
                         cache[key]=make_art(effect,layer.size,font,color,root)
                     art=cache[key]
-                speed=max(1,round(float(effect.get('entrance_seconds',.23))*fps))
-                bounds, opacity=motion(layer.corners[index],(index-layer.first+1)/speed,
+                bounds, opacity=motion(layer.corners[index],(index-origin+1)/speed,
                                        effect.get('animation','pop'),
                                        fit_inside=layer.report['mode']=='screen')
                 mask=occlusion_at(root,effect['occlusion'],index,frame.shape[:2]) if effect.get('occlusion') else None
@@ -336,6 +378,10 @@ def main():
     run.add_argument('--font',type=Path)
     run.add_argument('--fps',type=int,default=30)
     run.add_argument('--report',type=Path)
+    run.add_argument('--body-model',type=Path,help='Modelo Pose Landmarker .task para âncoras sem JSON.')
+    run.add_argument('--gesture-model',type=Path,help='Modelo Gesture Recognizer .task opcional.')
+    run.add_argument('--pose-python',default=sys.executable,help='Python do ambiente com MediaPipe.')
+    run.add_argument('--body-persons',type=int,default=4)
     run.add_argument('--ocr-language',help='Idioma Tesseract já instalado para proteger texto existente.')
     imported=sub.add_parser('colmap')
     imported.add_argument('model',type=Path)
@@ -387,7 +433,21 @@ def main():
             if args.ocr_language:
                 binary=engine(args.ocr_language)
                 ocr=lru_cache(maxsize=512)(lambda i: detect(frames[i],binary,args.ocr_language))
-            layers=[prepare(effect,frames,cuts,args.fps,resolution,root,occupied,ocr) for effect in effects]
+            needs_body=any(e.get('anchor',{}).get('mode') in {'body','orbit'}
+                           and not e.get('anchor',{}).get('pose') for e in effects)
+            body_default=None
+            if needs_body and args.body_model:
+                body_data=Path(working)/'body.json'
+                masks=Path(working)/'masks'
+                cmd=[args.pose_python,'-m','visual_fidelity.body_pose',str(picture),str(body_data),
+                     '--model',str(args.body_model),'--fps',str(args.fps),'--persons',str(args.body_persons),
+                     '--masks',str(masks)]
+                if args.gesture_model:
+                    cmd+=['--gesture-model',str(args.gesture_model)]
+                subprocess.run(cmd,check=True)
+                body_default=(body_data,masks)
+            layers=[prepare(effect,frames,cuts,args.fps,resolution,root,occupied,ocr,body_default)
+                    for effect in effects]
             render(picture,args.output,resolution,args.fps,layers,args.font,root)
         report={'source':args.source.name,'fps':args.fps,'frames':len(frames),
                 'resolution':list(resolution),'shot_starts':cuts,'effects':[layer.report for layer in layers]}
