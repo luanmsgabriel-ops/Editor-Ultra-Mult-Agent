@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Cascata de três cards</title>
+  <style>
+    html,body{margin:0;background:#e7e4e8}
+    main{position:relative;overflow:hidden}
+    canvas{display:block}
+  </style>
+</head>
+<body>
+<main data-composition-id="main" data-no-timeline data-start="0" data-duration="__DURATION__"
+      data-width="720" data-height="1280" data-fps="30">
+  <canvas id="stage" width="720" height="1280"></canvas>
+</main>
+<script>
+const data=__TRACK_DATA__;
+const stage=document.getElementById("stage");
+const ctx=stage.getContext("2d");
+const layers=data.layers.map(layer=>{
+  const image=new Image();
+  image.src=layer.image;
+  return {...layer,image};
+});
+const ready=Promise.all(layers.map(layer=>layer.image.decode()));
+function renderAt(seconds){
+  const frame=Math.max(0,Math.min(Math.round(seconds*30),data.frameCount-1));
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle="#e7e4e8";
+  ctx.fillRect(0,0,stage.width,stage.height);
+  for(const layer of layers){
+    const pose=layer.frames[frame];
+    if(!pose)continue;
+    ctx.save();
+    ctx.setTransform(...pose.matrix);
+    ctx.globalAlpha=pose.alpha;
+    ctx.drawImage(layer.image,0,0);
+    ctx.restore();
+  }
+}
+window.addEventListener("hf-seek",event=>{
+  const task=ready.then(()=>renderAt(event.detail.time));
+  event.detail.waitUntil?.(task);
+});
+ready.then(()=>renderAt(0));
+</script>
+</body>
+</html>
