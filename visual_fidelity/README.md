@@ -171,3 +171,13 @@ python -m visual_fidelity overlay out/textura.mov --mask texto.png --size 720 12
 A transição produz a faixa visual e o áudio fica a cargo do plano de montagem. O LUT de demonstração é autoral em SDR. Em referências acabadas, um look pode ser refeito por aproximação visual; dados antes/depois alinhados permitem uma comparação mais fiel da transformação. O overlay aceita uma máscara PNG e exporta MOV com transparência ou MP4 de revisão.
 
 Veja [regras de movimento, auditoria de curvas e captura OBS](MOTION.md). Para som, exporte e catalogue o arquivo próprio separado do mix. Prefira alternativas de som cujo uso esteja documentado e marque cada ataque pela timeline. Registre fonte e método para reconstruir quando só houver o efeito misturado com voz ou música na referência.
+
+## Comparativo de reconstrução completa
+
+```bash
+python -m visual_fidelity timeline-qa referencia.mp4 reconstrucao.mp4 timeline.json relatorio.json --compare comparativo.mp4 --audio referencia
+```
+
+Forneça dois vídeos CFR no mesmo relógio e um JSON com `fps`, `frames` e `shots`. Cada cena possui `id`, `start` inteiro inclusivo e `end` inteiro exclusivo. As cenas devem cobrir o intervalo de quadros sem lacunas. O comando exporta CSV por quadro e JSON por cena. `--compare` compõe as imagens lado a lado com timecode, com áudio da referência, do render ou silencioso.
+
+O pico é medido numa janela de três quadros em cada direção. Confira as linhas sem pico pela reprodução. A diferença de luminância inclui a pessoa, a cor e os elementos da composição. Use os valores para localizar o que merece revisão visual.
