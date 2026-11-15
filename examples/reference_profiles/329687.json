@@ -1,0 +1,22 @@
+{
+  "reference_id": "329687",
+  "drive_folder_url": "https://drive.google.com/drive/folders/1kPgwgsaby5YUwEogAZVpJkVmolrhD5Z5",
+  "archive_filename": "Referencia-329687-Pacote-Completo.zip",
+  "archive_sha256": "3647d83fc284d9d08046842fcde046c1653cf42decb4019d0dc6f8229a3379af",
+  "manifest_filename": "bundle.json",
+  "assembly_map": "MAPA-DE-MONTAGEM.md",
+  "audited_files": 782,
+  "scenes": 14,
+  "base_reconstruction_visual_approval": "pending",
+  "clara_adaptation_visual_approval": "rejected",
+  "requirements": [
+    "Load original reference and preserved package before adaptation",
+    "Verify frozen assets and required bindings",
+    "Keep three glass panels, two foliage layers, lens path and finishing",
+    "Keep report/gift/computer sequence",
+    "Translate text via versioned derivatives without replacing panel geometry/material",
+    "Compare critical scenes before full render",
+    "Visual fidelity is not certified by integrity tests"
+  ],
+  "verifier_command": "python -m visual_fidelity reference-bundle verify bundle.json --root ROOT"
+}
