@@ -1,0 +1,32 @@
+{
+  "studio_editor": "0.8.0",
+  "motion_kit": "0.7.0",
+  "actual_engine_executed": true,
+  "source_seconds": 10.026667,
+  "output": {
+    "frames": 1135,
+    "fps": 24,
+    "duration_seconds": 47.291667,
+    "shots": 16,
+    "all_frames_decoded": true,
+    "all_black_frames": [],
+    "identical_adjacent_frames": []
+  },
+  "python_tests": {
+    "count": 90,
+    "result": "passed"
+  },
+  "review": {
+    "encoded_frame_samples": 46,
+    "full_perceptual_playback": false,
+    "user_approved": false,
+    "speech_source_clock": "Original clauses remapped without time stretch; visible recruitment speech remains continuous across shot722.",
+    "measured_recruitment_av_offset_seconds": 0.015
+  },
+  "limitations": [
+    "Extracted subject is a2D card",
+    "Physical3D passes reused from prior Cycles render",
+    "Fonts and motions are approximations",
+    "No pixel-identical likeness claim"
+  ]
+}
