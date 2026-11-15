@@ -62,3 +62,14 @@ As seis rejeições da revisão 329687 V6 são casos de regressão, não um esti
 Para recortar pessoa/cadeira e remontar em uma timeline híbrida, consulte `visual_fidelity/STUDIO_EDIT.md` e execute `python -m visual_fidelity studio-edit`. A versão 0.8.0 reutiliza as primitivas do motion-kit 0.7.0, com manifesto, relógios de fonte explícitos, alpha temporal supervisionado e relatório dos hashes realmente importados. Não substitua a execução por imagens de demonstração.
 
 Quando o usuário autorizar estender o material, mantenha as falas originais em cláusulas completas e use cenas gráficas, recortes e reutilização visual declarada. Preserve sincronismo nos trechos em que o rosto e a fala coexistem. Revise V/U e acentos da fonte em palavras reais, contraste, crop facial, ampliação óptica da lupa e fechamento coerente com a fala. Uma sequência de fundo 3D não transforma o recorte da pessoa em geometria 3D.
+
+
+## Pacote fixo por referência: rejeição da adaptação Clara
+
+A adaptação Clara de 47 segundos foi REJEITADA. A versão V7 anterior também não tem aprovação visual global. Não usar testes de código, duração correta ou ausência de quadros pretos como prova de fidelidade.
+
+Antes de reutilizar a referência 329687, carregar a pasta https://drive.google.com/drive/folders/1kPgwgsaby5YUwEogAZVpJkVmolrhD5Z5 e o seu MAPA-DE-MONTAGEM.md, AUDITORIA-DE-FIDELIDADE.md e bundle.json. Extrair o pacote completo preservando caminhos. Executar `python -m visual_fidelity reference-bundle verify bundle.json --root CAMINHO` antes de adaptar.
+
+Reutilizar os mesmos assets, fontes, módulos ativos, parâmetros, ordem de camadas e relógios. Não substituir painéis de vidro por cartões planos, não remover folhagem, não reduzir a sequência relatório/presente/computador a um objeto. Traduzir textos em camadas separadas ou em variantes localizadas versionadas, preservando desenho/material/perspectiva; nunca recriar toda a composição para trocar letras. Copiar bytes sem conservar os bindings por cena também não atende ao pedido.
+
+Antes de exportar a adaptação inteira, comparar cenas críticas da lupa, órbita e arquitetura com o original. Mudanças de assets ou da receita exigem nova versão identificada e evidência visual; não sobrescrever a base. O verificador detecta alterações e ausências, mas não mede estética, câmera ou identidade visual automaticamente.
