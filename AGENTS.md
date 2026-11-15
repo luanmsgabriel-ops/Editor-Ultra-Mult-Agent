@@ -77,7 +77,7 @@ Antes de exportar a adaptação inteira, comparar cenas críticas da lupa, órbi
 
 ## Reaplicação PT2: preservar composição, plano e movimento
 
-A revisão Clara PT2 usa `examples/reference_replays/329687_pt2/` e `visual_fidelity/reference_replay.py`, com pacote de mídia em https://drive.google.com/drive/folders/1gzaDgUdLVcnVOkR-ONPM8csCRCd6vzgz. Não presumir aprovação do usuário. Manter o pacote-base separado.
+A revisão Clara PT2 usa `examples/reference_replays/329687_pt2/` e `visual_fidelity/reference_replay.py`, com pacote de mídia em https://drive.google.com/drive/folders/1gzaDgUdLVcnVOkR-ONPM8csCRCd6vzgz. A revisão Clara PT2 foi APROVADA pelo usuário: “Agora sim, ficou perfeito vou te mandar um novo vídeo”. SHA-256 do render aprovado: `34e2c8926a821d53933a65661d6de053c375d1737d299248e02b2f5e37c22d4d`. Registro externo `APROVACAO-PT2.json` na pasta; manter pacote congelado e rejeições anteriores separados.
 
 Na troca de pessoa, conservar plano aberto versus close, inserir a pessoa e sua cadeira como uma única camada, separar transformação final de tela da câmera global e manter oclusores de mesa em primeiro plano. O relógio explícito deve preservar a fala em ambos os lados de cada corte. Não repetir quadros de origem silenciosamente.
 
