@@ -1,0 +1,6 @@
+{
+  "fps":30,
+  "frame_count":160,
+  "logo_center":[360,640],
+  "cuts":[[0,"grid_in"],[33,"white"],[37,"black"],[41,"chrome"],[45,"aura"],[49,"palette"],[53,"stone"],[57,"board"],[61,"cards"],[65,"keychain"],[70,"bottle"],[74,"social"],[78,"cap"],[82,"folder"],[86,"liquid"],[90,"folder"],[94,"cap"],[98,"social"],[102,"bottle"],[106,"keychain"],[110,"cards"],[115,"board"],[119,"stone"],[123,"palette"],[127,"aura"],[131,"chrome"],[135,"black"],[139,"white"],[143,"grid_out"]]
+}
