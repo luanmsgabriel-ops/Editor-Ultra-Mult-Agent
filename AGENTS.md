@@ -55,3 +55,10 @@ Consulte visual_fidelity/MOTION_KIT.md e execute `python -m visual_fidelity moti
 Separe palavras inteiras de máscaras de visibilidade; contornos extraídos de letras ocultas são fragmentos e exigem reconstrução declarada antes de reutilização como palavra completa. Preserve kerning e avanços reais ao distribuir letras em curvas. Brilho deve seguir a superfície e seu alpha. Órbitas precisam de profundidade/oclusão; objetos com movimento próprio devem ter hierarquia e controles separados. Molduras metálicas precisam de silhueta, relevo, material e iluminação, preservando o conteúdo aprovado.
 
 As seis rejeições da revisão 329687 V6 são casos de regressão, não um estilo obrigatório para todo vídeo. Use o desenho, ritmo e materiais da nova referência. Fontes substitutas, movimento ajustado, 2,5D e ausência de playback perceptivo devem permanecer declarados. Só marque aprovado pelo usuário após confirmação real.
+
+
+## Reedição de bruto curto no estilo de uma referência
+
+Para recortar pessoa/cadeira e remontar em uma timeline híbrida, consulte `visual_fidelity/STUDIO_EDIT.md` e execute `python -m visual_fidelity studio-edit`. A versão 0.8.0 reutiliza as primitivas do motion-kit 0.7.0, com manifesto, relógios de fonte explícitos, alpha temporal supervisionado e relatório dos hashes realmente importados. Não substitua a execução por imagens de demonstração.
+
+Quando o usuário autorizar estender o material, mantenha as falas originais em cláusulas completas e use cenas gráficas, recortes e reutilização visual declarada. Preserve sincronismo nos trechos em que o rosto e a fala coexistem. Revise V/U e acentos da fonte em palavras reais, contraste, crop facial, ampliação óptica da lupa e fechamento coerente com a fala. Uma sequência de fundo 3D não transforma o recorte da pessoa em geometria 3D.
