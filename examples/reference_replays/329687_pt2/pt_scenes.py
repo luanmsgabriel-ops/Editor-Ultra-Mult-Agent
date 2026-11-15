@@ -68,14 +68,14 @@ def opening(frame,ev):
 
 def orbit(frame,ev):
  bg=legacy.neutral();bg.alpha_composite(people_layer(frame));bg.alpha_composite(render_background_type(frame))
- sub=subject(frame,'orbita',a.progress(frame,104,7),True)
- p=a.progress(frame,108,5)
+ sub=subject(frame,'orbita',a.progress(frame,101,4),True)
+ p=a.progress(frame,102,5)
  spec=OrbitSpec(center=(355,680),radius_x=410,radius_z=320,camera_distance=1450,
- tilt_deg=-17+2*math.sin((frame-108)/20),pitch_deg=7,phase=.90+(frame-154)*.006,
+ tilt_deg=-17+2*math.sin((frame-108)/20),pitch_deg=7,phase=.90+(frame-154)*.020,
  font_size=195,gap=130,repeats=4,thickness=6,highlight_phase=.48-.018*(frame-108))
  rear,front=render_orbit_type('CRIAR',ROOT/'fonts/Anton.ttf',spec)
  for im in(rear,front):im.putalpha(im.getchannel('A').point(lambda v:round(v*p)))
- out=composite_orbit(bg,sub,rear,front);out.alpha_composite(render_foreground_type(frame))
+ out=composite_orbit(bg,sub,rear,front);zoom=a.pose(frame,[(102,.86),(120,.88),(132,1.0),(156,1.06)])[0];out=a.camera(out,zoom,y=125*(1-zoom));out.alpha_composite(render_foreground_type(frame))
  if frame>=157:
   p=a.progress(frame,157,8);out=Image.blend(out.filter(ImageFilter.GaussianBlur(12*p)),Image.new('RGBA',SIZE,(255,248,242)),.92*p)
  return out
