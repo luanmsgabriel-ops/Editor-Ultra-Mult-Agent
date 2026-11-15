@@ -1,0 +1,13 @@
+{
+  "suite": "unittest discover -s tests -v",
+  "tests": 77,
+  "result": "passed",
+  "blender_version": "4.3.2",
+  "actual_blender_render_passes": {
+    "target": 47,
+    "keyhole": 37
+  },
+  "reference_export": "pending final encode",
+  "visual_review": "keyframes and sampled transitions only",
+  "user_approved": false
+}
