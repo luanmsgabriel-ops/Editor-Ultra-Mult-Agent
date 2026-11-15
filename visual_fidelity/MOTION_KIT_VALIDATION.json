@@ -7,7 +7,16 @@
     "target": 47,
     "keyhole": 37
   },
-  "reference_export": "pending final encode",
+  "reference_export": {
+    "revision": "V7",
+    "frames": 1135,
+    "fps": 24,
+    "duration_s": 47.291666666666664,
+    "all_frames_decoded": true,
+    "all_black_frames": []
+  },
   "visual_review": "keyframes and sampled transitions only",
-  "user_approved": false
+  "user_approved": false,
+  "merged_to_main": true,
+  "merge_commit": "5e2e36ff1e0cb7d80749da9250ad56d24127dcf6"
 }
