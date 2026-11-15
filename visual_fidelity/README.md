@@ -181,3 +181,7 @@ python -m visual_fidelity timeline-qa referencia.mp4 reconstrucao.mp4 timeline.j
 Forneça dois vídeos CFR no mesmo relógio e um JSON com `fps`, `frames` e `shots`. Cada cena possui `id`, `start` inteiro inclusivo e `end` inteiro exclusivo. As cenas devem cobrir o intervalo de quadros sem lacunas. O comando exporta CSV por quadro e JSON por cena. `--compare` compõe as imagens lado a lado com timecode, com áudio da referência, do render ou silencioso.
 
 O pico é medido numa janela de três quadros em cada direção. Confira as linhas sem pico pela reprodução. A diferença de luminância inclui a pessoa, a cor e os elementos da composição. Use os valores para localizar o que merece revisão visual.
+
+## Reconstrução espacial com MoGe, VGGT e Cycles
+
+O comando `scene3d` prepara vistas de um plano, estima geometria e câmeras e exporta uma cena Blender com malha, textura e objetos 3D editáveis. Instale o ambiente opcional com `python visual_fidelity/install_scene_models.py .venv-scene3d --backend cpu`. Execute o diagnóstico com `.venv-scene3d/bin/python -m visual_fidelity scene3d doctor`. A configuração e os exemplos estão em [SCENE3D.md](SCENE3D.md).

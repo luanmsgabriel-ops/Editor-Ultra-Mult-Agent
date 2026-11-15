@@ -16,3 +16,5 @@ out/
 *.wav
 *.flac
 __pycache__/
+
+.venv-scene3d/

@@ -1,0 +1,17 @@
+# Optional inference dependencies, compatible with pinned MoGe-2 and VGGT.
+# Install torch/torchvision first with install_scene_models.py to choose CPU/CUDA.
+numpy==1.26.4
+Pillow>=10,<14
+opencv-python==4.10.0.84
+scipy>=1.11,<2
+matplotlib>=3.8,<4
+trimesh>=4,<5
+huggingface-hub>=0.28,<1
+einops>=0.7,<1
+safetensors>=0.4,<1
+click>=8,<9
+tqdm>=4,<5
+requests>=2.31,<3
+# Official repository commits are pinned to the APIs used by scene_inference.
+utils3d @ git+https://github.com/EasternJournalist/utils3d.git@3fab839f0be9931dac7c8488eb0e1600c236e183
+pipeline @ git+https://github.com/EasternJournalist/pipeline.git@866f059d2a05cde05e4a52211ec5051fd5f276d6
