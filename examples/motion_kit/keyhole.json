@@ -1,0 +1,46 @@
+{
+  "kind": "keyhole",
+  "frames": 48,
+  "fps": 24,
+  "resolution": [
+    360,
+    540
+  ],
+  "samples": 12,
+  "output": "./motion-output-keyhole",
+  "ortho_scale": 3.6,
+  "root_keyframes": {
+    "1": {
+      "location": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "48": {
+      "location": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "gold": [
+    0.83,
+    0.43,
+    0.075
+  ],
+  "roughness": 0.24,
+  "depth": 0.13,
+  "inset": 0.92
+}
