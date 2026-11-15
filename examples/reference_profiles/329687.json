@@ -1,8 +1,6 @@
 {
   "reference_id": "329687",
   "drive_folder_url": "https://drive.google.com/drive/folders/1kPgwgsaby5YUwEogAZVpJkVmolrhD5Z5",
-  "archive_filename": "Referencia-329687-Pacote-Completo.zip",
-  "archive_sha256": "3647d83fc284d9d08046842fcde046c1653cf42decb4019d0dc6f8229a3379af",
   "manifest_filename": "bundle.json",
   "assembly_map": "MAPA-DE-MONTAGEM.md",
   "audited_files": 782,
@@ -18,5 +16,26 @@
     "Compare critical scenes before full render",
     "Visual fidelity is not certified by integrity tests"
   ],
-  "verifier_command": "python -m visual_fidelity reference-bundle verify bundle.json --root ROOT"
+  "verifier_command": "python -m visual_fidelity reference-bundle verify bundle.json --root ROOT",
+  "archive_parts": [
+    {
+      "filename": "01-Codigo-Fontes-Manual-Referencia.zip",
+      "bytes": 57314205,
+      "files": 372,
+      "sha256": "7a96e243cdac20f0dffcc5719d39f7aedbd77abd2ebee1d6d0bdfdbe44779bd9"
+    },
+    {
+      "filename": "02-Icones-Animacoes-Camera-Referencia.zip",
+      "bytes": 52504379,
+      "files": 303,
+      "sha256": "9150a99d65aae8238bec830ec26433fb8f9f660fd35dccbac4670b4f10403a29"
+    },
+    {
+      "filename": "03-Cenas-Blender-Renders-Referencia.zip",
+      "bytes": 31725768,
+      "files": 108,
+      "sha256": "10e9d3233913b60175746df5faef08ba587e742d3471885290fe84c34d33e2fb"
+    }
+  ],
+  "assembly": "Extract all three ZIPs into the same destination, then verify Referencia-329687/bundle.json."
 }
