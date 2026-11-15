@@ -45,3 +45,5 @@ O [motor de fidelidade visual](visual_fidelity/README.md) mede fontes e vetores,
 Para adaptar palavras e gráficos ao enquadramento de outro vídeo, use `python -m visual_fidelity anchor render` com o [plano de exemplo](examples/ancoras-visuais.json). O motor escolhe uma posição por plano ou acompanha uma superfície pela homografia. O [manual de âncoras](visual_fidelity/README.md#aplicar-texto-e-efeitos-a-outro-vídeo) também cobre trajetórias TAPIR e projeção por câmera Blender/COLMAP.
 
 Para seguir cabeça, ombro, mãos, quadril, joelhos ou pés, use as [âncoras corporais](visual_fidelity/README.md#âncoras-no-corpo-e-órbita). O [plano de exemplo](examples/ancoras-corpo.json) combina uma órbita de texto com o rastreamento do ombro.
+
+A [biblioteca de efeitos](https://drive.google.com/drive/folders/1f3oYF6f1JP1BZVZ2HVkAq7I6I-q-evJC) reúne motion, transições, LUTs, overlays e sons. O [manual do motor](visual_fidelity/README.md#biblioteca-de-efeitos-no-drive) documenta as fichas versionadas, a busca e a criação de novas variantes. Para captura real e auditoria de curvas consulte [MOTION.md](visual_fidelity/MOTION.md).

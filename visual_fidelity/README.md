@@ -144,3 +144,30 @@ python -m visual_fidelity body-rtmw --fps 24 import predicoes.json /projeto/pose
 ```
 
 Instale `rtmlib` e `onnxruntime` no ambiente que executa `run`. Use pesos compatíveis de [OpenMMLab RTMW](https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose). O importador aceita a saída do MMPose WholeBody. Essas rotas fornecem pontos 2D; para gestos classificados e recorte, use MediaPipe ou máscaras locais. Exporte todos os dados no FPS usado na composição.
+
+## Biblioteca de efeitos no Drive
+
+O [catálogo do Editor Ultra](https://drive.google.com/drive/folders/1f3oYF6f1JP1BZVZ2HVkAq7I6I-q-evJC) separa motion, transições, cor/LUTs, efeitos visuais e sons. Cada versão registra como foi feita, quando usar, parâmetros ou código e os ativos necessários.
+
+```sh
+python -m visual_fidelity effects analyze referencia.mp4 out/analise.json
+python -m visual_fidelity effects register /projeto/efeito/card.json /projeto/catalogo
+python -m visual_fidelity effects index /projeto/catalogo out/catalogo.json
+python -m visual_fidelity effects suggest out/catalogo.json "produto flash no corte" --kind transicao
+```
+
+A análise marca mudanças fortes e inserções claras curtas para revisão. Classifique manualmente o que for lettering, overlay, tratamento de cor, material, gesto ou efeito sonoro. O registro salva hashes dos arquivos e reutiliza uma versão idêntica. A definição e os arquivos de execução pertencem à pasta da categoria e a única versão corrente de cada efeito fica no índice. Ao publicar pelo agente, mantenha versões anteriores no histórico e atualize o JSON/guia com os links reais. O CLI registra localmente. O envio ao Drive usa a conexão autorizada do projeto.
+
+```sh
+python -m visual_fidelity presets transition plano-a.mp4 plano-b.mp4 out/match.mp4 \
+  --size 720 1280 --fps 30 --anchor-before .42 .55 --anchor-after .54 .44 \
+  --target .5 .5 --flash-frames 4
+
+python -m visual_fidelity presets cube out/look.cube --side 17 --contrast 1.26
+python -m visual_fidelity presets color bruto-sdr.mp4 out/look.cube out/cor.mp4
+python -m visual_fidelity overlay out/textura.mov --mask texto.png --size 720 1280
+```
+
+A transição produz a faixa visual e o áudio fica a cargo do plano de montagem. O LUT de demonstração é autoral em SDR. Em referências acabadas, um look pode ser refeito por aproximação visual; dados antes/depois alinhados permitem uma comparação mais fiel da transformação. O overlay aceita uma máscara PNG e exporta MOV com transparência ou MP4 de revisão.
+
+Veja [regras de movimento, auditoria de curvas e captura OBS](MOTION.md). Para som, exporte e catalogue o arquivo próprio separado do mix. Prefira alternativas de som cujo uso esteja documentado e marque cada ataque pela timeline. Registre fonte e método para reconstruir quando só houver o efeito misturado com voz ou música na referência.

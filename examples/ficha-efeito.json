@@ -1,0 +1,20 @@
+{
+  "id": "match-cut-ancora-flash",
+  "kind": "transicao",
+  "title": "Match cut por âncora com inserção clara",
+  "description": "Alinha o elemento âncora nos dois planos e permite inserir um clarão curto.",
+  "version": "1.0.0",
+  "status": "pronto",
+  "tags": ["transição", "flash", "match cut", "marca"],
+  "source": {
+    "type": "reconstruído",
+    "details": "Referência Origins com inserção clara observada e prévia refeita com elementos sintéticos.",
+    "frames": [33, 37],
+    "fps": 30
+  },
+  "recipe": {
+    "engine": "editor-ultra-mult-agent",
+    "entry": "visual_fidelity presets transition"
+  },
+  "files": ["Codigo-Match-Cut-Flash.zip", "Previa-Match-Cut-Flash.mp4"]
+}
