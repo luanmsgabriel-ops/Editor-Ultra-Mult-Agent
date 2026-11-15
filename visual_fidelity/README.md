@@ -185,3 +185,8 @@ O pico é medido numa janela de três quadros em cada direção. Confira as linh
 ## Reconstrução espacial com MoGe, VGGT e Cycles
 
 O comando `scene3d` prepara vistas de um plano, estima geometria e câmeras e exporta uma cena Blender com malha, textura e objetos 3D editáveis. Instale o ambiente opcional com `python visual_fidelity/install_scene_models.py .venv-scene3d --backend cpu`. Execute o diagnóstico com `.venv-scene3d/bin/python -m visual_fidelity scene3d doctor`. A configuração e os exemplos estão em [SCENE3D.md](SCENE3D.md).
+
+
+## Motion Kit reutilizável
+
+Consulte [MOTION_KIT.md](MOTION_KIT.md) para órbita com oclusão, brilho em alpha, palavras completas em camadas, curva com métricas, alvo/flecha e moldura metálica. Descubra os componentes com `python -m visual_fidelity motion-kit list`. Os adaptadores devem importar o motor e passar parâmetros, em vez de duplicar a técnica por vídeo.
