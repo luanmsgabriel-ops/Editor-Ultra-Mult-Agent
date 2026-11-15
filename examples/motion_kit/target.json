@@ -1,0 +1,38 @@
+{
+  "kind": "target",
+  "frames": 48,
+  "fps": 24,
+  "resolution": [
+    320,
+    320
+  ],
+  "samples": 12,
+  "output": "./motion-output-target",
+  "ortho_scale": 3.6,
+  "root_keyframes": {
+    "1": {
+      "location": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "48": {
+      "location": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  }
+}
