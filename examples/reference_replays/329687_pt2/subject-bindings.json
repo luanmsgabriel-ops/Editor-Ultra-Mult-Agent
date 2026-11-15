@@ -1,0 +1,247 @@
+{
+  "coordinate_space": "final_screen_pixels",
+  "formula": "x_out = scale*x_source + tx; y_out = scale*y_source + ty",
+  "source_size": [
+    720,
+    1280
+  ],
+  "source_alpha_union": [
+    110,
+    332,
+    610,
+    1163
+  ],
+  "source_face_at141": [
+    307,
+    362,
+    412,
+    467
+  ],
+  "status": "PT2 measured layout with reviewed close/wide transforms; visual approval pending",
+  "scenes": {
+    "abertura": {
+      "out": [
+        0,
+        102
+      ],
+      "source_start_frame": 0,
+      "speed": 1,
+      "keys": [
+        {
+          "reference_frame": 24,
+          "scale": 0.7942238267148014,
+          "tx": 81.57942238267151,
+          "ty": 126.31768953068593,
+          "fit": "fullbody"
+        },
+        {
+          "reference_frame": 49,
+          "scale": 0.7942238267148014,
+          "tx": 81.57942238267151,
+          "ty": 126.31768953068593,
+          "fit": "fullbody"
+        },
+        {
+          "reference_frame": 64,
+          "scale": 1.0697954271961492,
+          "tx": -52.62635379061368,
+          "ty": -162.1720818291215,
+          "fit": "fullbody"
+        },
+        {
+          "reference_frame": 80,
+          "scale": 1.0697954271961492,
+          "tx": -52.62635379061368,
+          "ty": -162.1720818291215,
+          "fit": "fullbody"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [],
+      "disable_proxy_chair": true
+    },
+    "orbita": {
+      "out": [
+        102,
+        166
+      ],
+      "source_start_frame": 45,
+      "speed": 1,
+      "keys": [
+        {
+          "reference_frame": 135,
+          "scale": 0.7701564380264742,
+          "tx": 52.743682310469296,
+          "ty": 194.30806257521058,
+          "fit": "fullbody"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [],
+      "disable_proxy_chair": true
+    },
+    "omad": {
+      "out": [
+        166,
+        219
+      ],
+      "source_start_frame": 60,
+      "speed": 1,
+      "keys": [
+        {
+          "reference_frame": 190,
+          "scale": 0.9025270758122743,
+          "tx": 95.09025270758127,
+          "ty": 135.36101083032491,
+          "fit": "fullbody"
+        }
+      ],
+      "roll_degrees": 12,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [],
+      "disable_proxy_chair": true
+    },
+    "diagonal": {
+      "out": [
+        405,
+        533
+      ],
+      "source_start_frame": 48,
+      "speed": 0.9,
+      "keys": [
+        {
+          "reference_frame": 460,
+          "scale": 0.7581227436823105,
+          "tx": 89.57581227436822,
+          "ty": 183.30324909747293,
+          "fit": "fullbody"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [],
+      "disable_proxy_chair": true
+    },
+    "nome": {
+      "out": [
+        646,
+        679
+      ],
+      "source_start_frame": 0,
+      "speed": 1,
+      "keys": [
+        {
+          "reference_frame": 662,
+          "scale": 1.8,
+          "tx": -279.6,
+          "ty": -365.6,
+          "fit": "face"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [],
+      "disable_proxy_chair": true
+    },
+    "azul": {
+      "out": [
+        679,
+        722
+      ],
+      "source_start_frame": 115,
+      "speed": 1,
+      "keys": [
+        {
+          "reference_frame": 702,
+          "scale": 1.6,
+          "tx": -213.20000000000005,
+          "ty": 22.799999999999955,
+          "fit": "face"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [
+        "desk",
+        "laptop"
+      ],
+      "disable_proxy_chair": true
+    },
+    "valor": {
+      "out": [
+        722,
+        799
+      ],
+      "source_start_frame": 158,
+      "speed": 1,
+      "keys": [
+        {
+          "reference_frame": 760,
+          "scale": 1.8761904761904762,
+          "tx": -347.9904761904762,
+          "ty": -334.18095238095236,
+          "fit": "face"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [],
+      "disable_proxy_chair": true
+    },
+    "xadrez": {
+      "out": [
+        799,
+        846
+      ],
+      "source_start_frame": 20,
+      "speed": 1,
+      "keys": [
+        {
+          "reference_frame": 820,
+          "scale": 1.7714285714285714,
+          "tx": -258.8285714285714,
+          "ty": -242.25714285714287,
+          "fit": "face"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [
+        "table",
+        "chessboard"
+      ],
+      "disable_proxy_chair": true
+    },
+    "cta": {
+      "out": [
+        920,
+        1135
+      ],
+      "source_start_frame": 20,
+      "speed": 0.8,
+      "keys": [
+        {
+          "reference_frame": 1000,
+          "scale": 2.019047619047619,
+          "tx": -377.847619047619,
+          "ty": -203.89523809523803,
+          "fit": "face"
+        },
+        {
+          "reference_frame": 1100,
+          "scale": 2.066666666666667,
+          "tx": -396.4666666666667,
+          "ty": -221.13333333333344,
+          "fit": "face"
+        }
+      ],
+      "roll_degrees": 0,
+      "roll_note": "If applying roll, rotate around transformed subject center; do not combine with an inherited global camera transform.",
+      "foreground_occluders": [],
+      "disable_proxy_chair": true
+    }
+  },
+  "audio_note": "Third clause advanced3frames to29.375s, preserving source lip sync and ending before chesscut799."
+}
