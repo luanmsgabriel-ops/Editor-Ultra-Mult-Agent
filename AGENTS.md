@@ -34,3 +34,13 @@ Ao receber um vídeo de referência, avalie quais elementos podem ser reconstru�
 Escolha o método pelo movimento: uma imagem gerada pode servir como elemento gráfico ou camada com perspectiva; um cenário cuja câmera revela profundidade exige geometria e câmera 3D animada durante todo o plano. Não substitua esse movimento por zoom/rotação de um render estático. Identifique a entrega como híbrida quando incorporar imagens geradas; não a chame de inteiramente procedural.
 
 Para uma referência rejeitada por falta de fidelidade, valide primeiro os trechos críticos (por exemplo cenário com câmera e um ícone), comparando silhueta, perspectiva, material, iluminação e trajetória em vários quadros. Testes de código, duração correta e instalação de modelos não equivalem a fidelidade visual. Diferencie medições, ajustes manuais, inferências e limitações remanescentes.
+
+## Tipografia híbrida e fontes reutilizáveis
+
+Para recriar tipografia de vídeos, procure primeiro identificar a fonte original e separar desenho, espaçamento, perspectiva e efeitos. Quando o título for uma palavra fixa com conexões ou floreios próprios, preserve também um lettering vetorial separado. Não trate um lettering de poucas palavras como alfabeto completo.
+
+Se a fonte não puder ser identificada, o usuário autorizou gerar imagens de letras com fundo transparente, tomando quadros nítidos como referência, e transformá-las em uma fonte instalável. A geração é uma etapa: vetorize, refine curvas, normalize altura, largura, linha de base, peso e espaçamento, mapeie Unicode e construa TTF/OTF com métricas e kerning. Inclua acentos de português, números e pontuação conforme a cobertura declarada. Valide o arquivo com renderização de palavras e frases, não apenas com a existência do arquivo.
+
+Registre caracteres observados, reconstruídos e inferidos; preserve atlas, prompt, vetores, cobertura, versão e limitações. Letras ausentes ou ocultas são interpretações, não recuperações exatas da fonte original. Fontes experimentais devem ser identificadas como tais. Materiais, extrusão, luz e animação permanecem separados do desenho tipográfico. Guarde a fonte reutilizável e o lettering específico de cada cena no catálogo do projeto. Imagens e fontes derivadas permanecem no pacote de mídia; scripts e documentação podem ficar no Git.
+
+O protótipo em `typography_lab/scripts/build_font.py` gera uma TTF real a partir do atlas documentado; consulte `typography_lab/README.md` antes de reutilizar em outra referência.
