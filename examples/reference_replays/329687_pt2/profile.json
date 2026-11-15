@@ -1,0 +1,27 @@
+{
+  "revision": "Clara-PT2",
+  "reference_id": "329687",
+  "frames": 1135,
+  "fps": 24,
+  "drive_folder": "https://drive.google.com/drive/folders/1gzaDgUdLVcnVOkR-ONPM8csCRCd6vzgz",
+  "base_reference": "https://drive.google.com/drive/folders/1kPgwgsaby5YUwEogAZVpJkVmolrhD5Z5",
+  "renderer": "render_pt.py",
+  "composition": "pt_scenes.py",
+  "type": "pt_typography.py",
+  "source_clock": "subject-bindings.json",
+  "engine_extension": "reference_replay1.0",
+  "user_approved": false,
+  "status": "rendered; internal QA completed; user visual review pending",
+  "regressions_addressed": [
+    "three panels restored",
+    "glass sequence restored",
+    "full words and real script fonts",
+    "wide and close framing separated",
+    "real subject+chair matte only",
+    "3D camera wall projection",
+    "desk and chess foreground",
+    "arrows avoid face"
+  ],
+  "engine_commit": "42137054d328e0fcca0151aa31233305efa31a08",
+  "tests_passed": 106
+}
