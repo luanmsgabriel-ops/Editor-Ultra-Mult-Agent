@@ -44,3 +44,14 @@ Se a fonte não puder ser identificada, o usuário autorizou gerar imagens de le
 Registre caracteres observados, reconstruídos e inferidos; preserve atlas, prompt, vetores, cobertura, versão e limitações. Letras ausentes ou ocultas são interpretações, não recuperações exatas da fonte original. Fontes experimentais devem ser identificadas como tais. Materiais, extrusão, luz e animação permanecem separados do desenho tipográfico. Guarde a fonte reutilizável e o lettering específico de cada cena no catálogo do projeto. Imagens e fontes derivadas permanecem no pacote de mídia; scripts e documentação podem ficar no Git.
 
 O protótipo em `typography_lab/scripts/build_font.py` gera uma TTF real a partir do atlas documentado; consulte `typography_lab/README.md` antes de reutilizar em outra referência.
+
+
+## Aprendizado obrigatório no motor de motion
+
+Ao receber uma correção visual, registre defeito, causa, componente reutilizável, teste e evidência. Implemente a técnica no pacote visual_fidelity e use esse mesmo componente no adaptador do vídeo. Não deixe a correção apenas no render privado nem apenas em instruções.
+
+Consulte visual_fidelity/MOTION_KIT.md e execute `python -m visual_fidelity motion-kit list` antes de reconstruir órbitas, brilhos, tipografia curva, palavras sobrepostas, alvos animados ou molduras metálicas. O projeto deve fixar a versão do motor e validar o manifesto pelo comando `motion-kit check`.
+
+Separe palavras inteiras de máscaras de visibilidade; contornos extraídos de letras ocultas são fragmentos e exigem reconstrução declarada antes de reutilização como palavra completa. Preserve kerning e avanços reais ao distribuir letras em curvas. Brilho deve seguir a superfície e seu alpha. Órbitas precisam de profundidade/oclusão; objetos com movimento próprio devem ter hierarquia e controles separados. Molduras metálicas precisam de silhueta, relevo, material e iluminação, preservando o conteúdo aprovado.
+
+As seis rejeições da revisão 329687 V6 são casos de regressão, não um estilo obrigatório para todo vídeo. Use o desenho, ritmo e materiais da nova referência. Fontes substitutas, movimento ajustado, 2,5D e ausência de playback perceptivo devem permanecer declarados. Só marque aprovado pelo usuário após confirmação real.
