@@ -73,3 +73,12 @@ Antes de reutilizar a referência 329687, carregar a pasta https://drive.google.
 Reutilizar os mesmos assets, fontes, módulos ativos, parâmetros, ordem de camadas e relógios. Não substituir painéis de vidro por cartões planos, não remover folhagem, não reduzir a sequência relatório/presente/computador a um objeto. Traduzir textos em camadas separadas ou em variantes localizadas versionadas, preservando desenho/material/perspectiva; nunca recriar toda a composição para trocar letras. Copiar bytes sem conservar os bindings por cena também não atende ao pedido.
 
 Antes de exportar a adaptação inteira, comparar cenas críticas da lupa, órbita e arquitetura com o original. Mudanças de assets ou da receita exigem nova versão identificada e evidência visual; não sobrescrever a base. O verificador detecta alterações e ausências, mas não mede estética, câmera ou identidade visual automaticamente.
+
+
+## Reaplicação PT2: preservar composição, plano e movimento
+
+A revisão Clara PT2 usa `examples/reference_replays/329687_pt2/` e `visual_fidelity/reference_replay.py`, com pacote de mídia em https://drive.google.com/drive/folders/1gzaDgUdLVcnVOkR-ONPM8csCRCd6vzgz. Não presumir aprovação do usuário. Manter o pacote-base separado.
+
+Na troca de pessoa, conservar plano aberto versus close, inserir a pessoa e sua cadeira como uma única camada, separar transformação final de tela da câmera global e manter oclusores de mesa em primeiro plano. O relógio explícito deve preservar a fala em ambos os lados de cada corte. Não repetir quadros de origem silenciosamente.
+
+Na troca de idioma, conservar composição de fontes, cursivas reais, hierarquia, palavras completas e perspectiva. Usar a mesma câmera do cenário para reprojetar lettering na parede. Conferir a velocidade e a entrada da órbita em vários quadros; um quadro parecido não comprova movimento parecido. Gerar variantes de assets apenas quando necessário, manter alpha, prompt, proveniência e versões. Salvar render, comparação, manifesto e instruções de encaixe junto dos materiais reutilizáveis.
