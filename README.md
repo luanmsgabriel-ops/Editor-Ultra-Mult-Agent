@@ -35,3 +35,7 @@ Para repetir apenas som e montagem final, use `--picture` com a imagem limpa já
 ## Cobertura
 
 O piloto exercita ingest de catálogo, ranking, três efeitos de áudio com proveniência, plano travado, imagem dos 38 brutos, mix, export e verificação. Os papéis de agente integram essa execução quando acionados no Codex. Análise semântica e calibração espacial automatizadas em qualquer filmagem, round-trip gráfico e julgamento perceptivo sem revisão permanecem etapas distintas de validação.
+
+## Motion a partir de referência
+
+O [piloto da cascata de três cards](pilots/motion_cards/README.md) mede movimentos, aplica o mesmo template sobre outro bruto e exporta uma comparação e uma composição HyperFrames.
