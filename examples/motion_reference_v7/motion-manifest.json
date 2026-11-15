@@ -1,0 +1,119 @@
+{
+  "engine_version": "0.7.0",
+  "reference": "329687.mp4",
+  "revision": "V7",
+  "required_features": [
+    "orbit-occlusion",
+    "light-sweep",
+    "complete-word-layers",
+    "metric-curve-type",
+    "target-arrow-rig",
+    "metallic-keyhole"
+  ],
+  "features": {
+    "orbit-occlusion": {
+      "module": "visual_fidelity.orbit_type",
+      "adapter": "orbit_v7.py",
+      "controls": {
+        "occluder": true,
+        "depth_order": true
+      },
+      "status": "tested",
+      "evidence": [
+        "hybrid/v7-orbit/validation.json"
+      ],
+      "user_approved": false
+    },
+    "light-sweep": {
+      "module": "visual_fidelity.light_sweep",
+      "adapter": "typography_refinement.py",
+      "controls": {
+        "surface_alpha": true
+      },
+      "status": "tested",
+      "evidence": [
+        "qa/sweep-v7.jpg"
+      ],
+      "user_approved": false
+    },
+    "complete-word-layers": {
+      "module": "visual_fidelity.type_layout",
+      "adapter": "typography_v7.py",
+      "controls": {
+        "complete_glyphs": true,
+        "layer_order": true
+      },
+      "status": "tested",
+      "evidence": [
+        "hybrid/v7-type/provenance.json"
+      ],
+      "user_approved": false
+    },
+    "metric-curve-type": {
+      "module": "visual_fidelity.type_layout",
+      "adapter": "typography_v7.py",
+      "controls": {
+        "font_metrics": true,
+        "path": true
+      },
+      "status": "tested",
+      "evidence": [
+        "hybrid/v7-type/preview.jpg"
+      ],
+      "user_approved": false
+    },
+    "target-arrow-rig": {
+      "module": "visual_fidelity.blender_motion_objects",
+      "adapter": "value_v7.py",
+      "controls": {
+        "separate_arrow": true,
+        "parent_transform": true
+      },
+      "status": "tested",
+      "evidence": [
+        "hybrid/v7-objects/validation.json"
+      ],
+      "user_approved": false
+    },
+    "metallic-keyhole": {
+      "module": "visual_fidelity.blender_motion_objects",
+      "adapter": "objects_v7.py",
+      "controls": {
+        "aperture_mask": true,
+        "bevel": true,
+        "moving_reflection": true
+      },
+      "status": "tested",
+      "evidence": [
+        "hybrid/v7-objects/validation.json"
+      ],
+      "user_approved": false
+    }
+  },
+  "lettering_assets": [
+    {
+      "id": "Usmonov",
+      "used_as_complete": true,
+      "coverage": "complete-font",
+      "font": "Liberation Sans Bold Italic substitute"
+    },
+    {
+      "id": "Ayyubxon",
+      "used_as_complete": true,
+      "coverage": "complete-font",
+      "font": "Anton substitute with authored shear"
+    },
+    {
+      "id": "Men",
+      "used_as_complete": false,
+      "coverage": "visible-fragment"
+    }
+  ],
+  "limits": [
+    "Sampled visual inspection; no full perceptual playback",
+    "Orbit uses projected cylindrical artwork, not extruded mesh",
+    "Authored target motion, not recovered tracking",
+    "Original audio reused",
+    "No user approval of V7 yet"
+  ]
+}

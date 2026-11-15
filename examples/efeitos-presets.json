@@ -1,0 +1,19 @@
+{
+  "transition": {
+    "id": "match-cut-ancora-flash",
+    "fps": 30,
+    "size": [720, 1280],
+    "anchor_before": [0.5, 0.5],
+    "anchor_after": [0.5, 0.5],
+    "target": [0.5, 0.5],
+    "flash_frames": 4
+  },
+  "color": {
+    "id": "pb-neutro-alto-contraste",
+    "side": 17,
+    "contrast": 1.26,
+    "pivot": 0.46,
+    "black": 0.012,
+    "white": 0.992
+  }
+}

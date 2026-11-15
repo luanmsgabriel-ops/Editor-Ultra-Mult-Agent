@@ -35,3 +35,15 @@ Para repetir apenas som e montagem final, use `--picture` com a imagem limpa já
 ## Cobertura
 
 O piloto exercita ingest de catálogo, ranking, três efeitos de áudio com proveniência, plano travado, imagem dos 38 brutos, mix, export e verificação. Os papéis de agente integram essa execução quando acionados no Codex. Análise semântica e calibração espacial automatizadas em qualquer filmagem, round-trip gráfico e julgamento perceptivo sem revisão permanecem etapas distintas de validação.
+
+## Motion a partir de referência
+
+O [piloto da cascata de três cards](pilots/motion_cards/README.md) mede movimentos, aplica o mesmo template sobre outro bruto e exporta uma comparação e uma composição HyperFrames.
+
+O [motor de fidelidade visual](visual_fidelity/README.md) mede fontes e vetores, renderiza materiais em Blender/Cycles e compõe fotos ou malhas na timeline Origins. Os adaptadores opcionais de COLMAP e TRELLIS.2 operam em ambientes externos.
+
+Para adaptar palavras e gráficos ao enquadramento de outro vídeo, use `python -m visual_fidelity anchor render` com o [plano de exemplo](examples/ancoras-visuais.json). O motor escolhe uma posição por plano ou acompanha uma superfície pela homografia. O [manual de âncoras](visual_fidelity/README.md#aplicar-texto-e-efeitos-a-outro-vídeo) também cobre trajetórias TAPIR e projeção por câmera Blender/COLMAP.
+
+Para seguir cabeça, ombro, mãos, quadril, joelhos ou pés, use as [âncoras corporais](visual_fidelity/README.md#âncoras-no-corpo-e-órbita). O [plano de exemplo](examples/ancoras-corpo.json) combina uma órbita de texto com o rastreamento do ombro.
+
+A [biblioteca de efeitos](https://drive.google.com/drive/folders/1f3oYF6f1JP1BZVZ2HVkAq7I6I-q-evJC) reúne motion, transições, LUTs, overlays e sons. O [manual do motor](visual_fidelity/README.md#biblioteca-de-efeitos-no-drive) documenta as fichas versionadas, a busca e a criação de novas variantes. Para captura real e auditoria de curvas consulte [MOTION.md](visual_fidelity/MOTION.md).

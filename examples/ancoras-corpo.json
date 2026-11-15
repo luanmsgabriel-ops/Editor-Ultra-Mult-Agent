@@ -1,0 +1,41 @@
+{
+  "effects": [
+    {
+      "id": "legenda-em-orbita",
+      "text": "MOVIMENTO • MOVIMENTO",
+      "start": 0.45,
+      "end": 6.8,
+      "anchor": {
+        "mode": "orbit",
+        "landmark": "body_center",
+        "person": "auto",
+        "radius": 1.34,
+        "tilt": 0.36,
+        "turn_seconds": 4.4,
+        "letter_height": 0.045,
+        "span": 310,
+        "phase": 180
+      },
+      "color": [223, 248, 243],
+      "weight": 850,
+      "entrance_seconds": 0.45
+    },
+    {
+      "id": "legenda-no-ombro",
+      "text": "NO PONTO CERTO",
+      "start": 7.05,
+      "end": 9.75,
+      "size": [0.4, 0.052],
+      "anchor": {
+        "mode": "body",
+        "landmark": "left_shoulder",
+        "person": "auto",
+        "relation": "right",
+        "scale_with_body": true
+      },
+      "animation": "pop",
+      "color": [240, 250, 248],
+      "weight": 780
+    }
+  ]
+}
