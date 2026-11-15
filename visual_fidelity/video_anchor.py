@@ -189,16 +189,24 @@ def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None):
                 protected=[list(protected if shared else (protected or [[] for _ in ids])[j])+
                            occupied.get(i,[])+(recognized[j]['boxes'] if recognized else [])
                            for j,i in enumerate(ids)]
-            selected=size.copy()
+            candidates=[]
             padding=1.55 if style=='slide' else 1.16 if style=='pop' else 1.
-            for factor in (1., .83):
+            for factor in (1., .83, .70, .63):
                 selected=size*factor
                 envelope=np.minimum(selected*[padding if style=='pop' else 1.,padding],.99)
                 choice=choose_anchor([frames[i] for i in ids],envelope,protected=protected,
                                      previous=previous)
-                if choice['protected_overlap']==0:
+                candidates.append((choice,selected))
+                if choice['protected_overlap']==0 and choice.get('subject_overlap_estimate',0)<=.10:
                     break
+            choice,selected=min(candidates,key=lambda item:(
+                item[0]['protected_overlap']>0,
+                item[0]['protected_overlap'],
+                item[0].get('subject_overlap_estimate',0)>.10,
+                max(0.,item[0].get('subject_overlap_estimate',0)-.10)))
             safe=choice['protected_overlap']==0
+            if safe and choice.get('subject_overlap_estimate',0)>.20:
+                choice['review_required']=True
             audit['shots'].append({'frames':[start,stop],**choice,'rendered':safe})
             if not safe:
                 continue
