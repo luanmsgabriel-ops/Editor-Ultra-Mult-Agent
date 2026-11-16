@@ -1,0 +1,439 @@
+{
+  "schema": "video-generation-plan/1",
+  "id": "travel-demonstration",
+  "revision": 1,
+  "author": {
+    "kind": "model",
+    "actor": "host director",
+    "method": "Original illustrative direction; no source video was supplied or analyzed."
+  },
+  "brief": {
+    "mode": "original",
+    "objective": "Demonstrate three connected ten-second prompts for an original travel presenter video.",
+    "audience": "Viewers planning a personal trip.",
+    "aspect_ratio": "9:16",
+    "target_duration_s": 30,
+    "instruction_language": "en",
+    "dialogue_language": "pt-BR",
+    "language_review": {
+      "actor": "host director",
+      "method": "English stage directions and literal Brazilian Portuguese speech reviewed in this authored example.",
+      "instruction_language": "en",
+      "dialogue_language": "pt-BR"
+    },
+    "audio_execution": "generation"
+  },
+  "bible": {
+    "visual_style": "Realistic travel film with restrained motion, warm ochre accents and readable faces; editing supports each sentence.",
+    "invariants": [
+      "One fictional presenter throughout.",
+      "The notebook stays in her right hand until the final two-handed hold.",
+      "The ochre jacket, cream top and dark trousers stay unchanged."
+    ],
+    "characters": [
+      {
+        "id": "presenter",
+        "identity": "An original fictional presenter with short dark curly hair and medium brown skin. Use the same supplied portrait reference for every clip.",
+        "wardrobe": "Ochre linen jacket, cream top, dark trousers; no logos.",
+        "voice": "One natural Brazilian Portuguese voice, conversational and close to the microphone.",
+        "invariants": [
+          "No identity or hairstyle changes during location transitions."
+        ]
+      }
+    ],
+    "locations": [
+      {
+        "id": "desk",
+        "description": "An uncluttered travel planning desk beside a window."
+      },
+      {
+        "id": "station",
+        "description": "A quiet train platform in late afternoon."
+      },
+      {
+        "id": "rooftop",
+        "description": "A quiet rooftop at dusk with a distant city skyline."
+      }
+    ],
+    "props": [
+      {
+        "id": "notebook",
+        "description": "A small plain ochre notebook with no text or logos."
+      }
+    ]
+  },
+  "references": [],
+  "evidence": [],
+  "assets": [
+    {
+      "id": "portrait",
+      "kind": "image",
+      "purpose": "Reference for a fictional presenter shared by all clips.",
+      "route": "chat_image",
+      "status": "needed",
+      "evidence_ids": [],
+      "reference_ids": [],
+      "prompt": "Create a reference portrait of an original fictional travel presenter with short dark curly hair, medium brown skin, an ochre linen jacket, cream top and dark trousers. Neutral expression, soft daylight, plain background. Preserve the same face, hairstyle and clothing in the later scene references."
+    },
+    {
+      "id": "opening",
+      "kind": "image",
+      "purpose": "Opening composition for clip 1.",
+      "route": "chat_image",
+      "status": "needed",
+      "evidence_ids": [],
+      "reference_ids": [],
+      "prompt": "Using the established fictional presenter reference, show her at an uncluttered travel planning desk holding a closed ochre notebook in her right hand. Eye-level medium shot, soft window light, realistic materials. No text or logos. Vertical composition."
+    },
+    {
+      "id": "handoff-1",
+      "kind": "image",
+      "purpose": "Shared end of clip 1 and start of clip 2.",
+      "route": "chat_image",
+      "status": "needed",
+      "evidence_ids": [],
+      "reference_ids": [],
+      "prompt": "A closed ochre notebook covers the entire lens, with the same right hand barely visible at the lower edge. Its plain cover has a soft diffuse texture. No lettering. Frame to serve as one common boundary image."
+    },
+    {
+      "id": "handoff-2",
+      "kind": "image",
+      "purpose": "Shared end of clip 2 and start of clip 3.",
+      "route": "chat_image",
+      "status": "needed",
+      "evidence_ids": [],
+      "reference_ids": [],
+      "prompt": "Using the established fictional presenter, compose an eye-level medium wide view with her in the left third, notebook in right hand, round warm lamp upper right and an uncluttered background that can support the planned visual match. Keep identity, wardrobe and proportions. No text or logos."
+    },
+    {
+      "id": "closing",
+      "kind": "image",
+      "purpose": "End composition for clip 3.",
+      "route": "chat_image",
+      "status": "needed",
+      "evidence_ids": [],
+      "reference_ids": [],
+      "prompt": "Using the established fictional presenter, show a rooftop at dusk, notebook closed against her chest, natural warm smile. Medium shot, amber practical light and cool distant skyline. Keep exact clothing and identity. No text or logos."
+    }
+  ],
+  "clips": [
+    {
+      "id": "clip-1",
+      "purpose": "Apresentar a ideia e preparar uma passagem por objeto.",
+      "duration_s": 10,
+      "use": {
+        "start_s": 0,
+        "end_s": 10
+      },
+      "character_ids": [
+        "presenter"
+      ],
+      "location_ids": [
+        "desk"
+      ],
+      "prop_ids": [
+        "notebook"
+      ],
+      "evidence_ids": [],
+      "shots": [
+        {
+          "id": "greeting",
+          "start_s": 0,
+          "end_s": 4,
+          "intent": "Introduce the planning problem through a concrete object.",
+          "action": "The presenter opens the notebook with her left hand while her right hand supports it. She points to a blank page, then looks back at the lens.",
+          "composition": "Eye-level medium shot; keep the face, both hands and notebook visible.",
+          "camera": "A slow short push toward the presenter; stop before either hand is cropped.",
+          "performance": "Conversational curiosity, a small eyebrow raise on the question; no exaggerated acting.",
+          "lighting": "Soft window key from camera left; neutral skin and a gentle amber practical in the background."
+        },
+        {
+          "id": "cover",
+          "start_s": 4,
+          "end_s": 10,
+          "intent": "Finish the thought and motivate the move to the station.",
+          "action": "She closes the notebook, keeps it in her right hand, and moves it from left to right across the lens. It fills the frame at the end.",
+          "composition": "Maintain the same screen direction and keep the notebook edge in focus during the approach.",
+          "camera": "Return to a stable eye-level medium shot before the object reaches the lens.",
+          "performance": "Calm confidence; finish the sentence before the notebook covers her mouth.",
+          "lighting": "Keep exposure steady as the ochre cover fills the frame."
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker_id": "presenter",
+          "text": "Uma boa viagem começa antes de sair. Primeiro, escolha o que você quer viver.",
+          "start_s": 0.4,
+          "end_s": 8.8,
+          "mode": "on_camera",
+          "delivery": "Brazilian Portuguese, natural conversational pace, preserve one voice across all clips."
+        }
+      ],
+      "audio": {
+        "voice_direction": "Keep the same close, natural presenter voice in every clip.",
+        "ambience": "Quiet indoor room.",
+        "music": "No music in the generated clip; the final edit may use one continuous track.",
+        "sfx": "Only quiet sounds caused by the visible hand and notebook actions."
+      },
+      "conditioning": [
+        {
+          "role": "identity_image",
+          "asset_id": "portrait"
+        },
+        {
+          "role": "start_frame",
+          "asset_id": "opening"
+        }
+      ],
+      "post": [
+        {
+          "id": "title-1",
+          "kind": "text",
+          "brief": "Render the exact editorial title: \"ANTES DE SAIR\".",
+          "start_s": 1,
+          "end_s": 4,
+          "trigger": "Align to the corresponding spoken phrase after inspecting the returned audio."
+        }
+      ],
+      "constraints": [
+        "Keep face, hairstyle, clothing and hand ownership consistent.",
+        "Generate clean images without titles, logos or interface text; editorial typography is added in post.",
+        "Do not invent a second presenter or extra spoken lines."
+      ],
+      "initial_state": {
+        "description": "A fictional travel presenter stands beside a small desk, holding a closed ochre notebook in her right hand.",
+        "motion": "She looks at the lens, relaxed, before raising the notebook.",
+        "camera": "Medium shot at eye level, with room around her hands.",
+        "audio": "Dry, close conversational voice; quiet indoor ambience."
+      }
+    },
+    {
+      "id": "clip-2",
+      "purpose": "Mostrar deslocamento e preparar um match visual.",
+      "duration_s": 10,
+      "use": {
+        "start_s": 0,
+        "end_s": 10
+      },
+      "character_ids": [
+        "presenter"
+      ],
+      "location_ids": [
+        "station"
+      ],
+      "prop_ids": [
+        "notebook"
+      ],
+      "evidence_ids": [],
+      "shots": [
+        {
+          "id": "station",
+          "start_s": 0,
+          "end_s": 6,
+          "intent": "Reveal the next step without breaking the presenter identity.",
+          "action": "The same notebook continues its left-to-right movement out of the frame, revealing the presenter at a quiet station platform. She lowers it naturally, still in her right hand.",
+          "composition": "Medium wide shot showing the presenter and enough of the platform to explain the location.",
+          "camera": "Stable horizon; after the reveal, begin a slow clockwise arc.",
+          "performance": "She gives one relaxed glance toward the track, then addresses the viewer.",
+          "lighting": "Soft late afternoon light; maintain the jacket color and natural skin."
+        },
+        {
+          "id": "lamp",
+          "start_s": 6,
+          "end_s": 10,
+          "intent": "Prepare a motivated match into the destination view.",
+          "action": "The presenter gestures once with her empty left hand toward a warm round platform lamp, keeping the notebook visible in her right hand.",
+          "composition": "Presenter left third, lamp upper right; no signage or background lettering.",
+          "camera": "Continue the same slow clockwise arc, arriving at the shared boundary composition.",
+          "performance": "Small, precise gesture timed to the end of the sentence.",
+          "lighting": "Warm lamp glow balanced with daylight; no exposure flash at the cut."
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker_id": "presenter",
+          "text": "Depois, organize o caminho com tempo para aproveitar cada parada.",
+          "start_s": 0.4,
+          "end_s": 8.8,
+          "mode": "on_camera",
+          "delivery": "Brazilian Portuguese, natural conversational pace, preserve one voice across all clips."
+        }
+      ],
+      "audio": {
+        "voice_direction": "Keep the same close, natural presenter voice in every clip.",
+        "ambience": "A restrained station atmosphere.",
+        "music": "No music in the generated clip; the final edit may use one continuous track.",
+        "sfx": "Only quiet sounds caused by the visible hand and notebook actions."
+      },
+      "conditioning": [
+        {
+          "role": "identity_image",
+          "asset_id": "portrait"
+        }
+      ],
+      "post": [
+        {
+          "id": "title-2",
+          "kind": "text",
+          "brief": "Render the exact editorial title: \"ESCOLHA O CAMINHO\".",
+          "start_s": 1,
+          "end_s": 4,
+          "trigger": "Align to the corresponding spoken phrase after inspecting the returned audio."
+        }
+      ],
+      "constraints": [
+        "Keep face, hairstyle, clothing and hand ownership consistent.",
+        "Generate clean images without titles, logos or interface text; editorial typography is added in post.",
+        "Do not invent a second presenter or extra spoken lines."
+      ]
+    },
+    {
+      "id": "clip-3",
+      "purpose": "Chegar ao destino e concluir a mensagem.",
+      "duration_s": 10,
+      "use": {
+        "start_s": 0,
+        "end_s": 10
+      },
+      "character_ids": [
+        "presenter"
+      ],
+      "location_ids": [
+        "rooftop"
+      ],
+      "prop_ids": [
+        "notebook"
+      ],
+      "evidence_ids": [],
+      "shots": [
+        {
+          "id": "arrival",
+          "start_s": 0,
+          "end_s": 6,
+          "intent": "Turn the planning idea into a concrete sense of arrival.",
+          "action": "Start in the shared composition, then reveal a quiet rooftop as the slow clockwise camera arc continues. The presenter brings the notebook toward her chest.",
+          "composition": "Keep the presenter in the left third until the reveal completes; leave a clear lower area for later editorial text.",
+          "camera": "Preserve the arc direction and similar speed, then gradually move into a medium shot.",
+          "performance": "A natural look of satisfaction, without abrupt changes in expression.",
+          "lighting": "Dusk skyline with a warm practical matching the previous lamp; the face remains readable."
+        },
+        {
+          "id": "finish",
+          "start_s": 6,
+          "end_s": 10,
+          "intent": "Complete the message with a calm, usable ending.",
+          "action": "She closes both hands around the notebook against her chest and holds a natural smile with visible breathing.",
+          "composition": "Eye-level medium shot with the full notebook and both hands in frame.",
+          "camera": "Decelerate to a stable finish rather than freezing the subject.",
+          "performance": "Warm, understated delivery and a short breath after the final phrase.",
+          "lighting": "Keep the same dusk balance and skin tone through the last frame."
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker_id": "presenter",
+          "text": "O destino ganha sentido quando o plano combina com você. Vamos preparar a próxima?",
+          "start_s": 0.4,
+          "end_s": 8.8,
+          "mode": "on_camera",
+          "delivery": "Brazilian Portuguese, natural conversational pace, preserve one voice across all clips."
+        }
+      ],
+      "audio": {
+        "voice_direction": "Keep the same close, natural presenter voice in every clip.",
+        "ambience": "Soft rooftop air.",
+        "music": "No music in the generated clip; the final edit may use one continuous track.",
+        "sfx": "Only quiet sounds caused by the visible hand and notebook actions."
+      },
+      "conditioning": [
+        {
+          "role": "identity_image",
+          "asset_id": "portrait"
+        },
+        {
+          "role": "end_frame",
+          "asset_id": "closing"
+        }
+      ],
+      "post": [
+        {
+          "id": "title-3",
+          "kind": "text",
+          "brief": "Render the exact editorial title: \"VIAJE DO SEU JEITO\".",
+          "start_s": 1,
+          "end_s": 4,
+          "trigger": "Align to the corresponding spoken phrase after inspecting the returned audio."
+        }
+      ],
+      "constraints": [
+        "Keep face, hairstyle, clothing and hand ownership consistent.",
+        "Generate clean images without titles, logos or interface text; editorial typography is added in post.",
+        "Do not invent a second presenter or extra spoken lines."
+      ],
+      "final_state": {
+        "description": "On a rooftop at dusk, the presenter closes the notebook against her chest and holds a natural smile.",
+        "motion": "Hands settle; breathing remains visible through the end.",
+        "camera": "Medium shot, camera decelerates smoothly to a stable finish.",
+        "audio": "The final sentence ends with a short natural breath, without an added slogan."
+      }
+    }
+  ],
+  "joins": [
+    {
+      "id": "join-1",
+      "from": "clip-1",
+      "to": "clip-2",
+      "kind": "Object occlusion",
+      "rationale": "The notebook motivates a location change while masking the boundary.",
+      "execution": "generation",
+      "strategy": "planned_frame",
+      "overlap_s": 0,
+      "outgoing": {
+        "description": "The plain ochre notebook fills the frame, held by the same right hand; its edge moves left to right.",
+        "motion": "The notebook continues a gentle horizontal wipe at a constant speed.",
+        "camera": "Eye-level camera; exposure stays stable while the notebook covers the lens.",
+        "audio": "The last spoken phrase finishes before the cut. A short paper movement may cross the join."
+      },
+      "incoming": {
+        "description": "The plain ochre notebook fills the frame, held by the same right hand; its edge moves left to right.",
+        "motion": "The notebook continues a gentle horizontal wipe at a constant speed.",
+        "camera": "Eye-level camera; exposure stays stable while the notebook covers the lens.",
+        "audio": "The last spoken phrase finishes before the cut. A short paper movement may cross the join."
+      },
+      "match": [
+        "Same right hand and notebook.",
+        "Same left-to-right screen direction and similar apparent speed.",
+        "Same exposure while the lens is covered."
+      ],
+      "handoff_asset_id": "handoff-1"
+    },
+    {
+      "id": "join-2",
+      "from": "clip-2",
+      "to": "clip-3",
+      "kind": "Match cut on practical light and composition",
+      "rationale": "The station lamp links the journey to the destination without adding an arbitrary effect.",
+      "execution": "generation",
+      "strategy": "planned_frame",
+      "overlap_s": 0,
+      "outgoing": {
+        "description": "A round warm lamp occupies the upper right; the presenter is in the left third, still holding the notebook.",
+        "motion": "A gentle clockwise camera arc continues around the presenter.",
+        "camera": "Medium wide shot with a steady horizon and slow angular movement.",
+        "audio": "Quiet station ambience yields to rooftop air; the presenter keeps the same voice."
+      },
+      "incoming": {
+        "description": "A round warm lamp occupies the upper right; the presenter is in the left third, still holding the notebook.",
+        "motion": "A gentle clockwise camera arc continues around the presenter.",
+        "camera": "Medium wide shot with a steady horizon and slow angular movement.",
+        "audio": "Quiet station ambience yields to rooftop air; the presenter keeps the same voice."
+      },
+      "match": [
+        "Presenter left third; lamp upper right.",
+        "Same notebook hand and wardrobe.",
+        "Clockwise movement continues without an abrupt change of speed."
+      ],
+      "handoff_asset_id": "handoff-2"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "schema": "video-generation-capabilities/1",
+  "id": "example-only",
+  "tool": "Illustrative tool profile",
+  "model": "Replace with the exact selected model",
+  "mode": "image_to_video",
+  "interface": "manual",
+  "verification": {
+    "status": "unverified",
+    "source": "Example only, not a provider capability claim.",
+    "checked_at": "2026-11-16"
+  },
+  "durations_s": [
+    10
+  ],
+  "aspect_ratios": [
+    "9:16"
+  ],
+  "max_prompt_chars": null,
+  "inputs": {
+    "start_frame": {
+      "supported": true,
+      "max_count": 1,
+      "field": "Initial image"
+    },
+    "end_frame": {
+      "supported": true,
+      "max_count": 1,
+      "field": "Final image"
+    },
+    "identity_image": {
+      "supported": true,
+      "max_count": 1,
+      "field": "Character reference"
+    }
+  },
+  "outputs": {
+    "audio": true,
+    "speech": true
+  },
+  "multi_shot": true
+}

@@ -3,4 +3,5 @@ description = "Projeta cortes e operações validadas na timeline."
 developer_instructions = """
 Leia .agents/skills/montar-timeline/SKILL.md e AGENTS.md.
 Forneça recortes com fim exclusivo e fontes rastreáveis. Separe relógio do bruto e da sequência. Marque silêncio, reação e contexto e valide continuidade, especialmente em interpolação e handles.
+Para clipes gerados, leia docs/video-generation.md. Use os arquivos reais e a faixa use de cada clipe; desconte sobreposições e registre pontes extras como clipes. A timeline exportada ainda usa segundos planejados até conformar os resultados recebidos. Não remover silêncio, alterar FPS, repetir frames ou escolher automaticamente o último quadro para completar uma transição. Confira a emenda em movimento e preserve o recibo que originou cada condicionamento.
 """

@@ -22,6 +22,12 @@ A busca semântica de áudio em `audiovisual.semantic_audio` admite CLAP local o
 
 O [registro histórico de validação contextual](docs/validation-contextual-edit.md) descreve a bateria de 315 testes daquela etapa e distingue as provas de render/PCM da avaliação com modelo e filmagem reais. A validação da expansão de motion fica em [registro próprio](docs/validation-motion-integration.md); a contagem histórica não representa a suíte atual.
 
+## Direção e geração de prompts de vídeo
+
+`python -m editorial_engine generation` organiza briefing, personagens, cenas, imagens pendentes e ligações entre clipes; exporta prompts autossuficientes com configurações e anexos separados para a ferramenta escolhida. Ao receber os vídeos, registra metadados, quadros selecionados e dependências por hash. A direção é escrita pelo host; o compilador verifica contratos e duração, sem enviar jobs nem apresentar validação técnica como qualidade visual. Consulte o [guia de geração](docs/video-generation.md) e o [exemplo autoral de três clipes de dez segundos](examples/video_generation/three-clips-plan.json).
+
+A [validação desta integração](docs/validation-video-generation.md) registra 453 testes e 42 subtestes aprovados, incluindo encadeamento e revisão de retornos com vídeos sintéticos reais. Essa evidência técnica não representa aprovação estética de um gerador externo.
+
 ## Criação de motion e aplicação ao bruto
 
 `python -m editorial_engine motion` reúne OpenKatana, Motion Lab legado MIT e MOTNGRFX portátil. OpenKatana mede referência/áudio e executa timeline e efeitos; Motion Lab oferece cenas 2D, grupos independentes, blur por subframes e 3D por CPU; MOTNGRFX produz tipografia extrudada com rotação ou articulação por glifo. O diretor escolhe a receita pela função do trecho. Consulte o [guia de integração de motion](docs/motion-integration.md) para instalação, licenças fixadas, exemplos e disponibilidade medida por backend.

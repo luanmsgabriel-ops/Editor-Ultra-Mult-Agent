@@ -76,6 +76,8 @@ def parser():
     patch.add_argument("--review-output", type=Path, required=True)
     motion = sub.add_parser("motion", help="Measure, author and render motion using the pinned adapters")
     motion.add_argument("motion_args", nargs=argparse.REMAINDER)
+    generation = sub.add_parser("generation", help="Direct connected clips, export prompts and inspect returned video")
+    generation.add_argument("generation_args", nargs=argparse.REMAINDER)
     return root
 
 
@@ -84,6 +86,9 @@ def main(argv=None):
     if argv and argv[0] == "motion":
         from .motion import main as motion_main
         return motion_main(argv[1:])
+    if argv and argv[0] == "generation":
+        from .generation.cli import main as generation_main
+        return generation_main(argv[1:])
     argparser = parser()
     args = argparser.parse_args(argv)
     try:
