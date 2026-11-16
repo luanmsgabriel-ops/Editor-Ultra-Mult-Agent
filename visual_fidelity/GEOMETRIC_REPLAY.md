@@ -72,3 +72,14 @@ For `linear_gradient`, start/end are normalized along the selected axis and
 `end > start` is required. Sampling uses pixel centers; horizontal means x and
 vertical means y. Unlike a geometric edge antialias, the gradient spans the
 whole authored interval and can crossfade recovered photographic layers.
+
+## Soft composite decomposition (1.0.1)
+
+`decompose_observed(observed, base_guess, coverage)` accepts matching uint8 RGB
+rasters and a finite [0,1] alpha mask. It returns an adjusted base and insert.
+The guessed base is constrained to a feasible color interval before solving the
+insert, preventing clipped highlights/vertical seams in feathered composites.
+This is a non-unique coupled decomposition of observed pixels, not recovery of
+hidden photography. Validate new geometry against the assets' observed support.
+The regression test recomposes a synthetic high-contrast gradient within one
+8-bit level, including alpha endpoints, without mutating the supplied guess.
