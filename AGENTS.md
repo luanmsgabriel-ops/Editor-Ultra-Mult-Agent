@@ -91,3 +91,10 @@ Use `visual_fidelity/geometric_replay.py` versão 1.0.1 para faixas horizontais/
 Quando só existir o MP4 final, declare a recomposição de pixels fotográficos recuperados, marque regiões ocultas inferidas e mantenha a geometria independente dos assets. A comparação usando pixels da referência não prova generalização. Gere uma prova adicional trocando as fontes pelas mesmas máscaras/tempos. Para um novo bruto, refaça os recortes e reancore portais como viseiras; não reutilize coordenadas de uma pessoa como rastreamento de outra.
 
 Em transições suaves, `decompose_observed` restringe a base aproximada ao intervalo de cor que permite uma inserção sem clipping. A correção da emenda clara da colagem 180/195 foi incorporada ao motor e tem teste de regressão. A decomposição é não única; não a descreva como recuperação exata do material oculto. Preserve os parâmetros, camadas, áudio, proveniência, instruções e hashes no pacote. Não imponha fontes ou estética de referências anteriores a um vídeo sem tipografia.
+
+
+## Aplicação geométrica a bruto novo: 330494
+
+Use `visual_fidelity/geometric_video.py` 1.0.1 e o adaptador `examples/reference_replays/330494_application/`. Pacote completo: https://drive.google.com/drive/folders/1wYeiImVXB2dVG_2hi1622S23iWt_yEd4. Aprovação do usuário pendente.
+
+Refaça mattes de sujeito e viseira para cada bruto. Aplique exatamente o mesmo viewport ao vídeo e à máscara; redimensione recortes com alpha premultiplicado e ajuste a inserção à caixa da máscara do portal. Preserve relógios explícitos, proporção e hashes reais. Reutilize geometria e tempos da referência, sem transportar seus pixels fotográficos. Se faltar fundo, gere clean plate documentado com prompt/proveniência e preserve o original. Mantenha novos assets, máscaras, timeline, dependências, código e instruções juntos. A trilha de referência usada em teste privado permanece identificada separadamente. Testes e decodificação não equivalem a aprovação estética; registre serrilhado, limitações de ampliação e ausência de audição confirmada.
