@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "migration_date": "2026-11-16",
+  "repository": "luanmsgabriel-ops/Editor-Ultra-Mult-Agent",
+  "original_collection_name": "EditorPro / SFX",
+  "destination_root_id": "1voHZz4uwmnfcIcFgqOsNaBZnhbWtWr6B",
+  "destination_root_url": "https://drive.google.com/drive/folders/1voHZz4uwmnfcIcFgqOsNaBZnhbWtWr6B",
+  "destination_path": "Banco Audiovisual/01 Áudio/Efeitos sonoros/EditorPro — Biblioteca SFX (15 fontes)",
+  "transfer_method": "Google Drive server-side file copy; original shared folders retained",
+  "verification": "Per-folder source-to-destination file count, name, MIME, and size comparison; not a cryptographic or listening audit",
+  "verification_result": "15/15 root folders and 4/4 Foley subfolders reconciled. Foley 'Veículos ' trailing space normalized to 'Veículos'.",
+  "licensing": "NOT_VERIFIED; copying a file does not establish redistribution or commercial usage rights",
+  "editor_import_status": "available_on_drive; catalog registration still needed on editor's next catalog refresh; do not mark licensed by copying",
+  "total_audio_files": 595,
+  "categories": [
+    {
+      "name": "SFX Diegetic",
+      "file_count": 48,
+      "source_drive_folder_id": "1rPZO0jjcETmytNiojD_etE-hAaSPCy-z",
+      "destination_drive_folder_id": "1o4SSBkr46f-kVw6-fOk7SoVw2RuYEgX3"
+    },
+    {
+      "name": "SFX Foley",
+      "file_count": 79,
+      "source_drive_folder_id": "1O3tiPAUvJuq-UuhKF-HGqB852IW5V1tO",
+      "destination_drive_folder_id": "1c5kIwas9ra1A9Hoa77Dz-RwXMDQagJC9"
+    },
+    {
+      "name": "SFX Reverb PRO",
+      "file_count": 39,
+      "source_drive_folder_id": "1O3kbUQE4KqoarIHCSFSCk583dwn7AXO1",
+      "destination_drive_folder_id": "1kLYqzIOZE6wTUxRMBj201tDKR0ASc2xj"
+    },
+    {
+      "name": "SFX Ambientes PRO",
+      "file_count": 26,
+      "source_drive_folder_id": "1pll0QbrYNrJ_b6KJzFV1cObBTA4UY_OG",
+      "destination_drive_folder_id": "1r9lAQYsZWzPYrDXJ2cnOIXqH1qOYvO6t"
+    },
+    {
+      "name": "SFX Natureza PRO",
+      "file_count": 24,
+      "source_drive_folder_id": "1GM7U-k_BnM28w_5SJcRGb_VCsB6J7Gfy",
+      "destination_drive_folder_id": "1Pye0PG-C_Ww_SCx7OTQafDJp0Yn1EXch"
+    },
+    {
+      "name": "SFX Emoção PRO",
+      "file_count": 18,
+      "source_drive_folder_id": "1xZPViRXvi9IuS2d1Tl3P4RAkqPlH9aB_",
+      "destination_drive_folder_id": "155-CfcOTe_Qf9Q-1XHf55IQuQ9_uBUwN"
+    },
+    {
+      "name": "SFX HUDs PRO",
+      "file_count": 17,
+      "source_drive_folder_id": "1zfsDVoYGIOEYNGOcoWk04VdLYmErqqTw",
+      "destination_drive_folder_id": "10HRRhjUlHGOzfjmiUEQDcCaVXLvr3_Eq"
+    },
+    {
+      "name": "SFX Tonalidade PRO",
+      "file_count": 29,
+      "source_drive_folder_id": "1dlEc3p0pq5oiLa7osVl2uS2j_xJQxyet",
+      "destination_drive_folder_id": "1Q5u1kpHxDXGqXSmUTC3zu0aSbeUxiOvz"
+    },
+    {
+      "name": "SFX Retro PRO",
+      "file_count": 29,
+      "source_drive_folder_id": "11ppwPGia-QXS-S6pIXjd5X3a_UbDhd6k",
+      "destination_drive_folder_id": "1EUR6IMMt0Ftm50SLApMVDXq90OpXBHlk"
+    },
+    {
+      "name": "SFX Transitions PRO",
+      "file_count": 28,
+      "source_drive_folder_id": "1uBC6ZN0l94QYq_sq4z2bAWQJJcTec09M",
+      "destination_drive_folder_id": "1SfsW-GeA4kQqAoNPREjofabpZOTcug5g"
+    },
+    {
+      "name": "SFX Interface PRO",
+      "file_count": 87,
+      "source_drive_folder_id": "1sGSkKcKbVhyDJBTjYwVoK0j4X_S1tXsK",
+      "destination_drive_folder_id": "1Daz0Z5YT7QazTc76w_rM9eN9I_wzoqgc"
+    },
+    {
+      "name": "SFX Whoosh PRO",
+      "file_count": 45,
+      "source_drive_folder_id": "1hrqc9wpgCt4HAPTcQaSqKqogKUpKtq0M",
+      "destination_drive_folder_id": "1aJUvSTXfhyDfv-3XEF16UQ5GQAuGWg45"
+    },
+    {
+      "name": "SFX Hits PRO",
+      "file_count": 24,
+      "source_drive_folder_id": "1g8a_AEpU93Kt8doGnsnaQP0AKcAEO8EW",
+      "destination_drive_folder_id": "1WLBG2kMZp9QoahBkY67JU30GN70TnDlZ"
+    },
+    {
+      "name": "SFX Efeitos (Fogo, CO2,etc) PRO",
+      "file_count": 58,
+      "source_drive_folder_id": "104YMqTnmj7Y0Pa8L1Q2Gn7YSqK7kteeH",
+      "destination_drive_folder_id": "1LROuYDQy3jjQIXS9lv8EV5do8M_WVr9e"
+    },
+    {
+      "name": "SFX Risers PRO",
+      "file_count": 44,
+      "source_drive_folder_id": "10tMVLvQ8QkwAslBLQB6W-MH_TVxF99gF",
+      "destination_drive_folder_id": "1CgPF3OzavkNUpm8vepKYCCOpWVv8R3nP"
+    }
+  ],
+  "foley_subcategories": [
+    {
+      "name": "Veículos",
+      "file_count": 15,
+      "source_drive_folder_id": "1VIfuFdI_0RzQcoUXUK_T5t52G8Y8sPKB",
+      "destination_drive_folder_id": "1iy2MxOyJpAYe2bJDi-V5hq25oTGP_9-_"
+    },
+    {
+      "name": "Detalhes",
+      "file_count": 31,
+      "source_drive_folder_id": "1y-HTfVeMRBLXPcFEN4cgA_BtFI83stPB",
+      "destination_drive_folder_id": "1I1nr5pNes9UR3YxfgtZhQYhUVPIwHE1n"
+    },
+    {
+      "name": "Pessoas",
+      "file_count": 21,
+      "source_drive_folder_id": "1iOOAjlEhz0gFMGNKYnkw7wfQvCpnyCvP",
+      "destination_drive_folder_id": "1_aggEf818deM0moJhFwZggz0mzUyogzy"
+    },
+    {
+      "name": "Sons do dia a dia",
+      "file_count": 12,
+      "source_drive_folder_id": "1S0cubXEDqcjn1Wq0kTecfYjKKHnCtkX-",
+      "destination_drive_folder_id": "1_d5IgmKbb5ITfyj5unbeyXYKj_XoL7k0"
+    }
+  ]
+}
