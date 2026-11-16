@@ -10,7 +10,7 @@ import math
 import cv2
 import numpy as np
 
-VERSION='1.0.0'
+VERSION='1.0.1'
 
 
 def _number(value,name):
@@ -212,3 +212,31 @@ def compose(base,insert,mask,foreground=None):
     output=rgb if original.shape[2]==3 else np.concatenate([rgb,out_alpha],axis=2)
     output=np.clip(output,0,1)
     return np.rint(output*255).astype(np.uint8) if original.dtype==np.uint8 else output.astype(original.dtype)
+
+
+def decompose_observed(observed,base_guess,coverage):
+    """Coupled inverse composition for an observed uint8 RGB composite.
+
+    Return (adjusted_base, insert), uint8. In soft-alpha pixels, constrain the
+    guessed base to values allowing an in-gamut insert. This avoids seams caused
+    by clipping the inverse solution. The decomposition is non-unique and is
+    NOT recovery of the original/hidden photography. At alpha=0 the observed
+    image belongs to the base; at alpha=1 it belongs to the insert.
+    """
+    source=np.asarray(observed);guess=np.asarray(base_guess)
+    if source.dtype!=np.uint8 or guess.dtype!=np.uint8 or source.ndim!=3 or source.shape[-1]!=3 or guess.shape!=source.shape:
+        raise ValueError('Observed and base guess must be matching uint8 RGB rasters')
+    a=np.asarray(coverage,dtype=np.float32)
+    if a.shape!=source.shape[:2] or not np.isfinite(a).all() or np.any((a<0)|(a>1)):
+        raise ValueError('Coverage must match raster and be finite [0,1]')
+    base=guess.copy();insert=np.zeros_like(source)
+    base[a==0]=source[a==0];insert[a==1]=source[a==1]
+    soft=(a>0)&(a<1)
+    if soft.any():
+        weight=a[soft,None];pixel=source[soft].astype(np.float32)
+        low=np.maximum(0,(pixel-255*weight)/(1-weight))
+        high=np.minimum(255,pixel/(1-weight))
+        base[soft]=np.rint(np.clip(base[soft],np.ceil(low),np.floor(high))).astype(np.uint8)
+        solved=(pixel-(1-weight)*base[soft])/weight
+        insert[soft]=np.rint(np.clip(solved,0,255)).astype(np.uint8)
+    return base,insert
