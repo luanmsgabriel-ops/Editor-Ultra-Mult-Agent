@@ -155,7 +155,7 @@ def composite_orbit_context(frame, layer, index, fps):
     matte=read_alpha(effect['mattes'],index)
     if matte is None:
         raise ValueError(f'Missing matte for orbital frame {index}')
-    elapsed=(index-layer.first)/fps
+    elapsed=(index-layer.first)/float(fps)
     opacity=min(1.,(elapsed+.04)/.21,(layer.last-index)/max(1.,fps*.21))
     layers=orbit_passes(size,layer.corners[index],matte,effect['title'],effect['font'],effect['ink'],elapsed)
     for art in layers:
@@ -196,7 +196,7 @@ def composite_hand_context(frame, layer, index, fps):
     matte=read_alpha(effect['mattes'],index) if effect['mattes'] else None
     if matte is None:
         return
-    elapsed=(index-layer.first)/fps
+    elapsed=(index-layer.first)/float(fps)
     gain=min(1.,(elapsed+.025)/.12,(layer.last-index)/max(1.,fps*.16))
     rear,front=hand_passes(size,layer.corners[index],matte,elapsed)
     for coverage,color in zip((rear,front),((253,248,230),tuple(effect['ink']))):

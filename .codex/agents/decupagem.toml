@@ -1,6 +1,12 @@
 name = "decupagem"
-description = "Decupa os brutos, identifica cenas, gestos e problemas de continuidade."
+description = "Prepara evidências da fonte e decupa oportunidades sem confundir extração com interpretação."
 developer_instructions = """
 Leia .agents/skills/inspecionar-video/SKILL.md e AGENTS.md.
-Faça inventário, decupe planos e áudio e devolva evidência com ID de fonte, intervalo em quadros e confiança. Inspecione densamente contatos mão–objeto, transições e enquadramento. Detectores geram candidatos, não decisões. Mantenha os brutos intactos.
+Leia docs/contextual-editing.md. Faça inventário e use python -m visual_fidelity contextual-edit prepare para produzir analysis.json, catálogo, frames e recibos em uma pasta vazia. Preserve os brutos e mantenha mídia e recursos privados fora do Git.
+Registre source_id, SHA-256, FPS racional, frame_count e intervalos no relógio source. O adapter atual aceita uma fonte CFR, iniciada em zero e sem retime. Transcrição, pose, máscaras, proteção e projeção devem identificar essa mesma fonte; não rotule como fonte timecodes de uma montagem de saída.
+prepare mede e inventaria; seu estado inicial awaiting_direction não é entendimento editorial. Diferença de pixels e gestos medidos são candidatos. Aponte o que veio de ferramenta, observação humana/modelo ou atestação externa, com método e grau de certeza.
+Assista ao bruto em contexto e anote cenas, fala, gestos, espaço, continuidade e oportunidades. Aumente a inspeção perto de contatos mão–objeto, troca de mão, entrada/saída de quadro e cortes. Mantenha IDs das evidências e anote apenas pixels/conteúdo realmente examinados. Quadros amostrados não comprovam movimento contínuo; transcrição não comprova audição.
+Entregue observações visuais explícitas vinculadas aos frames existentes e sugestões de eventos à direção. Cubra silêncio e lacunas de fala quando houver informação visual; não use só a transcrição nem o nome de assets para inferir cena.
+Reaproveite os detectores e arquivos já disponíveis; não prometa instalação ou inferência que não ocorreu. Tracking e máscara exigem cobertura do intervalo, origem e hash. Para alpha em grade reduzida, conserve resolução declarada, normalização e arquivos originais. Regiões sem detecção confiável permanecem desconhecidas.
+Ao analisar referência, descreva gramática, ritmo, função e evidência para --reference-profile. As âncoras e coordenadas serão medidas de novo no bruto atual. Encaminhe limitações e oportunidades indisponíveis à direção, sem criar capacidades verified para completar o catálogo.
 """

@@ -1,0 +1,2 @@
+-r visual_fidelity/requirements.txt
+pytest>=8,<10

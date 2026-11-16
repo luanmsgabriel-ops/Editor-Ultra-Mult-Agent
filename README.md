@@ -8,7 +8,23 @@ Abra o repositório no Codex com acesso aos arquivos do projeto. Informe fontes,
 
 O repo usa Python 3.11+ e ffprobe. O piloto requer FFmpeg (libass, zscale e libx264), NumPy e fontes do sistema. Reconstruir o letreiro requer também Blender e Pillow.
 
+## Direção contextual de novos vídeos
+
+O fluxo padrão para escolher efeitos em um novo bruto é `python -m visual_fidelity contextual-edit`. Ele prepara quadros reais, fala e recibos de rastreamento; recebe direção explícita de uma pessoa, do agente no host ou de um modelo multimodal configurado; concilia propostas e executa as operações viáveis. Cada decisão guarda intenção, evidência, intervalo, efeito, âncora, parâmetros e justificativa. Eventos sem decisão bloqueiam o render; preservar também exige justificativa explícita.
+
+O catálogo nativo executa tipografia cinética, imagens em tela, imagens atrás do sujeito, projeções em superfícies medidas, órbita corporal, acento na palma e SFX. Máscaras e trajetórias pertencem ao bruto atual. Os requisitos são conferidos antes da execução, as animações respeitam as regiões reservadas e as revisões ficam ligadas aos hashes do plano e do arquivo renderizado. Operações 3D ou geração de novos planos usam adaptadores externos explícitos; não são presumidas pelo catálogo.
+
+Leia o [guia de direção contextual](docs/contextual-editing.md) para preparar o projeto e executar `prepare`, `request`, `plan`, `render`, `review` e `patch`. O comando opcional `direct` chama um endpoint multimodal configurado; o host também pode produzir `direction.json` após examinar as fontes. Não há substituição da análise por palavras-chave quando o modelo está indisponível.
+
+A [comparação de alternativas ao Higgsfield](docs/higgsfield-reuse.md) documenta os padrões reimplementados: manifestos de efeitos, verificação de recursos, receitas, execução retomável e conferência contra a filmagem original. O ledger de workflows reserva custo antes de executar um callback, verifica arquivos reais e não repete jobs de estado desconhecido. Nenhum provedor de geração externo vem configurado.
+
+A busca semântica de áudio em `audiovisual.semantic_audio` admite CLAP local opcional e diferencia indexação técnica de embeddings reais. O render de SFX usa o ataque interno do arquivo, reamostragem explícita, ducking pelo áudio original e controle de picos. Aprovação perceptiva de sincronismo, inteligibilidade e direção continua registrada separadamente dos testes.
+
+O [registro de validação](docs/validation-contextual-edit.md) descreve os 315 testes executados e distingue as provas de render/PCM da avaliação ainda necessária com modelo e filmagem reais.
+
 ```sh
+python -m pip install -r requirements-dev.txt
+python -m pytest -q tests extensions
 python -m unittest discover -s tests -v
 python -m unittest discover -s extensions -v
 python -m audiovisual inventory /caminho/dos/brutos --output inventario.json
@@ -38,7 +54,7 @@ O piloto exercita ingest de catálogo, ranking, três efeitos de áudio com prov
 
 ## Motion a partir de referência
 
-Para transferir o estilo da Clara a um novo bruto, use o [planejamento por fala e rastreamento](visual_fidelity/ADAPTIVE_TEMPLATE.md).
+Para transferir o estilo da Clara a um novo bruto, use a [direção contextual](docs/contextual-editing.md), com perfil de referência e evidências do vídeo atual. O [template por fala e rastreamento](visual_fidelity/ADAPTIVE_TEMPLATE.md) permanece disponível para reproduzir seu fluxo específico; suas regras de palavras e ícones não são o diretor semântico geral.
 
 O [piloto da cascata de três cards](pilots/motion_cards/README.md) mede movimentos, aplica o mesmo template sobre outro bruto e exporta uma comparação e uma composição HyperFrames.
 

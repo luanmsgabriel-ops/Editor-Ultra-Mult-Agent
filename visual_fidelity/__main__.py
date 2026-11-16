@@ -8,11 +8,13 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('typography','cap','asset','reconstruct','origins','measure','anchor','blender-anchors','glyph-profile','body-pose','body-rtmw','effects','presets','obs','motion-qa','timeline-qa','scene3d','overlay','motion-kit','motion-objects','studio-edit','reference-bundle','reference-cadence','reference-layers','adaptive-template'),
+    parser.add_argument('command', choices=('typography','cap','asset','reconstruct','origins','measure','anchor','blender-anchors','glyph-profile','body-pose','body-rtmw','effects','presets','obs','motion-qa','timeline-qa','scene3d','overlay','motion-kit','motion-objects','studio-edit','reference-bundle','reference-cadence','reference-layers','adaptive-template','contextual-edit'),
                         help='Escolha a operação; use COMANDO --help para ver as opções.')
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    if args.command in {'cap','asset','blender-anchors','motion-objects'}:
+    if args.command == 'contextual-edit':
+        command = [sys.executable, '-m', 'editorial_engine', *args.arguments]
+    elif args.command in {'cap','asset','blender-anchors','motion-objects'}:
         blender = shutil.which('blender')
         if not blender:
             parser.exit(1, 'Blender indisponível no PATH.\n')
