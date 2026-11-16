@@ -17,3 +17,11 @@ description: Ler waveform, energia, ataques e compassos, fazer spotting, curador
 - Se os MP3 forem exportados, usar `python -m audiovisual.elevenlabs_sfx inspect` e `stage` com os caminhos documentados. Nenhum staging aprova licença, nem altera o motor de política.
 - Na leitura de referência, identificar evento visual, começo da animação, ponto de máxima velocidade e instante de impacto. Recomendar efeitos por função acústica e testar posicionamento em amostras, nunca somente pelo rótulo do template.
 - Separar camadas `whoosh`, `hit`, `riser`, `foley` na timeline e anotar a origem independente de cada uma. Evitar som excessivo que encubra voz; fazer escuta A/B e medir o ataque/cauda antes da aprovação.
+
+## Acervo EditorPro no Drive
+
+- A biblioteca compartilhada de 15 fontes (595 MP3) foi copiada para `Banco Audiovisual/01 Áudio/Efeitos sonoros/EditorPro — Biblioteca SFX (15 fontes)` (Drive folder `1voHZz4uwmnfcIcFgqOsNaBZnhbWtWr6B`).
+- Leia `assets/sfx/editorpro/migration-2026-11-16.json` para os 15 IDs de origem/destino, contagem por categoria e as quatro subpastas Foley. As cópias foram verificadas por listagens de nomes, tamanhos e tipos, mas ainda não por SHA-256 nem escuta.
+- Para pesquisar esses efeitos no motor, inclua **apenas o folder ID de destino** como raiz autorizada na rotina de catálogo `audiovisual.drive_catalog`. Aponte a ferramenta de curadoria para o snapshot local após nova indexação. Não pressupor disponibilidade em cache nem renderização apenas por existir link no Drive.
+- A licença destes arquivos compartilhados ainda está `unknown`. O `editor_policy.py` deve manter inelegíveis para publicação comercial até validação explícita do titular e do escopo permitido. Somente uma prévia privada autorizada pode seguir a política de exceção já existente no motor, sem alterar regras para a biblioteca toda.
+- Evite misturar a biblioteca EditorPro com os 20 SFX originais do ElevenLabs; têm proveniência e direitos distintos.
