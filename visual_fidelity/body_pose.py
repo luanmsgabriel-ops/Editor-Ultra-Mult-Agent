@@ -2,6 +2,7 @@
 import argparse
 from contextlib import ExitStack
 from dataclasses import dataclass
+from hashlib import file_digest
 import json
 from pathlib import Path
 import subprocess
@@ -201,7 +202,7 @@ def analyze(source, output, model, gesture_model=None, masks=None,
         masks.mkdir(parents=True, exist_ok=True)
     width, height = size = video_size(source, max_dimension)
     tracker = PersonTracker(max_gap=max(2, round(fps*.4)))
-    saved, previous = {}, None
+    saved, observed_hands, previous = {}, {}, None
     cuts = [0]
     with ExitStack() as resources:
         pose = resources.enter_context(vision.PoseLandmarker.create_from_options(
@@ -229,8 +230,15 @@ def analyze(source, output, model, gesture_model=None, masks=None,
                                      for name, point in zip(BODY, path)},
                        'gestures': {}} for path in result.pose_landmarks]
             tracker.assign(people, index, width/height)
-            if hands is not None and people:
-                attach_hands(people, hands.recognize_for_video(image, timestamp), width/height)
+            if hands is not None:
+                hand_result = hands.recognize_for_video(image, timestamp)
+                if people:
+                    attach_hands(people, hand_result, width/height)
+                observed_hands[str(index)] = [
+                    {'side': label[0].category_name.lower() if label else 'unknown',
+                     'landmarks': {name: point_value(p, 1.) for name, p in zip(HAND, points)}}
+                    for points, label in zip(hand_result.hand_landmarks, hand_result.handedness)
+                ]
             if masks is not None:
                 save_masks(result.segmentation_masks, people, masks, index,
                            per_person, (height, width))
@@ -239,6 +247,10 @@ def analyze(source, output, model, gesture_model=None, masks=None,
         raise ValueError('Nenhum quadro foi decodificado.')
     report = {'fps': fps, 'resolution': list(size), 'provider': 'mediapipe',
               'shots': cuts, 'frames': saved}
+    with Path(source).open('rb') as stream:
+        report['source_sha256'] = file_digest(stream, 'sha256').hexdigest()
+    if hands is not None:
+        report['hands'] = observed_hands
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open('w', encoding='utf-8') as file:
         json.dump(report, file, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
@@ -273,3 +285,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

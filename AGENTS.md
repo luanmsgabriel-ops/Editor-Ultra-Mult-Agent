@@ -115,3 +115,7 @@ Use `python -m visual_fidelity reference-cadence analyze` para medir batidas com
 ## Leitura e reaplicação de efeitos em camadas
 
 Quando uma máscara composta tem formas independentes, preserve a identidade de cada forma. Use `reference-layers analyze` para ler a oclusão, detectar mudanças de conteúdo por faixa e guardar as evidências. Use `reference-layers apply` após compilar a cadência, com a paleta de imagens e os recortes do novo sujeito. Valide profundidade e trocas no render. Consulte `visual_fidelity/REFERENCE_LAYERS.md`.
+
+## Aplicação de estilo ao bruto novo
+
+Ao receber um bruto novo com pedido para aplicar a Clara PT2, use `python -m visual_fidelity adaptive-template`. A Clara passa a fornecer paleta, hierarquia de fontes e linguagem de animação. Defina momentos, enquadramentos, gráficos e textos a partir da fala e dos pontos rastreados no bruto. Em close ou corpo cortado, mantenha o enquadramento real e proteja rosto e mãos no decorrer do plano. Para inserir algo no ambiente, use âncora planar ou câmera com evidência medida. Se um ícone precisar ser criado, use o conceito sustentado pela fala e registre o arquivo com transparência e proveniência. Consulte `visual_fidelity/ADAPTIVE_TEMPLATE.md`. O render fixo de 329687 PT2 serve para reproduzir a edição aprovada com a Clara.
