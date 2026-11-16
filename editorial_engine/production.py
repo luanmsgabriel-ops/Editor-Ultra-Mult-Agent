@@ -714,6 +714,40 @@ def _motion(request, root):
                            "simulated": False, "backend": params["backend"], "producer_receipt": _file(root / "motion" / "run.json")}}
 
 
+def _planar_portal(request, root):
+    """Render a declared portal only when all nested media are tracked inputs."""
+    from visual_fidelity.planar_portal import render as render_portal
+    params = _fields(request["parameters"], {"manifest_input"}, label="planar_portal.parameters")
+    require(request["output_kind"] == "video", "production_portal", "Bundled planar_portal produces a silent video")
+    manifest_input = _input(request, params["manifest_input"])
+    require(manifest_input["kind"] == "json", "production_portal", "manifest_input must identify a declared JSON input")
+    _file(manifest_input["path"], manifest_input["sha256"])
+    manifest_path = Path(manifest_input["path"]).resolve()
+    manifest = mapping(json.loads(manifest_path.read_text(encoding="utf-8")), "portal manifest")
+    require(manifest.get("schema") == "planar-portal/1", "production_portal", "Expected planar-portal/1")
+    tracked = {(str(Path(item["path"]).resolve()), item["sha256"]) for item in request["inputs"]}
+    sources = [mapping(manifest.get(name), "portal." + name) for name in ("base", "insert")]
+    if manifest.get("occlusion") is not None:
+        sources.append(mapping(mapping(manifest["occlusion"], "portal.occlusion").get("source"), "portal.occlusion.source"))
+    for source in sources:
+        require(source.get("kind") in {"image", "video", "sequence"}, "production_portal", "Unknown portal source kind")
+        files = sequence(source.get("files"), "portal source files") if source["kind"] == "sequence" else [source]
+        require(bool(files), "production_portal", "Portal sources cannot be empty")
+        for item in files:
+            mapping(item, "portal source file")
+            path = (manifest_path.parent / nonempty(item.get("path"), "portal source path")).resolve()
+            expected = sha256(item.get("sha256"), "portal source sha256")
+            require((str(path), expected) in tracked, "production_portal_input",
+                    "Every portal base, insert, occlusion and sequence file must also be a hashed request input", str(path))
+    output = root / "portal.mp4"
+    receipt = render_portal(manifest_path, output)
+    return {"artifact_path": str(output), "artifact_sha256": receipt["output_sha256"], "actual_cost": 0,
+            "provenance": {"actor": "visual_fidelity.planar_portal.render",
+                "method": "Rendered independent hashed sources through authored four-corner geometry on an explicit frame clock",
+                "simulated": False, "mapping": receipt["mapping"], "audio": "not_rendered",
+                "producer_receipt": _file(output.with_suffix(".mp4.json"))}}
+
+
 def execute_request(request, output_dir, *, executor=None, registry=None, ledger=None,
                     estimated_cost=0, retry_failed=False):
     """Export, stage or execute explicitly; unknown executions are never retried.
@@ -728,14 +762,25 @@ def execute_request(request, output_dir, *, executor=None, registry=None, ledger
     root = Path(output_dir).resolve()
     _export_request(data, root)
     adapter = _adapter(data, executor, registry)
-    builtin = data["operation"] == "motion_recipe" and adapter is None and data["adapter_id"] in (None, "bundled.motion")
+    builtin_motion = data["operation"] == "motion_recipe" and adapter is None and data["adapter_id"] in (None, "bundled.motion")
+    builtin_portal = data["operation"] == "planar_portal" and adapter is None and data["adapter_id"] in (None, "bundled.planar_portal")
+    builtin = builtin_motion or builtin_portal
     descriptor = adapter.descriptor() if adapter else ({"id": "bundled.motion", "version": "1", "simulated": False,
         "implementation_sha256": _file(__file__)["sha256"],
-        "motion_sha256": _file(Path(__file__).with_name("motion.py"))["sha256"]} if builtin else None)
+        "motion_sha256": _file(Path(__file__).with_name("motion.py"))["sha256"]} if builtin_motion else None)
+    if builtin_portal:
+        from visual_fidelity import planar_portal, geometric_replay
+        descriptor = {"id": "bundled.planar_portal", "version": planar_portal.VERSION, "simulated": False,
+            "implementation_sha256": _file(__file__)["sha256"],
+            "portal_sha256": _file(planar_portal.__file__)["sha256"],
+            "geometry_sha256": _file(geometric_replay.__file__)["sha256"]}
     previous_path = root / "execution.json"
     previous = _previous_execution(root)
     if previous:
         require(previous["request_sha256"] == data["request_sha256"], "production_stale", "Output belongs to another request")
+        if builtin_portal and previous["status"] == "succeeded":
+            require(previous["adapter"] == descriptor, "production_stale",
+                    "Portal implementation changed; keep this result and render a new execution directory")
         if previous["ledger"] is not None:
             require(ledger is not None, "production_ledger", "Resume a ledger-managed job with its ledger")
             old_job = ledger.get_job(previous["ledger"]["key"])
@@ -795,8 +840,8 @@ def execute_request(request, output_dir, *, executor=None, registry=None, ledger
                    "cost_limit": estimated_cost, "cost_unit": ledger.budget()["unit"] if ledger else None}
         if builtin:
             try:
-                outcome = _motion(data, work)
-            except (ValueError, OSError, RuntimeError, KeyError, TypeError, ImportError) as error:
+                outcome = _planar_portal(data, work) if builtin_portal else _motion(data, work)
+            except (ValueError, OSError, RuntimeError, KeyError, TypeError, ImportError, subprocess.SubprocessError) as error:
                 outcome = {"status": "failed", "actual_cost": 0, "error": "local_adapter_failed:" + str(error)}
         else:
             outcome = adapter.executor(context)
