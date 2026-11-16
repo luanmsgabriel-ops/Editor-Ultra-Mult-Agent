@@ -29,6 +29,12 @@ def parser():
     update.add_argument("--reason", required=True)
     command("status", "Show current artifacts, stale dependencies and concrete next actions")
     command("advance", "Resume local preparation and export the next direction request")
+    recreation = command("recreation", "Plan independent performer video, geometry and composition dependencies")
+    recreation.add_argument("--assets", type=Path, help="Actual independent resources with provenance and source bindings")
+    recreation.add_argument("--queue", action="store_true", help="Export typed missing production tasks without generating media")
+    recreation_adopt = command("recreation-adopt", "Adopt a verified production result with performer, lineage and clock declarations")
+    recreation_adopt.add_argument("request_id")
+    recreation_adopt.add_argument("descriptor", type=Path)
     fork = command("fork", "Branch an existing project without modifying its sources")
     fork.add_argument("parent", type=Path)
     fork.add_argument("--id", dest="project_id")
@@ -143,6 +149,10 @@ def main(argv=None):
             return 0
         elif action == "advance":
             engine.advance_project(args.project)
+        elif action == "recreation":
+            engine.plan_recreation(args.project, assets=_read(args.assets), queue=args.queue)
+        elif action == "recreation-adopt":
+            engine.adopt_recreation_asset(args.project, args.request_id, _read(args.descriptor))
         elif action == "fork":
             engine.fork_project(args.project, args.parent, project_id=args.project_id)
         elif action in {"prepare", "prepare-film"}:

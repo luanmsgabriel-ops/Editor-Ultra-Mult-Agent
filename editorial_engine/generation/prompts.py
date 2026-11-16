@@ -115,7 +115,14 @@ def _media_issue(item, path):
             with Image.open(item["path"]) as image:
                 image.load()
                 require(image.width > 0 and image.height > 0, "image_dimensions", "Image has no pixels", path)
-        elif item["kind"] in {"video", "audio"}:
+        elif item["kind"] == "video":
+            # FFprobe describes a PNG as a video stream too. Verify decoded
+            # temporal media, including its PTS, using the same importer gate.
+            from .ingest import _probe
+            measured = _probe(item["path"])
+            require(measured["frame_count"] > 1, "video_frames",
+                    "A video conditioning asset needs more than one decoded frame", path)
+        elif item["kind"] == "audio":
             result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
                                      "-of", "json", item["path"]], capture_output=True, text=True,
                                     check=True, timeout=20)
@@ -319,7 +326,15 @@ def _prompt(plan, clip, incoming, outgoing, observed):
     audio_execution = brief.get("audio_execution", "generation")
     opening, closing = effective_states(plan, clip["id"])
     lines = ["CLIP " + clip["id"], "PURPOSE: " + clip["purpose"],
+             f"GENERATE: {clip['duration_s']:g} seconds; ASPECT RATIO: {brief['aspect_ratio']}",
              "VISUAL STYLE: " + bible["visual_style"]]
+    if "recreation" in plan:
+        extension = plan["recreation"]
+        role = extension["stage"]
+        step = next(s for s in extension["plan"]["steps"] if s["id"] == role)
+        lines.append("INDEPENDENT RECREATION STAGE: " + role)
+        lines.append("PRODUCTION REQUIREMENT: " + step["instructions"])
+        lines.append("REFERENCE USE: direction and timing only. The replacement performer must be present from the opening; supply actual temporal performance, then measure tracking on that new footage.")
     for invariant in bible["invariants"]:
         lines.append("CONTINUITY INVARIANT: " + invariant)
     for character in bible["characters"]:
@@ -334,10 +349,16 @@ def _prompt(plan, clip, incoming, outgoing, observed):
     if observed:
         visible_observation = {k: v for k, v in observed.items() if k != "audio" or audio_execution == "generation"}
         lines.append("RETURNED SOURCE OBSERVATION (attributed review, not an automatic match guarantee): " + json.dumps(visible_observation, ensure_ascii=False, sort_keys=True))
-    for shot in clip["shots"]:
-        lines.append(f"SHOT {shot['id']} [{shot['start_s']:g}, {shot['end_s']:g}) s — approximate direction timing")
-        for key in ("intent", "action", "composition", "camera", "performance", "lighting"):
-            lines.append(key.upper() + ": " + shot[key])
+    if "shot_design" in plan:
+        from .shot_design import shot_prompt
+        bound = plan["shot_design"]
+        lines.append("AUTHORED SHOT DIRECTION:\n" + shot_prompt(bound["plan"], bound["clip_to_shot"][clip["id"]],
+                     brief["aspect_ratio"], include_voice=False))
+    else:
+        for shot in clip["shots"]:
+            lines.append(f"SHOT {shot['id']} [{shot['start_s']:g}, {shot['end_s']:g}) s — approximate direction timing")
+            for key in ("intent", "action", "composition", "camera", "performance", "lighting"):
+                lines.append(key.upper() + ": " + shot[key])
     if audio_execution == "generation":
         for dialogue in clip["dialogue"]:
             lines.append(f"DIALOGUE {dialogue['speaker_id']} [{dialogue['start_s']:g}, {dialogue['end_s']:g}) s; {dialogue['mode']}; delivery: {dialogue['delivery']}")
@@ -374,6 +395,18 @@ def compile_pack(plan: dict, *, profile=None, returns=None, ready=False) -> dict
     outgoing_by_id = {j["from"]: j for j in plan["joins"]}
     valid_returns, invalid_returns = _returns_checked(_return_map(returns), plan)
     shared_issues = _language_issues(plan["brief"])
+    if "shot_mapping" in plan and "shot_design" not in plan:
+        shared_issues.append(_issue("shot_design_unbound", "Bind the shot mapping to the current authored design before exporting ready prompts", "shot_mapping"))
+    if "recreation" in plan:
+        extension = plan["recreation"]
+        step = next(s for s in extension["plan"]["steps"] if s["id"] == extension["stage"])
+        for code in step["blocked_by"]:
+            shared_issues.append(_issue("recreation_dependency", "Resolve the independent recreation requirement: " + code,
+                                       "recreation." + extension["stage"]))
+    if "shot_design" in plan:
+        for item in plan["shot_design"]["plan"].get("issues", []):
+            if item.get("blocking"):
+                shared_issues.append(_issue("shot_design_pending", item.get("message", str(item)), "shot_design"))
     for reference in plan["references"]:
         problem = _file_issue(reference, "references." + reference["id"])
         if problem:

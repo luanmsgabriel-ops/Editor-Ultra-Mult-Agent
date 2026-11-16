@@ -1,0 +1,286 @@
+{
+  "schema": "video-shot-design/1",
+  "id": "three-environments-directed",
+  "revision": 1,
+  "author": {
+    "kind": "model",
+    "actor": "ChatGPT",
+    "method": "Direção autorada a partir das correções do usuário; tempos do exemplo são propostas, sem geração externa ou aprovação audiovisual."
+  },
+  "aspect_ratios": [
+    "9:16",
+    "16:9"
+  ],
+  "duration_candidates_s": [
+    4,
+    6,
+    8,
+    10
+  ],
+  "target_duration_s": 18,
+  "locations": [
+    {
+      "id": "cafe",
+      "description": "A quiet warm cafe with soft window light and a wooden table."
+    },
+    {
+      "id": "street",
+      "description": "A calm street outside the cafe, with open space in the walking direction."
+    },
+    {
+      "id": "studio",
+      "description": "A clean studio with a muted blue background and enough space for both arms."
+    }
+  ],
+  "shots": [
+    {
+      "id": "cafe-arrival",
+      "purpose": "Introduce the performer and motivate the move outside.",
+      "subject": "A fictional adult performer with short dark curls, wearing a plain cobalt jacket over a white shirt; keep the same face, proportions and wardrobe across all shots.",
+      "performance": "Natural tempo, continuous breathing and coherent hands, shoulders and eye line. Do not render the portal, its glow, captions or transition effect into this base performance.",
+      "lighting": "Soft, stable lighting motivated by the stated environment; preserve facial identity.",
+      "location_ids": [
+        "cafe"
+      ],
+      "use_duration_s": 4,
+      "handles": {
+        "in_s": 0,
+        "out_s": 0
+      },
+      "camera": {
+        "purpose": "Keep the action, hands and body proportions readable.",
+        "movement": "Hold an eye-level medium shot; no zoom."
+      },
+      "actions": [
+        {
+          "id": "action-1",
+          "start_s": 0,
+          "end_s": 1,
+          "description": "Already visible from the first frame, hold a closed notebook at waist level and breathe naturally."
+        },
+        {
+          "id": "action-2",
+          "start_s": 1,
+          "end_s": 3,
+          "description": "Lift the gaze from the notebook toward the exit on screen right."
+        },
+        {
+          "id": "action-3",
+          "start_s": 3,
+          "end_s": 4,
+          "description": "Begin turning shoulders toward screen right; keep the movement readable for the cut."
+        }
+      ],
+      "compositions": {
+        "9:16": {
+          "framing": "Medium shot from waist to above the head; keep both hands and the notebook inside the narrow frame.",
+          "rationale": "Compose the action for portrait instead of cropping a landscape performance.",
+          "subject_zone": [
+            0.15,
+            0.1,
+            0.85,
+            0.92
+          ],
+          "gesture_zone": [
+            0.05,
+            0.24,
+            0.95,
+            0.88
+          ]
+        },
+        "16:9": {
+          "framing": "Medium-wide shot with the performer on the left third and the cafe exit visible on the right.",
+          "rationale": "Use horizontal room for the environment and action without stretching the person.",
+          "subject_zone": [
+            0.22,
+            0.1,
+            0.68,
+            0.92
+          ],
+          "gesture_zone": [
+            0.1,
+            0.24,
+            0.9,
+            0.88
+          ]
+        }
+      }
+    },
+    {
+      "id": "street-walk",
+      "purpose": "Continue the same screen direction and prepare a hand gesture.",
+      "subject": "A fictional adult performer with short dark curls, wearing a plain cobalt jacket over a white shirt; keep the same face, proportions and wardrobe across all shots.",
+      "performance": "Natural tempo, continuous breathing and coherent hands, shoulders and eye line. Do not render the portal, its glow, captions or transition effect into this base performance.",
+      "lighting": "Soft, stable lighting motivated by the stated environment; preserve facial identity.",
+      "location_ids": [
+        "street"
+      ],
+      "use_duration_s": 6,
+      "handles": {
+        "in_s": 0,
+        "out_s": 0
+      },
+      "camera": {
+        "purpose": "Keep the action, hands and body proportions readable.",
+        "movement": "Track gently alongside the performer, then settle when the performer stops."
+      },
+      "actions": [
+        {
+          "id": "action-1",
+          "start_s": 0,
+          "end_s": 2,
+          "description": "Continue toward screen right with two unhurried steps; keep the notebook in the left hand."
+        },
+        {
+          "id": "action-2",
+          "start_s": 2,
+          "end_s": 4,
+          "description": "Stop, turn the torso toward the camera and raise the free right hand."
+        },
+        {
+          "id": "action-3",
+          "start_s": 4,
+          "end_s": 6,
+          "description": "Hold the open right palm at chest height, with small natural motion; prepare a match cut."
+        }
+      ],
+      "compositions": {
+        "9:16": {
+          "framing": "Leave headroom and lower-frame room for steps; both forearms stay inside the portrait canvas.",
+          "rationale": "Compose the action for portrait instead of cropping a landscape performance.",
+          "subject_zone": [
+            0.15,
+            0.1,
+            0.85,
+            0.92
+          ],
+          "gesture_zone": [
+            0.05,
+            0.24,
+            0.95,
+            0.88
+          ]
+        },
+        "16:9": {
+          "framing": "Leave lead room to screen right and keep the walking path and both arms visible.",
+          "rationale": "Use horizontal room for the environment and action without stretching the person.",
+          "subject_zone": [
+            0.22,
+            0.1,
+            0.68,
+            0.92
+          ],
+          "gesture_zone": [
+            0.1,
+            0.24,
+            0.9,
+            0.88
+          ]
+        }
+      }
+    },
+    {
+      "id": "studio-gesture",
+      "purpose": "Provide a complete new performance on which the portal can be composed later.",
+      "subject": "A fictional adult performer with short dark curls, wearing a plain cobalt jacket over a white shirt; keep the same face, proportions and wardrobe across all shots.",
+      "performance": "Natural tempo, continuous breathing and coherent hands, shoulders and eye line. Do not render the portal, its glow, captions or transition effect into this base performance.",
+      "lighting": "Soft, stable lighting motivated by the stated environment; preserve facial identity.",
+      "location_ids": [
+        "studio"
+      ],
+      "use_duration_s": 8,
+      "handles": {
+        "in_s": 0,
+        "out_s": 0
+      },
+      "camera": {
+        "purpose": "Keep the action, hands and body proportions readable.",
+        "movement": "Use a locked eye-level camera at a distance that contains the entire gesture; no push-in."
+      },
+      "actions": [
+        {
+          "id": "action-1",
+          "start_s": 0,
+          "end_s": 2,
+          "description": "Start with the right palm at the same height and facing the same direction as the prior shot."
+        },
+        {
+          "id": "action-2",
+          "start_s": 2,
+          "end_s": 5,
+          "description": "Bring both hands up and separate them gradually to outline an opening; retain natural wrist and shoulder movement."
+        },
+        {
+          "id": "action-3",
+          "start_s": 5,
+          "end_s": 7,
+          "description": "Sustain the open gesture, with the face, both shoulders and forearms visible."
+        },
+        {
+          "id": "action-4",
+          "start_s": 7,
+          "end_s": 8,
+          "description": "Settle the gesture into a stable closing pose, without freezing the performer."
+        }
+      ],
+      "compositions": {
+        "9:16": {
+          "framing": "Medium shot from waist upward with generous lateral room for both hands; avoid an oversized face and shoulders.",
+          "rationale": "Compose the action for portrait instead of cropping a landscape performance.",
+          "subject_zone": [
+            0.15,
+            0.1,
+            0.85,
+            0.92
+          ],
+          "gesture_zone": [
+            0.05,
+            0.24,
+            0.95,
+            0.88
+          ]
+        },
+        "16:9": {
+          "framing": "Medium-wide shot with the performer near center and room on both sides for the opening gesture.",
+          "rationale": "Use horizontal room for the environment and action without stretching the person.",
+          "subject_zone": [
+            0.22,
+            0.1,
+            0.68,
+            0.92
+          ],
+          "gesture_zone": [
+            0.1,
+            0.24,
+            0.9,
+            0.88
+          ]
+        }
+      }
+    }
+  ],
+  "joins": [
+    {
+      "id": "leave-cafe",
+      "from": "cafe-arrival",
+      "to": "street-walk",
+      "kind": "cut",
+      "execution": "post",
+      "overlap_s": 0,
+      "rationale": "Change location while preserving rightward screen direction.",
+      "outgoing": "Shoulders begin turning screen right.",
+      "incoming": "The same performer continues screen right outdoors."
+    },
+    {
+      "id": "hand-match",
+      "from": "street-walk",
+      "to": "studio-gesture",
+      "kind": "cut",
+      "execution": "post",
+      "overlap_s": 0,
+      "rationale": "Join the environments through a matching right-hand pose.",
+      "outgoing": "Right palm open at chest height.",
+      "incoming": "Right palm at the same position and orientation in the studio."
+    }
+  ]
+}

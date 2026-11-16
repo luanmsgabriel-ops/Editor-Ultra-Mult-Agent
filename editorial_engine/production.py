@@ -304,7 +304,12 @@ def _media(path, kind, *, decode=True):
     if decode:
         args.append("-count_frames")
     payload = json.loads(_run([*args, "-show_streams", "-show_format", "-of", "json", str(path)]))
-    stream = next((item for item in payload.get("streams", []) if item.get("codec_type") == kind), None)
+    if kind == "video":
+        formats = set(payload.get("format", {}).get("format_name", "").split(","))
+        require(not formats & {"image2", "image2pipe", "png_pipe", "jpeg_pipe", "webp_pipe", "hls", "dash", "concat"},
+                "production_media", "Supply self-contained temporal video, not a still or playlist")
+    stream = next((item for item in payload.get("streams", []) if item.get("codec_type") == kind
+                   and (kind != "video" or not item.get("disposition", {}).get("attached_pic"))), None)
     require(stream is not None, "production_media", "Artifact does not contain the requested media stream")
     duration = stream.get("duration") or payload.get("format", {}).get("duration")
     require(duration not in (None, "N/A"), "production_media", "Media duration is unknown")
@@ -313,7 +318,7 @@ def _media(path, kind, *, decode=True):
     if decode:
         require(shutil.which("ffmpeg"), "production_media", "FFmpeg is required to decode the result")
         _run(["ffmpeg", "-nostdin", "-v", "error", "-xerror", "-protocol_whitelist", "file,pipe",
-              "-i", str(path), "-map", "0:v:0" if kind == "video" else "0:a:0", "-f", "null", "-"])
+              "-i", str(path), "-map", "0:" + str(stream["index"]), "-f", "null", "-"])
     result = {"duration_s": duration, "codec": stream.get("codec_name"),
               "check": "stream_and_decode" if decode else "stream_probe",
               "audio_present": any(item.get("codec_type") == "audio" for item in payload.get("streams", []))}
@@ -769,11 +774,12 @@ def execute_request(request, output_dir, *, executor=None, registry=None, ledger
         "implementation_sha256": _file(__file__)["sha256"],
         "motion_sha256": _file(Path(__file__).with_name("motion.py"))["sha256"]} if builtin_motion else None)
     if builtin_portal:
-        from visual_fidelity import planar_portal, geometric_replay
+        from visual_fidelity import planar_portal, geometric_replay, subject_alignment
         descriptor = {"id": "bundled.planar_portal", "version": planar_portal.VERSION, "simulated": False,
             "implementation_sha256": _file(__file__)["sha256"],
             "portal_sha256": _file(planar_portal.__file__)["sha256"],
-            "geometry_sha256": _file(geometric_replay.__file__)["sha256"]}
+            "geometry_sha256": _file(geometric_replay.__file__)["sha256"],
+            "subject_alignment_sha256": _file(subject_alignment.__file__)["sha256"]}
     previous_path = root / "execution.json"
     previous = _previous_execution(root)
     if previous:

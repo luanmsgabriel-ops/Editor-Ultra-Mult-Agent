@@ -56,6 +56,35 @@ Liste ativos faltantes com finalidade, fonte/evidência e rota. Uma imagem gerad
 no chat é estática; movimentos com mudança de vista exigem vídeo, geometria ou
 outra técnica apropriada. Não invente um arquivo ou marque um recurso como pronto.
 
+Ao recriar com outra pessoa, decomponha a produção: identidade visual, vídeo base
+da nova pessoa desde o primeiro quadro, camada da transformação, tracking e
+oclusão da nova filmagem, encaixe anatômico e composição. Uma imagem de identidade
+não satisfaz a atuação temporal. A referência orienta ações e linguagem; seus
+pixels não são o novo bruto quando recreation_context exige independência.
+Não copie controles ou máscaras da pessoa anterior. Encaixe cabeça, ombros e
+tronco com escala uniforme, mantendo a abertura do efeito separada do conteúdo.
+Em recreation_stage=base_video, o resultado será a atuação base: não condicione
+o clipe ao próprio vídeo que ainda será produzido. Nas etapas dependentes,
+identifique assets com recreation_role=base_video ou transformed_image_or_video.
+O host vincula o contrato de recriação à resposta; não o substitua por sua prosa.
+
+Planeje duração por tomada, não por imagem individual. Para cada tomada descreva
+preparação, ação principal e conclusão; ações simultâneas podem compartilhar
+tempo. Escolha 4, 6, 8 ou 10 segundos somente quando a atuação couber e o perfil
+da ferramenta aceitar. Esses valores são opções de planejamento, não limites
+universais. Separe duração gerada, intervalo útil, margens para corte e emendas.
+Se uma tomada precisar de mais tempo, divida em ações coerentes ou use uma
+capacidade confirmada; não acelere automaticamente a atuação ou a fala.
+Divida ambientes em tomadas com prompts próprios, exceto quando uma passagem
+contínua entre eles for uma decisão explícita de direção. Para 9:16 e 16:9
+recomponha sujeito, espaço para gestos, cenário e câmera: mudar a proporção
+não autoriza cortar mãos/cabeça nem esticar a imagem. Tempos no prompt são
+instruções aproximadas e precisam ser confrontados com o vídeo recebido.
+Se houver shot_design_context, conserve durações, faixas úteis e sobreposições
+desse plano. Retorne shot_mapping como objeto de ID do clipe para ID da tomada.
+Use a composição e o prompt da proporção solicitada e preserve as ações
+autoradas. O host liga esse mapeamento ao plano exato recebido no contexto.
+
 Escreva toda a sequência antes da exportação e trate cada emenda como decisão
 dos dois lados. Em outgoing/incoming descreva composição, estado da ação, direção,
 velocidade, câmera e áudio no mesmo momento de passagem. A emenda é a fonte única
@@ -315,7 +344,8 @@ def response_contract() -> dict:
         "asset": obj({"id": string, "kind": choice({"image", "video", "audio", "motion"}),
                       "purpose": string, "route": choice({"reuse", "chat_image", "external_video", "procedural", "user"}),
                       "status": choice({"needed", "ready"}), "evidence_ids": strings,
-                      "reference_ids": strings, "prompt": string, "path": string, "sha256": string},
+                      "reference_ids": strings, "prompt": string, "path": string, "sha256": string,
+                      "recreation_role": choice({"base_video", "transformed_image_or_video"})},
                      ["id", "kind", "purpose", "route", "status", "evidence_ids", "reference_ids"]),
         "shot": obj({"id": string, "start_s": time, "end_s": time,
                      **{key: string for key in ("intent", "action", "composition", "camera", "performance", "lighting")}}),
@@ -353,6 +383,7 @@ def response_contract() -> dict:
                   "references": arr("reference"), "evidence": arr("evidence"), "assets": arr("asset"),
                   "clips": {**arr("clip"), "minItems": 1}, "joins": arr("join")})
     schema.update({"$schema": "https://json-schema.org/draft/2020-12/schema", "$defs": defs})
+    schema["properties"]["shot_mapping"] = {"type": "object", "additionalProperties": string}
     return {"schema": PLAN_SCHEMA, "json_schema": schema,
             "validator": "editorial_engine.generation.contracts.validate_plan",
             "example_path": "examples/video_generation/three-clips-plan.json",
@@ -362,6 +393,8 @@ def response_contract() -> dict:
                 "Evidence hashes match references; video/audio evidence has a source interval and actual declared scope.",
                 "Every clip and asset in non-original modes has supporting evidence_ids.",
                 "Needed chat_image/external_video assets include a prompt; chat_image produces an image only.",
+                "For independent recreation, map required source assets with recreation_role. A base_video output does not condition on itself.",
+                "When shot_design_context is supplied, shot_mapping maps each clip to one authored shot, in order, preserving duration, use and overlaps.",
                 "Shots cover [0,duration_s) contiguously and in order. use/dialogue/post intervals stay inside the clip.",
                 "The used range retains each authored line and post event in full; revise them explicitly before trimming.",
                 "Every dialogue speaker belongs to the clip. Clip character/location/prop IDs resolve to the bible.",
@@ -559,6 +592,10 @@ def build_request(answers: dict, *, profile=None, analysis=None, assets=None,
     require(max_request_bytes <= 20 * 1024 * 1024, "request_budget", "Request budget cannot exceed 20 MiB")
     intake = briefing(context, profile=profile)
     resolved = intake["resolved"]
+    shot_design = None
+    if resolved.get("shot_design") is not None:
+        from .shot_design import plan_shots
+        shot_design = plan_shots(resolved["shot_design"], profile=resolved.get("capabilities"), verify_files=True)
     contract = response_contract()
     example_path = Path(__file__).resolve().parents[2] / contract["example_path"]
     example = None
@@ -576,6 +613,9 @@ def build_request(answers: dict, *, profile=None, analysis=None, assets=None,
                "editorial_inputs": resolved, "analysis": verified, "assets": inventory,
                "review_scope": review_scope, "response_contract": contract,
                "authoring_context": authoring_context, "reference_context": reference_context,
+               "recreation_context": resolved.get("recreation_context"),
+               "recreation_stage": resolved.get("recreation_stage"),
+               "shot_design_context": shot_design,
                "template_library": templates, "file_manifest": files, "image_manifest": image_manifest,
                "request_limits": {"max_frames": max_frames, "max_image_bytes": max_image_bytes,
                                   "max_request_bytes": max_request_bytes},
@@ -597,4 +637,6 @@ def build_request(answers: dict, *, profile=None, analysis=None, assets=None,
             "reference_context_sha256": digest(reference_context) if reference_context is not None else None,
             "template_library_sha256": templates["library_sha256"] if templates is not None else None,
             "assets_sha256": digest(inventory), "request_sha256": digest(body), "body": body,
+            "recreation_context": payload["recreation_context"], "recreation_stage": payload["recreation_stage"],
+            "shot_design_context": shot_design,
             "model_inference_executed": False, "media_generation_executed": False}

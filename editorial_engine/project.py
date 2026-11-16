@@ -92,6 +92,18 @@ def _spec(spec):
     for name in ("generation_answers", "preferences", "settings"):
         mapping(data.setdefault(name, {}), "spec." + name)
     sequence(data.setdefault("requirements", []), "spec.requirements")
+    if data.get("recreation") is not None:
+        from .recreation import build_plan
+        checked = build_plan(data["recreation"], verify_files=True)
+        data["recreation"] = checked["spec"]
+        reference = checked["spec"]["reference"]
+        matches = [i for i in data["inputs"] if i["id"] == reference["id"]]
+        require(len(matches) == 1 and matches[0]["role"] == "reference"
+                and matches[0].get("sha256") == reference["sha256"],
+                "recreation_reference", "Declare the same reference input and bytes in the recreation contract")
+        forbidden = {reference["sha256"], *checked["spec"].get("known_reference_derivative_sha256s", [])}
+        require(not any(i["role"] == "footage" and i.get("sha256") in forbidden for i in data["inputs"]),
+                "recreation_reference_pixels", "Independent recreation cannot use the reference or its known derivatives as footage")
     return data
 
 
@@ -177,8 +189,8 @@ def _input(state, identifier):
 
 
 def _token(state, key):
-    if key in {"brief", "generation_answers", "preferences", "settings", "requirements", "intent"}:
-        return digest(state["spec"][key])
+    if key in {"brief", "generation_answers", "preferences", "settings", "requirements", "intent", "recreation"}:
+        return digest(state["spec"].get(key))
     category, _, identifier = key.partition(":")
     if category == "input":
         for item in state["spec"]["inputs"]:
@@ -309,6 +321,151 @@ def artifact(directory, key):
     return _artifact(_checked_state(directory), key)
 
 
+def _identity_replacement(state):
+    """Read an explicit decision, never infer identity changes from keywords."""
+    for key, record in state["artifacts"].items():
+        if not key.startswith("adaptation:") or record["status"] != "current":
+            continue
+        identifier = key.split(":", 1)[1]
+        dossier = _artifact(state, "dossier:" + identifier)
+        aspects = {item["id"]: item["aspect"] for item in dossier["observations"]}
+        contract = _artifact(state, key)
+        if any(d["action"] == "replace" and aspects.get(d["observation_id"]) == "identity"
+               for d in contract["decisions"]):
+            return True
+    return False
+
+
+def _recreation(state):
+    require(state["spec"].get("recreation") is not None or not _identity_replacement(state),
+            "recreation_required", "Replacing a performer requires an explicit independent recreation plan with a new base video from frame zero")
+    if state["spec"].get("recreation") is None:
+        return None
+    from .recreation import validate_plan
+    return validate_plan(_artifact(state, "recreation_plan"), verify_files=True)
+
+
+def plan_recreation(directory, *, assets=None, queue=False):
+    """Record actual independent media or export its missing production tasks.
+
+    Supplying no assets preserves current verified assets when the specification
+    is unchanged. A revised specification requires a fresh explicit binding.
+    """
+    from .recreation import build_plan, production_requests
+    state = _checked_state(directory)
+    spec = state["spec"].get("recreation")
+    require(spec is not None, "recreation_required", "Add an independent-recreation-spec/1 to spec.recreation")
+    prior = state["artifacts"].get("recreation_plan")
+    if assets is None and prior and prior["status"] == "current":
+        assets = _artifact(state, "recreation_plan")["assets"]
+    plan = build_plan(spec, assets, verify_files=True)
+    dependencies = _dependencies(state, "recreation", "input:" + spec["reference"]["id"])
+    _record(state, "recreation_plan", plan, dependencies)
+    if queue:
+        for request in production_requests(plan, verify_files=True):
+            key = "production:" + request["id"]
+            old = state["artifacts"].get(key)
+            if old and old["status"] == "current" and _artifact(state, key) == request:
+                continue
+            if old:
+                previous = _read(old["path"])
+                request.pop("request_sha256", None)
+                request["revision"] = previous["revision"] + 1
+                request["request_sha256"] = digest(request)
+                from .production import validate_request
+                request = validate_request(request, verify_files=True)
+            _record(state, key, request, _dependencies(state, "artifact:recreation_plan"))
+    return _commit(state, "plan_recreation", {"queued": bool(queue), "asset_count": len(plan["assets"])})
+
+
+def adopt_recreation_asset(directory, request_id, descriptor):
+    """Adopt a real production result with explicit performer/lineage claims.
+
+    Freeze its original result dependencies before advancing the recreation
+    inventory. A downstream request is then rebuilt from the new bytes rather
+    than retroactively rewriting the instructions that produced this resource.
+    """
+    from .production import validate_result
+    from .recreation import build_plan
+    state = _checked_state(directory)
+    plan = _recreation(state)
+    require(plan is not None, "recreation_required", "This project has no independent recreation contract")
+    request = _artifact(state, "production:" + request_id)
+    _recreation_production_guard(state, request)
+    result = validate_result(_artifact(state, "result:" + request_id), request, verify_files=True)
+    require(result["status"] != "simulated_result", "simulated_resource", "Adopt actual produced media only")
+    media = clone(mapping(descriptor, "recreation_asset"))
+    role = request["context"].get("recreation_role")
+    require(role is not None and media.get("role") == role
+            and request["context"].get("recreation_plan_sha256") == plan["plan_sha256"],
+            "recreation_production", "Bind the current requested recreation role and plan")
+    for key, actual in (("kind", result["kind"]), ("path", result["artifact"]["path"]),
+                        ("sha256", result["artifact"]["sha256"])):
+        require(media.get(key, actual) == actual, "recreation_result", "Descriptor differs from the verified production result: " + key)
+        media[key] = actual
+    resources = [a for a in plan["assets"] if a["role"] != role] + [media]
+    revised = build_plan(plan["spec"], resources, verify_files=True)
+    frozen_result = _freeze_artifact(state, "result:" + request_id)
+    dependencies = _dependencies(state, "recreation", "input:" + plan["spec"]["reference"]["id"],
+                                 "artifact:" + frozen_result)
+    _record(state, "recreation_plan", revised, dependencies)
+    return _commit(state, "adopt_recreation_asset", {"request_id": request_id, "role": role,
+                                                     "asset_id": media["id"], "sha256": media["sha256"]})
+
+
+def _recreation_source_guard(state, sources, *, assembly=None):
+    """Gate the actual pixels consumed by edit/assembly, not a prompt claim."""
+    plan = _recreation(state)
+    if plan is None:
+        return {}
+    forbidden = {plan["spec"]["reference"]["sha256"],
+                 *plan["spec"]["known_reference_derivative_sha256s"]}
+    require(not any(source.get("sha256") in forbidden for source in sources),
+            "recreation_reference_pixels", "Reference pixels cannot become the independent performance")
+    if assembly is not None and assembly.get("generation") is not None:
+        # Producing the base from current returned clips must not depend on
+        # the very base this montage is about to create.
+        generated = _artifact(state, "generation_plan")
+        if generated.get("recreation", {}).get("stage") == "base_video":
+            from fractions import Fraction
+            from .assembly import validate_assembly
+            origin = assembly["generation"]
+            require(origin["plan"] == generated and generated["recreation"]["plan"] == plan,
+                    "recreation_generation_plan", "Base assembly must bind the current independent generation plan")
+            checked = validate_assembly(assembly, verify_files=False)
+            clock = plan["spec"]["clock"]
+            require(checked["frame_count"] == clock["frame_count"]
+                    and Fraction(str(checked["output"]["fps"])) == Fraction(clock["fps"])
+                    and all(checked["output"][key] == clock[key] for key in ("width", "height")),
+                    "recreation_coverage", "Assemble the complete independent base on its declared raster and frame clock")
+            for clip in generated["clips"]:
+                require(origin["receipts"][clip["id"]] == _artifact(state, "return:" + clip["id"]),
+                        "recreation_return", "Use only the current real returned clips to produce the base")
+            return _dependencies(state, "recreation", "artifact:recreation_plan", "artifact:generation_plan",
+                                 *("artifact:return:" + clip["id"] for clip in generated["clips"]))
+    assets = {a["role"]: a for a in plan["assets"]}
+    require("base_video" in assets, "recreation_base_needed",
+            "Supply the new performer's independent video from frame zero before editing or assembly")
+    allowed = {assets["base_video"]["sha256"]}
+    if "composition" in assets:
+        allowed.add(assets["composition"]["sha256"])
+    hashes = [source.get("sha256") for source in sources]
+    require(bool(hashes) and all(checksum in allowed for checksum in hashes),
+            "recreation_source", "Recreation must consume its verified independent base or registered composition; bind newly generated footage before using it")
+    return _dependencies(state, "recreation", "artifact:recreation_plan")
+
+
+def _recreation_production_guard(state, request):
+    """Prevent known reference pixels from reentering a new media production."""
+    spec = state["spec"].get("recreation")
+    if spec is None or request["output_kind"] not in {"video", "image", "motion_layer"}:
+        return
+    forbidden = {spec["reference"]["sha256"], *spec.get("known_reference_derivative_sha256s", [])}
+    require(not any(i.get("sha256") in forbidden
+                    for i in request["inputs"]), "recreation_reference_pixels",
+            "Independent media production cannot consume reference photography; export its direction separately")
+
+
 def prepare_input(directory, input_id, *, resources=None, sample_every_s=1.0):
     """Prepare actual footage or a reference; resources may come from production."""
     from .perception import prepare_analysis
@@ -382,7 +539,10 @@ def request_direction(directory, *, kind, input_id=None, reference_id=None,
                       template_input_id=None, template_root=None, template_ids=None):
     state = _checked_state(directory)
     require(kind in {"edit", "generation"}, "direction_kind", "Use edit or generation")
-    dependencies = _dependencies(state, "brief", "intent", "generation_answers", "preferences")
+    dependencies = _dependencies(state, "brief", "intent", "generation_answers", "preferences", "recreation")
+    recreation = _recreation(state)
+    if recreation is not None:
+        dependencies.update(_dependencies(state, "artifact:recreation_plan"))
     dossier, adaptation, refs = _reference(state, reference_id)
     dependencies.update(refs)
     requires_reference = state["spec"]["intent"] in {"style_transfer", "reconstruct", "reference_generate"}
@@ -402,6 +562,7 @@ def request_direction(directory, *, kind, input_id=None, reference_id=None,
         require(input_id is not None, "input_needed", "Choose the current source or film")
         analysis = _artifact(state, "analysis:" + input_id)
         catalog = _artifact(state, "catalog:" + input_id)
+        dependencies.update(_recreation_source_guard(state, analysis["sources"]))
         dependencies.update(_dependencies(state, "artifact:analysis:" + input_id, "artifact:catalog:" + input_id))
         result = build_request(analysis, catalog, state["spec"]["brief"],
             reference_profile=to_contextual_profile(dossier, adaptation) if dossier else None, **kwargs)
@@ -428,10 +589,28 @@ def request_direction(directory, *, kind, input_id=None, reference_id=None,
         if assets is None:
             assets = []
             for item in state["spec"]["inputs"]:
-                if item["status"] == "ready" and item["role"] in {"image", "audio"}:
+                if item["status"] == "ready" and item["role"] in {"image", "audio", "footage"}:
                     assets.append({"id": item["id"], "kind": item["media_type"], "purpose": item.get("purpose", item["role"]),
                                    "route": "reuse", "status": "ready", "path": item["path"], "sha256": item["sha256"]})
                     dependencies.update(_dependencies(state, "input:" + item["id"]))
+        if recreation is not None:
+            from .recreation import generation_context
+            for media in recreation["assets"]:
+                if media["role"] not in {"base_video", "transformed_image_or_video"}:
+                    continue
+                existing = next((asset for asset in assets if asset["id"] == media["id"]), None)
+                if existing is not None:
+                    require(existing.get("sha256") == media["sha256"], "recreation_asset_collision", "Recreation asset ID has other bytes in the input inventory")
+                    existing["recreation_role"] = media["role"]
+                else:
+                    assets.append({"id": media["id"], "kind": media["kind"], "purpose": "Independent recreation " + media["role"],
+                        "route": "user", "status": "ready", "path": media["path"], "sha256": media["sha256"],
+                        "recreation_role": media["role"]})
+            stage = answers.get("recreation_stage", "base_video")
+            require(stage in {"base_video", "transformed_image_or_video", "composition"},
+                    "recreation_stage", "Choose the production stage being directed")
+            answers["recreation_context"] = generation_context(recreation)
+            answers["recreation_stage"] = stage
         result = build_request(answers, profile=state["spec"]["preferences"], analysis=analysis,
                                assets=assets, reference_dossier=dossier, adaptation=adaptation, **kwargs)
         key = "generation_request"
@@ -456,8 +635,34 @@ def accept_direction(directory, direction, *, kind, input_id=None):
     else:
         from .generation.contracts import validate_plan, revise_plan
         from .generation.provider import validate_editorial_inputs
+        recreation = _recreation(state)
+        if recreation is not None:
+            request = _artifact(state, "generation_request")
+            target = recreation["spec"]["target_character"]
+            expected = {"plan": recreation, "stage": request["recreation_stage"],
+                        "character_id": target["id"] if target else None}
+            require(direction.get("recreation", expected) == expected, "recreation_changed",
+                    "The generation direction cannot override the project's recreation contract")
+            direction = {**clone(direction), "recreation": expected}
+        request_info = state["artifacts"].get("generation_request")
+        if request_info and request_info["status"] == "current":
+            request = _artifact(state, "generation_request")
+            if request.get("shot_design_context") is not None:
+                expected_plan = request["shot_design_context"]
+                direction = clone(direction)
+                clip_mapping = direction.pop("shot_mapping", None)
+                if clip_mapping is not None:
+                    expected_extension = {"plan": expected_plan, "clip_to_shot": clip_mapping}
+                    require(direction.get("shot_design", expected_extension) == expected_extension,
+                            "shot_design_mapping", "Shot mapping conflicts with its bound plan")
+                    direction["shot_design"] = expected_extension
+                extension = direction.get("shot_design")
+                require(isinstance(extension, dict) and extension.get("plan") == expected_plan,
+                        "shot_design_mapping", "Bind the current shot design and an explicit clip_to_shot mapping")
         result = validate_plan(direction, verify_files=True)
-        dependencies = _dependencies(state, "brief", "generation_answers", "intent")
+        dependencies = _dependencies(state, "brief", "generation_answers", "intent", "recreation")
+        if recreation is not None:
+            dependencies.update(_dependencies(state, "artifact:recreation_plan"))
         request_record = state["artifacts"].get("generation_request")
         require(not request_record or request_record["status"] == "current", "stale_generation_request",
                 "Prepare direction against the current project before adopting a new plan")
@@ -557,8 +762,9 @@ def queue_production(directory, request):
     from .production import validate_request
     state = _checked_state(directory)
     request = validate_request(request, verify_files=True)
+    _recreation_production_guard(state, request)
     identifier = _id(request["id"] if "id" in request else request["request_id"])
-    dependencies = _dependencies(state, "brief", "requirements")
+    dependencies = _dependencies(state, "brief", "requirements", "recreation")
     for item in request.get("inputs", []):
         for source in state["spec"]["inputs"]:
             if source.get("path") == item.get("path"):
@@ -572,6 +778,7 @@ def produce(directory, request_id, *, executor=None, registry=None, estimated_co
     from .workflows import WorkflowLedger
     state = _checked_state(directory)
     request = _artifact(state, "production:" + request_id)
+    _recreation_production_guard(state, request)
     ledger = WorkflowLedger(Path(state["root"]) / "jobs.sqlite",
                             budget_limit=state["spec"]["settings"].get("production_budget"),
                             unit=state["spec"]["settings"].get("budget_unit", "credits"))
@@ -632,15 +839,37 @@ def queue_missing_assets(directory):
     from .production import production_request
     state = _checked_state(directory)
     plan = _artifact(state, "generation_plan")
+    independent = {}
+    if "recreation" in plan:
+        from .recreation import production_requests
+        independent = {request["context"]["recreation_role"]: request
+                       for request in production_requests(plan["recreation"]["plan"], verify_files=True)}
     for item in plan["assets"]:
         if item["status"] != "needed":
             continue
         identifier = _id("asset-" + item["id"])
         operation = {"reuse": "manual_asset", "user": "manual_asset"}.get(item["route"], item["route"])
         kind = "motion_layer" if item["kind"] == "motion" else item["kind"]
-        request = production_request(identifier, operation, prompt=item.get("prompt") or item["purpose"],
-            output_kind=kind, context={"project_id": state["spec"]["id"], "asset_id": item["id"],
-                                       "asset_need_sha256": digest(item), "generation_plan_id": plan["id"]})
+        details = clone(item.get("production", {}))
+        require(isinstance(details, dict) and set(details) <= {"inputs", "parameters", "constraints", "unresolved"},
+                "asset_production", "Asset production may declare inputs, parameters, constraints and unresolved dependencies")
+        context = {"project_id": state["spec"]["id"], "asset_id": item["id"],
+                   "asset_need_sha256": digest(item), "generation_plan_id": plan["id"]}
+        role = item.get("recreation_role")
+        prompt = item.get("prompt") or item["purpose"]
+        if role is not None and "recreation" in plan:
+            require(role in independent, "recreation_production", "No exportable production task for this recreation need")
+            authored = independent[role]
+            require(authored["output_kind"] == kind, "recreation_media_kind", "The asset does not satisfy its recreation task")
+            operation = authored["operation"]
+            details = {key: clone(authored[key]) for key in ("inputs", "parameters", "constraints", "unresolved", "source_binding")}
+            context.update(authored["context"])
+            prompt = authored["prompt"] + "\n\nAuthored asset direction: " + prompt
+        def make_request(revision=1):
+            return production_request(identifier, operation, prompt=prompt,
+                                      output_kind=kind, context=context, revision=revision, **details)
+        request = make_request()
+        _recreation_production_guard(state, request)
         prior = state["artifacts"].get("production:" + identifier)
         if prior:
             verify_file(prior["path"], prior["sha256"], "previous production request")
@@ -648,11 +877,13 @@ def queue_missing_assets(directory):
             equivalent = lambda value: {k: v for k, v in value.items() if k not in {"revision", "request_sha256"}}
             if prior["status"] == "current" and equivalent(previous) == equivalent(request):
                 continue
-            request = production_request(identifier, operation, prompt=item.get("prompt") or item["purpose"],
-                output_kind=kind, context=request["context"], revision=previous["revision"] + 1)
+            request = make_request(previous["revision"] + 1)
         # Binding to the asset need is separate from the whole plan revision: a
         # received image can be adopted without invalidating its own provenance.
-        _record(state, "production:" + identifier, request, _dependencies(state, "brief", "requirements"))
+        dependencies = _dependencies(state, "brief", "requirements", "recreation")
+        if role is not None and "recreation" in plan:
+            dependencies.update(_dependencies(state, "artifact:recreation_plan"))
+        _record(state, "production:" + identifier, request, dependencies)
     return _commit(state, "queue_missing_assets")
 
 
@@ -666,6 +897,8 @@ def fulfill_asset(directory, asset_id, request_id):
     matches = [item for item in plan["assets"] if item["id"] == asset_id]
     require(len(matches) == 1 and matches[0]["status"] == "needed", "asset_needed", "Choose an existing needed asset")
     need = matches[0]
+    require(need.get("recreation_role") is None, "recreation_adoption_required",
+            "Use recreation-adopt with the actual performance, identity and lineage descriptor; generic fulfill cannot invent those attestations")
     context = request.get("context", {})
     require(context.get("asset_id") == asset_id and context.get("asset_need_sha256") == digest(need),
             "asset_request_changed", "The production request must identify this exact asset need")
@@ -717,7 +950,7 @@ def plan_assembly(directory, plan=None, *, fps=None, width=None, height=None,
                   reference_id=None):
     from .assembly import from_generation, validate_assembly
     state = _checked_state(directory)
-    dependencies = _dependencies(state, "brief", "intent")
+    dependencies = _dependencies(state, "brief", "intent", "recreation")
     if state["spec"]["intent"] == "reconstruct":
         references = [i["id"] for i in state["spec"]["inputs"] if i["role"] == "reference" and i["status"] == "ready"]
         reference_id = reference_id or (references[0] if len(references) == 1 else None)
@@ -740,6 +973,7 @@ def plan_assembly(directory, plan=None, *, fps=None, width=None, height=None,
                 if source.get("path") == item.get("path"):
                     dependencies.update(_dependencies(state, "input:" + item["id"]))
     validate_assembly(plan, verify_files=True)
+    dependencies.update(_recreation_source_guard(state, plan["sources"], assembly=plan))
     _record(state, "assembly_plan", plan, dependencies)
     return _commit(state, "plan_assembly")
 
@@ -763,13 +997,16 @@ def render_project(directory, *, kind, font=None, script_font=None, style=None):
     workspace = _workspace(state, "render")
     if kind == "assembly":
         from .assembly import render_assembly
-        result = render_assembly(_artifact(state, "assembly_plan"), workspace / "assembly")
+        assembly = _artifact(state, "assembly_plan")
+        _recreation_source_guard(state, assembly["sources"], assembly=assembly)
+        result = render_assembly(assembly, workspace / "assembly")
         review_plan = result["review_plan"]
         dependencies = _dependencies(state, "artifact:assembly_plan")
     else:
         from .native import render_bundle
         require(kind == "edit", "render_kind", "Use assembly or edit")
         bundle = _artifact(state, "edit_bundle")
+        _recreation_source_guard(state, bundle["analysis"]["sources"])
         result = render_bundle(bundle, workspace / "render.mp4", font=font, script_font=script_font, style=style)
         review_plan = bundle["plan"]
         dependencies = _dependencies(state, "artifact:edit_bundle")
@@ -934,6 +1171,20 @@ def project_status(directory):
             need("missing_input", "update", "Forneça " + item["id"], input_id=item["id"])
     if spec["intent"] == "media_story" and not available_roles & {"image", "audio", "script"}:
         need("missing_story_media", "update", "Inclua imagens, áudio ou roteiro para esta entrada")
+    if spec.get("recreation") is not None:
+        if not has("recreation_plan"):
+            need("recreation_plan_needed", "recreation", "Planeje a nova atuação em vídeo desde o primeiro quadro e as camadas dependentes")
+        else:
+            recreation = _artifact(state, "recreation_plan")
+            for issue in recreation["issues"]:
+                if issue["blocking"]:
+                    need(issue["code"], "update", issue["message"])
+            for step in recreation["steps"]:
+                if step["status"] == "needed":
+                    need("recreation_media_needed", "recreation", step["instructions"],
+                         role=step["id"], blocked_by=step["blocked_by"])
+    elif _identity_replacement(state):
+        need("recreation_required", "update", "A troca de pessoa exige vídeo base independente, atuação e tracking novos; inclua spec.recreation")
     for requirement in spec["requirements"]:
         identifier = _id(requirement.get("id"))
         if not usable_result(identifier):
@@ -1022,6 +1273,10 @@ def project_status(directory):
 def advance_project(directory):
     """Resume repeatable local preparation. Direction and production stay explicit."""
     state = _checked_state(directory)
+    if state["spec"].get("recreation") is not None and state["artifacts"].get("recreation_plan", {}).get("status") != "current":
+        state = plan_recreation(directory)
+    if state["spec"].get("recreation") is None and _identity_replacement(state):
+        return project_status(directory)
     for item in state["spec"]["inputs"]:
         if item["status"] == "ready" and item["role"] in {"footage", "reference"} and item["media_type"] == "video":
             record = state["artifacts"].get("analysis:" + item["id"])

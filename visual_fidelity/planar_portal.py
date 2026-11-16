@@ -24,7 +24,7 @@ import numpy as np
 
 from .geometric_replay import _rgba
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 SCHEMA = "planar-portal/1"
 _UNIT_QUAD = [[0, 0], [1, 0], [1, 1], [0, 1]]
 _EASINGS = {"linear", "hold", "smoothstep"}
@@ -209,7 +209,7 @@ def _compose_opaque(base, layer, block_rows=64):
 
 def render_portal_frame(insert, quad, canvas_size, *, mapping, placement=None,
                         source_quad=None, opacity=1.0, feather_px=0.0,
-                        occlusion=None):
+                        occlusion=None, alignment_matrix=None):
     """Return straight uint8 RGBA at ``(width, height)``; inputs are RGB(A).
 
     ``screen_reveal`` requires normalized ``placement=[x,y,width,height]`` and
@@ -232,14 +232,32 @@ def render_portal_frame(insert, quad, canvas_size, *, mapping, placement=None,
     if mapping == "screen_reveal":
         if source_quad is not None:
             raise ValueError("source_quad applies only to projective mapping")
-        if not isinstance(placement, (list, tuple)) or len(placement) != 4:
-            raise ValueError("screen_reveal requires placement [x,y,width,height]")
-        x, y, w, h = [_number(v, "placement") for v in placement]
-        if w <= 0 or h <= 0:
-            raise ValueError("placement width and height must be positive")
-        mapped = _quad([[x, y], [x + w, y], [x + w, y + h], [x, y + h]])
+        if alignment_matrix is not None:
+            if placement is not None:
+                raise ValueError("Subject alignment and placement are mutually exclusive")
+            matrix = np.asarray(alignment_matrix, dtype=np.float64)
+            if matrix.shape != (2, 3) or not np.isfinite(matrix).all():
+                raise ValueError("Alignment matrix must be finite 2x3")
+            linear = matrix[:, :2]
+            gram = linear.T @ linear
+            if np.linalg.det(linear) <= 0 or not np.allclose(gram, np.eye(2) * gram[0, 0], rtol=1e-7, atol=1e-8):
+                raise ValueError("Subject alignment must preserve aspect ratio and orientation")
+            corners = np.asarray(_UNIT_QUAD) * [source_w, source_h] - .5
+            mapped = _quad((corners @ linear.T + matrix[:, 2] + .5) / [width, height])
+            scale = math.sqrt(float(gram[0, 0]))
+            interpolation_pad = np.array([math.ceil(scale) + 2] * 2)
+        else:
+            if not isinstance(placement, (list, tuple)) or len(placement) != 4:
+                raise ValueError("screen_reveal requires placement [x,y,width,height]")
+            x, y, w, h = [_number(v, "placement") for v in placement]
+            if w <= 0 or h <= 0:
+                raise ValueError("placement width and height must be positive")
+            mapped = _quad([[x, y], [x + w, y], [x + w, y + h], [x, y + h]])
+            interpolation_pad = np.ceil([(w * width) / source_w, (h * height) / source_h]).astype(int) + 2
         source = np.array(_UNIT_QUAD, dtype=np.float64)
     elif mapping == "projective":
+        if alignment_matrix is not None:
+            raise ValueError("Subject alignment uses screen_reveal; the portal window stays separate")
         if placement is not None:
             raise ValueError("placement applies only to screen_reveal mapping")
         mapped = target
@@ -269,7 +287,6 @@ def render_portal_frame(insert, quad, canvas_size, *, mapping, placement=None,
     if mapping == "screen_reveal":
         placed = mapped * [width, height]
         # Bilinear sampling has a one-source-pixel footprint beyond the image.
-        interpolation_pad = np.ceil([(w * width) / source_w, (h * height) / source_h]).astype(int) + 2
         lower = np.maximum(lower, np.floor(placed.min(axis=0)).astype(int) - interpolation_pad)
         upper = np.minimum(upper, np.ceil(placed.max(axis=0)).astype(int) + interpolation_pad)
     x0, y0 = np.maximum(lower, [0, 0])
@@ -301,13 +318,16 @@ def render_portal_frame(insert, quad, canvas_size, *, mapping, placement=None,
 
 def _probe_video(path, rate):
     result = subprocess.run(["ffprobe", "-v", "error", "-threads", "1", "-select_streams", "v:0",
-                             "-show_entries", "stream=width,height,avg_frame_rate,time_base:frame=best_effort_timestamp_time",
+                             "-show_entries", "stream=width,height,avg_frame_rate,time_base:frame=best_effort_timestamp_time,width,height",
                              "-show_frames", "-of", "json", str(path)],
                             check=True, capture_output=True, text=True)
     data = json.loads(result.stdout)
     if not data.get("streams") or not data.get("frames"):
         raise ValueError("Video has no decodable frames: " + str(path))
     stream = data["streams"][0]
+    if any((frame.get("width"), frame.get("height")) != (stream["width"], stream["height"])
+           for frame in data["frames"]):
+        raise ValueError("Video raster changes inside the declared source")
     if _positive_fraction(stream["avg_frame_rate"], "Video FPS") != rate:
         raise ValueError("Video FPS differs from the output; no implicit retime")
     timestamps = [float(frame["best_effort_timestamp_time"]) for frame in data["frames"]]
@@ -433,6 +453,49 @@ class _Source:
                 "metadata": self.metadata}
 
 
+def _alignment_frames(data, sources, states, count, rate, width, height):
+    """Bind calibration to the real media before any output is written."""
+    if data.get("subject_alignment") is None:
+        return {}, None
+    from .subject_alignment import validate_alignment_binding
+    config = _object(data["subject_alignment"], "subject_alignment")
+    if data.get("mapping") != "screen_reveal" or data.get("placement") is not None or data.get("source_quad") is not None:
+        raise ValueError("Subject alignment requires screen_reveal without placement/source_quad")
+    if "base" not in sources:
+        raise ValueError("Subject alignment requires its actual base source")
+    policy = config.get("uncovered_policy")
+    if policy not in {"reject", "reveal_base"}:
+        raise ValueError("Declare uncovered_policy reject or reveal_base; missing scenery is never synthesized")
+    bindings = {}
+    for side, name in (("source", "insert"), ("base", "base")):
+        source = sources[name]
+        if source.kind == "video":
+            raster = [source.metadata["width"], source.metadata["height"]]
+        else:
+            from PIL import Image
+            with Image.open(source.paths[0]) as image:
+                raster = list(image.size)
+            if source.kind == "sequence":
+                for path in source.paths[1:]:
+                    with Image.open(path) as image:
+                        if list(image.size) != raster:
+                            raise ValueError("Alignment source sequence raster changes between frames")
+        bindings[side] = {"kind": source.kind, "sha256": source.digest, "raster": raster,
+            "viewport_xywh": source.data.get("viewport_xywh", [0, 0, *raster]),
+            "fps": str(rate), "frames": 1 if source.kind == "image" else source.total,
+            "revision": source.data.get("revision"),
+            "clock": {"start_frame": source.start, "step": 0 if source.kind == "image" else 1}}
+    bindings["timeline"] = {"revision": data.get("revision"), "raster": [width, height],
+                            "fps": str(rate), "frames": count}
+    plan = config.get("plan")
+    validate_alignment_binding(plan, bindings)
+    samples = {sample["frame"]: sample for sample in plan["frames"]}
+    visible = [frame for frame in range(count) if _evaluate(states, frame)["opacity"] > 0]
+    if any(frame not in samples or samples[frame]["status"] != "ready" for frame in visible):
+        raise ValueError("Every visible portal frame needs its own valid alignment sample; no implicit holds")
+    return samples, policy
+
+
 def render(manifest, output_path, *, mode="composite"):
     """Render verified sources to silent MP4 or a PNG RGBA layer directory.
 
@@ -497,6 +560,8 @@ def render(manifest, output_path, *, mode="composite"):
                 raise ValueError("Occlusion and base start frames must match")
         if output == manifest or any(output in source.paths for source in sources.values()):
             raise ValueError("Output cannot overwrite inputs")
+        alignment, uncovered_policy = _alignment_frames(data, sources, states, count, rate, width, height)
+        uncovered_frames = []
         output.parent.mkdir(parents=True, exist_ok=True)
         frame_entries = []
         raw_digest = hashlib.sha256()
@@ -526,10 +591,28 @@ def render(manifest, output_path, *, mode="composite"):
                     if image.shape[2] == 4 and np.any(image[:, :, 3] != 255):
                         raise ValueError("Occlusion coverage is grayscale, not an ambiguous RGBA alpha")
                     matte = image[:, :, 0]
+                aligned = alignment.get(frame) if current["opacity"] > 0 else None
+                placement = data.get("placement")
+                if alignment and aligned is None:
+                    placement = [0, 0, 1, 1]  # Invisible frames require no fitted content.
                 layer = render_portal_frame(art, current["quad"], (width, height),
-                    mapping=data.get("mapping"), placement=data.get("placement"),
+                    mapping=data.get("mapping"), placement=placement,
                     source_quad=data.get("source_quad"), opacity=current["opacity"],
-                    feather_px=data.get("feather_px", 0), occlusion=matte)
+                    feather_px=data.get("feather_px", 0), occlusion=matte,
+                    alignment_matrix=aligned["matrix"] if aligned else None)
+                if aligned is not None:
+                    gate = _coverage_roi(np.asarray(current["quad"]), (width, height),
+                                         (0, 0, width, height), data.get("feather_px", 0))
+                    gate *= current["opacity"]
+                    if matte is not None:
+                        gate *= 1 - matte.astype(np.float32) / 255
+                    expected_alpha = gate * 255
+                    uncovered = int(np.count_nonzero((expected_alpha > 3) &
+                                                       (layer[:, :, 3].astype(np.float32) < expected_alpha - 3)))
+                    if uncovered:
+                        if uncovered_policy == "reject":
+                            raise ValueError(f"Aligned content leaves {uncovered} uncovered portal pixels at frame {frame}; supply background or explicitly allow the independent base")
+                        uncovered_frames.append({"frame": frame, "pixels": uncovered})
                 if mode == "composite":
                     base = sources["base"].read(frame)
                     if base.shape[:2] != (height, width) or (base.shape[2] == 4 and np.any(base[:, :, 3] != 255)):
@@ -566,6 +649,10 @@ def render(manifest, output_path, *, mode="composite"):
                 "sources": {name: source.receipt() for name, source in sources.items()},
                 "audio": "not_rendered", "visual_review": "pending", "continuous_playback": "pending",
                 "user_approval": "pending", "hidden_content_recovery": "not_performed"}
+            if alignment:
+                receipt["subject_alignment"] = {"plan_sha256": data["subject_alignment"]["plan"]["sha256"],
+                    "uncovered_policy": uncovered_policy, "uncovered_frames": uncovered_frames,
+                    "transform": "uniform_2d_similarity", "depth_reconstruction": False}
             if mode == "composite":
                 receipt["encoded_verification"] = measured
                 receipt["output_sha256"] = file_sha256(temp / "render.mp4")

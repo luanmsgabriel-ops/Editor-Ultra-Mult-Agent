@@ -308,6 +308,14 @@ def validate_plan(data, *, verify_files=False):
     require(timing["exact_final_s"] == timing["exact_target_s"], "duration_mismatch",
             f"Planned edit is {timing['final_duration_s']:g}s; target is {timing['target_duration_s']:g}s. "
             "Account for explicit trims and overlapping joins.")
+    if "recreation" in data:
+        from ..recreation import validate_generation_assets
+        extension = mapping(data["recreation"], "recreation")
+        validate_generation_assets(extension.get("plan"), data, verify_files=verify_files)
+    if "shot_design" in data:
+        from .shot_design import validate_generation_mapping
+        extension = mapping(data["shot_design"], "shot_design")
+        validate_generation_mapping(extension.get("plan"), data, extension.get("clip_to_shot"))
     return data
 
 
@@ -347,9 +355,10 @@ def clip_fingerprint(plan, clip_id):
     source_ids = {e["source_id"] for e in evidence}
     source_ids.update(r for a in assets for r in a["reference_ids"])
     references = [r for r in plan["references"] if r["id"] in source_ids]
+    policies = {key: plan[key] for key in ("recreation", "shot_design") if key in plan}
     return digest({"schema": PLAN_SCHEMA, "brief": plan["brief"], "bible": plan["bible"],
                    "clip": clip, "joins": joins, "assets": assets, "evidence": evidence,
-                   "references": references})
+                   "references": references, **policies})
 
 
 def revise_plan(previous, revised):
