@@ -21,3 +21,12 @@ __pycache__/
 node_modules/
 .pytest_cache/
 *.frames/
+
+# Private runtime state and imported catalogs never belong in the repository.
+app-data/
+*.sqlite
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+template-gallery*.json
+editor-ultra-access.json
