@@ -266,7 +266,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
 
     @server.tool(annotations=write)
     @offload
-    def editor_prepare(project_id: str, kind: Literal["clone", "edit", "prompts"],
+    def editor_prepare(project_id: str, kind: Literal["clone", "edit", "prompts", "assembly"],
                        expected_revision: int, request_id: str) -> CallToolResult:
         """Executa preparação real de evidências e pedido de direção. Não inventa plano, clonagem, render ou aprovação."""
         return enqueue(project_id, "prepare", kind, expected_revision, request_id)

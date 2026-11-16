@@ -162,7 +162,8 @@ def test_actual_multi_source_render_and_reference_substitution_guard(adapter, vi
     current = upload(adapter, current, "footage", videos["red"])
     current = upload(adapter, current, "footage", videos["lime"])
     pid = current["project_id"]
-    prepared = adapter.prepare(pid, "assembly", expected_revision=current["revision"])
+    prepared = adapter.prepare(pid, "edit", expected_revision=current["revision"])
+    assert prepared["kind"] == "assembly"
     plan = assembly_plan(prepared["state"]["assets"]["footage"])
     malicious = deepcopy(plan)
     ref = prepared["state"]["assets"]["ref"][0]

@@ -642,6 +642,13 @@ class EngineAdapter:
         with self._lock(project_id):
             record = self._load(project_id)
             self._expect(record, expected_revision)
+            # The UI's edit action must expose the existing multi-source route.
+            # Only routing is selected here; trims/order/transitions still need authorship.
+            if kind == "edit":
+                sources = (self._selected(record, "footage") if record["state"]["mode"] == "ready"
+                           else self._shot_files(record))
+                if len(sources) > 1:
+                    kind = "assembly"
             result = self._prepare(record, kind)
             self._write(record, "Preparação real: " + kind)
             return {**self._snapshot(record), **result}
