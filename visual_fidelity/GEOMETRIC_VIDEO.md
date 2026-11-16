@@ -2,7 +2,7 @@
 
 `python -m visual_fidelity.geometric_video timeline.json output.mp4`
 
-Version 1.0.0 uses geometric_replay 1.0.1. The renderer opens only sources explicitly
+Version 1.0.1 uses geometric_replay 1.0.1. The renderer opens only sources explicitly
 bound in the manifest. It never loads reference footage implicitly.
 
 A manifest supplies canvas width/height, frames/fps, assets, optional audio and
@@ -37,3 +37,7 @@ The renderer writes the actual input, manifest, engine and export hashes.
 
 Tests cover shared crop alignment, aspect preservation and premultiplied edge
 interpolation; these are technical checks, not aesthetic approval.
+
+`fit_insert_to_mask:true` fits the bound photographic insert into the current
+portal bounds after transforming its matte. This uses a 2D aspect-preserving crop,
+not a 3D optical reflection or a calibrated surface projection.
