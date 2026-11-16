@@ -41,3 +41,8 @@ interpolation; these are technical checks, not aesthetic approval.
 `fit_insert_to_mask:true` fits the bound photographic insert into the current
 portal bounds after transforming its matte. This uses a 2D aspect-preserving crop,
 not a 3D optical reflection or a calibrated surface projection.
+
+
+## Versão1.1.0 — contrato musical e de assets
+
+Consulte REFERENCE_PLANNING.md e MUSIC_SYNC.md. O renderer exige music_sync e asset_plan para evitar repetição de fontes inadequadas e edição sem eventos musicais. Exceções editoriais ao sincronismo precisam ser declaradas no manifesto. A versão1.0.1 permanece congelada nos pacotes anteriores.
