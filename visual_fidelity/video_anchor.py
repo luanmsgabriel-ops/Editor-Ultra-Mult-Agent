@@ -19,6 +19,7 @@ from .anchor_ocr import contains, detect, engine
 from .auto_placement import choose_anchor
 from .body_anchors import build_orbit_art, follow_quad, orbit_geometry, render_orbit, track_sidecar
 from .editorial_motion import composite_editorial
+from .body_depth import composite_hand_context, composite_orbit_context
 
 
 def load(path):
@@ -326,6 +327,10 @@ def render(picture, destination, resolution, fps, layers, font, root):
                 if index not in layer.corners:
                     continue
                 effect=layer.effect
+                if 'body_depth' in effect:
+                    compositor = composite_orbit_context if effect['body_depth']['kind']=='orbit' else composite_hand_context
+                    compositor(frame,layer,index,fps)
+                    continue
                 if 'editorial_scene' in effect:
                     composite_editorial(frame,layer,index,root,cache,fps)
                     continue

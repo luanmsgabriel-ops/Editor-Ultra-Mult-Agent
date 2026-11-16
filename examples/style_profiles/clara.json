@@ -3,6 +3,7 @@
   "paper": [255, 247, 236],
   "ink": [177, 12, 25],
   "editorial_motion": true,
+  "body_depth": true,
   "animation": "pop",
   "entrance_seconds": 0.25
 }

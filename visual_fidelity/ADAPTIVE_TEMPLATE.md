@@ -87,3 +87,29 @@ informar `editorial` como `kinetic_type`, `signature`, `signal`, `clock`,
 proteção de rosto e mãos. As cenas gráficas são cortes intencionais, separados
 do ambiente real, com perspectiva e profundidade desenhadas. Arte PNG
 externa e âncoras planas ou de câmera continuam disponíveis pelo compositor.
+
+## Camadas no bruto
+
+A opção `body_depth` do perfil Clara permite efeitos ligados ao corpo.
+Passe `--matte-model rvm_mobilenetv3_fp32.onnx` para calcular alpha recorrente
+com ONNX Runtime no mesmo relógio do bruto. Para reaproveitar uma sequência
+já calculada, passe `--mattes PASTA`. A pasta inclui `alpha.json` e PNGs
+numerados com seis dígitos. A origem e a taxa precisam coincidir.
+
+- A faixa de texto segue os ombros e projeta letras em duas passagens.
+  O alpha do sujeito oculta a parte traseira. O rosto e as mãos protegem
+  a passagem dianteira. O motor verifica amostras de letras visíveis na
+  frente e atrás, além das que ficaram cobertas. Se o quadro não sustenta
+  os dois lados, aplica a tipografia de tela.
+- O efeito de mão usa os pontos de palma em sequência contínua. O arco
+  traseiro respeita o alpha da pessoa. A animação termina quando a mão
+  sai do quadro ou a detecção se perde. A narração permanece intacta.
+
+O relatório `depth_effects` registra os intervalos aprovados. Órbita e
+arcos são projeções para composição, sem reconstruir o ambiente ou deslocar
+a imagem do apresentador.
+
+Para outros assuntos, um cue com `"body_effect": "orbit"` pode propor a
+órbita com as palavras do trecho. A opção passa pela mesma validação de
+oclusão e espaço visível. `depth_candidates` guarda o resultado dessa
+seleção, inclusive casos que voltaram à composição de tela.

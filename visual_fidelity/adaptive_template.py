@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from .anchor_graphics import motion
+from .body_depth import hand_track, orbit_track, read_alpha, verify_orbit
 from .context_art import make_card
 from .editorial_motion import CUTAWAYS, treatment
 from .reference_cadence import digest, video_clock
@@ -101,7 +102,8 @@ def speech_cues(transcript, reviewed=None):
             'start':words[left][1], 'spoken_end':words[right][2],
             'treatment': 'metric' if re.search(r'\d', title) else
                          'alert' if icon in {'signal','cancel'} else 'headline',
-            **{k: extra[k] for k in ('icon_asset','provenance','anchor','spatial_evidence','editorial') if k in extra},
+            **{k: extra[k] for k in ('icon_asset','provenance','anchor','spatial_evidence',
+                                      'editorial','body_effect') if k in extra},
         })
     return sorted(choices, key=lambda x:x['start'])
 
@@ -232,7 +234,7 @@ def place_screen(first, stop, protected, resolution):
     return {}, (8,8)
 
 
-def build_layers(source, transcript, pose, style, root, condensed, script, reviewed=None):
+def build_layers(source, transcript, pose, style, root, condensed, script, reviewed=None, mattes=None):
     rate,count=video_clock(source)
     checksum=digest(source)
     if pose.get('source_sha256') != checksum:
@@ -240,6 +242,11 @@ def build_layers(source, transcript, pose, style, root, condensed, script, revie
     if rate.denominator != 1:
         raise ValueError('Conform fractional FPS to an integer clock before tracking and rendering')
     fps=int(rate)
+    if mattes:
+        alpha_index=load(mattes/'alpha.json')
+        if (alpha_index['source_sha256']!=checksum or int(alpha_index['frames'])!=count or
+                Fraction(alpha_index['fps'])!=rate):
+            raise ValueError('Matting must be measured on this source and frame clock')
     if style['animation'] not in {'fade','pop','hold'}:
         raise ValueError('Adaptive layouts support fade, pop and hold animation')
     picture=next(frames_of(source),None)
@@ -254,6 +261,9 @@ def build_layers(source, transcript, pose, style, root, condensed, script, revie
     planned=[]
     layers=[]
     occupied=defaultdict(list)
+    depth_effects=[]
+    depth_candidates=[]
+    used_orbit=False
     for index,cue in enumerate(spoken_windows(speech_cues(transcript,reviewed),count,fps)):
         first,end=cue['spoken_frame'],cue['end_frame']
         # A gesture can accent a phrase after it starts, within 320 milliseconds.
@@ -292,7 +302,27 @@ def build_layers(source, transcript, pose, style, root, condensed, script, revie
             }
             details['asset'] = None
             details['visual_treatment'] = visual
-        if visual in CUTAWAYS:
+        orbit=None
+        orbit_cue=(cue.get('body_effect')=='orbit' or
+                  any(word in cue['evidence'].split() for word in ('decolagens','retomadas')))
+        if (mattes and style.get('body_depth') and not used_orbit and visual=='kinetic_type'
+                and orbit_cue
+                and len(marks)==2):
+            track=orbit_track(pose,protected,first,end,mattes)
+            title={'DECOLAGENS SUSPENSAS':'VOOS SUSPENSOS'}.get(cue['title'],cue['title'])
+            evidence=verify_orbit(track,resolution,mattes,title,str(condensed),tuple(style['ink']),fps)
+            depth_candidates.append({'kind':'orbit','frames':[first,end],
+                                     'status':'selected' if evidence else 'insufficient_visible_depth'})
+            if evidence:
+                orbit={ 'kind':'orbit', 'title':title, 'font':str(condensed.resolve()),
+                        'mattes':str(mattes.resolve()),'ink':style['ink'] }
+                depth_effects.append({'kind':'orbit','frames':[first,end],'evidence':evidence})
+                used_orbit=True
+        if orbit:
+            layers.append(Prepared({'id':key,'body_depth':orbit},first,end,track,{}, {'mode':'body_orbit'},
+                                   resolution,{},None))
+            details.update(visual_treatment='body_orbit',anchor_mode='tracked_shoulders',rendered_frames=len(track))
+        elif visual in CUTAWAYS:
             corners = {i: None for i in range(first,end)}
             layers.append(Prepared(effect,first,end,corners,{}, {'mode':'cutaway'},resolution,{},None))
             details['rendered_frames'] = len(corners)
@@ -321,8 +351,25 @@ def build_layers(source, transcript, pose, style, root, condensed, script, revie
             raise ValueError('A spatial layout requires measured planar or world anchor evidence')
         details['status']='renderable' if details['rendered_frames'] else 'no_safe_placement'
         planned.append(details)
+        if gesture and mattes and style.get('body_depth') and not cue.get('anchor'):
+            shot_start=max(c for c in cuts if c<=gesture['frame'])
+            shot_stop=min((c for c in cuts if c>gesture['frame']),default=count)
+            hand=hand_track(pose,protected,gesture['side'],
+                            max(shot_start,cue['spoken_frame']-round(.40*fps)),
+                            min(shot_stop,gesture['frame']+round(.44*fps)+1))
+            valid=len(hand)>=round(.20*fps) and all(read_alpha(mattes,i) is not None for i in hand)
+            depth_candidates.append({'kind':'hand_track','trigger_frame':gesture['frame'],
+                                     'status':'selected' if valid else 'insufficient_hand_track'})
+            if valid:
+                a,b=min(hand),max(hand)+1
+                art={'kind':'hand_track','ink':style['ink'],'mattes':str(mattes.resolve())}
+                layers.append(Prepared({'id':key+'-hand','body_depth':art},a,b,hand,{}, {'mode':'hand_track'},
+                                       resolution,{},None))
+                depth_effects.append({'kind':'hand_track','frames':[a,b],'tracked_frames':len(hand),
+                                      'side':gesture['side'],'trigger_frame':gesture['frame']})
     report={'schema':'adaptive-template/1','source_sha256':checksum,'fps':fps,'frames':count,
             'style':style['id'],'shots':shots,'gesture_candidates':gestures,'graphics':planned,
+            'depth_effects':depth_effects,'depth_candidates':depth_candidates,
             'limits':'Geometry measured from source landmarks. Spatial depth requires an independent anchor solve.'}
     return report,layers,resolution
 
@@ -349,6 +396,9 @@ def main():
     tracking.add_argument('--pose',type=Path)
     tracking.add_argument('--pose-model',type=Path)
     parser.add_argument('--hand-model',type=Path)
+    alpha=parser.add_mutually_exclusive_group()
+    alpha.add_argument('--mattes',type=Path)
+    alpha.add_argument('--matte-model',type=Path,help='RVM MobileNetV3 FP32 ONNX checkpoint')
     parser.add_argument('--persons', type=int, choices=range(1,9), default=2)
     parser.add_argument('--cues',type=Path)
     parser.add_argument('--condensed',type=Path,required=True)
@@ -378,8 +428,13 @@ def main():
                 for field in ('projection','tracks','cameras'):
                     if cue['anchor'].get(field):
                         cue['anchor'][field]=str((args.cues.parent/cue['anchor'][field]).resolve())
+    mattes=args.mattes
+    if args.matte_model:
+        from .subject_alpha import prepare_alpha
+        mattes=args.work/'alpha'
+        prepare_alpha(args.source,args.matte_model,mattes)
     report,layers,resolution=build_layers(args.source,words,pose,load(args.style),args.work,
-                                          args.condensed,args.script,reviewed)
+                                          args.condensed,args.script,reviewed,mattes)
     (args.work/'analysis.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     if args.render:
         if not layers:
