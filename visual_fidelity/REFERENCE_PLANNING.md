@@ -2,6 +2,8 @@
 
 O caso330494V1 foi rejeitado por ritmo e falta de imagens complementares. Uma máscara correta com a fotografia errada não reproduz a cena. Uma troca de foto em intervalo fixo não está sincronizada só porque existe música no export.
 
+Para medir a referência e aplicar os tempos na timeline, use [REFERENCE_CADENCE.md](REFERENCE_CADENCE.md).
+
 ## Fluxo obrigatório da adaptação
 
 1. O editor analisa a referência por plano e por camada. Para cada abertura de máscara, registrar conteúdo visível, direção, enquadramento, duração, papel e evidência por quadro. Esta análise é visual/semântica; o validador Python não entende sozinho o conteúdo de uma foto.

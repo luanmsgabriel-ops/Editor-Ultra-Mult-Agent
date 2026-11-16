@@ -5,6 +5,7 @@ No reference photography or reference-specific coordinates are embedded here.
 """
 from pathlib import Path
 from collections import OrderedDict
+from fractions import Fraction
 import argparse,hashlib,json,subprocess
 import cv2,numpy as np
 from .geometric_replay import mask,compose,VERSION as MASK_VERSION
@@ -66,6 +67,7 @@ def fit_insert(image,view,coverage):
 
 def render(manifest,output):
     manifest=Path(manifest);root=manifest.parent;data=json.loads(manifest.read_text());W,H=data['width'],data['height'];fps=data['fps'];frames=data['frames']
+    duration=float(frames/Fraction(str(fps)))
     if len(data['frame_bindings'])!=frames or [b['frame'] for b in data['frame_bindings']]!=list(range(frames)):raise ValueError('Frame bindings must cover output exactly')
     contract=validate_edit(data,root)
     sources=Sources(root,data['assets']);cv2.setNumThreads(2);output=Path(output);output.parent.mkdir(parents=True,exist_ok=True);silent=output.with_name(output.stem+'-silent.mp4')
@@ -105,12 +107,15 @@ def render(manifest,output):
     if audio:
         p=root/audio['path'];speed=audio.get('speed',1)
         if not .5<=speed<=2:raise ValueError('Audio tempo must be .5..2')
-        filters=edited_audio_filter(audio.get('start',0),speed,frames/fps)+f",afade=t=out:st={frames/fps-.18}:d=0.18"
-        subprocess.run(['ffmpeg','-v','error','-y','-i',str(silent),'-i',str(p),'-map','0:v','-map','1:a','-c:v','copy','-af',filters,'-c:a','aac','-b:a','192k','-t',str(frames/fps),'-movflags','+faststart',str(output)],check=True);silent.unlink()
+        fade=min(.18,duration)
+        filters=edited_audio_filter(audio.get('start',0),speed,duration)+f",afade=t=out:st={duration-fade}:d={fade}"
+        subprocess.run(['ffmpeg','-v','error','-y','-i',str(silent),'-i',str(p),'-map','0:v','-map','1:a:0','-c:v','copy','-af',filters,'-c:a','aac','-b:a','192k','-t',str(duration),'-movflags','+faststart',str(output)],check=True);silent.unlink()
         sources.hashes['audio']=hashlib.sha256(p.read_bytes()).hexdigest()
     else:silent.replace(output)
     dependencies={name:hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest() for name in ['music_sync.py','edit_contract.py','geometric_replay.py']}
     report={'dependency_sha256':dependencies,'edit_contract':contract,'video_engine':VERSION,'mask_engine':MASK_VERSION,'frames':frames,'fps':fps,'width':W,'height':H,'input_hashes':sources.hashes,'manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest(),'engine_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'render_sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'approval':'pending'}
+    if 'reference_cadence' in data:
+        report['reference_cadence']=data['reference_cadence']
     output.with_suffix('.json').write_text(json.dumps(report,indent=2));print(json.dumps(report));return report
 
 if __name__=='__main__':

@@ -121,17 +121,24 @@ def _pulse(times, envelope, cues):
             'beat_times': [round(float(t), 6) for t in beats]}
 
 
+def decode_pcm(path, duration, start=0, speed=1):
+    """Decode the render's soundtrack interval as stereo float32 little-endian PCM."""
+    filters = edited_audio_filter(start, speed, duration)
+    return subprocess.check_output([
+        'ffmpeg', '-v', 'error', '-nostdin', '-i', str(path), '-map', '0:a:0',
+        '-vn', '-af', filters, '-ar', str(SAMPLE_RATE), '-ac', '2',
+        '-f', 'f32le', '-c:a', 'pcm_f32le', '-',
+    ])
+
+
 def analyze_audio(path, duration, start=0, speed=1):
     """Analyze the same trimmed/tempo-mapped clock used for the output soundtrack.
 
     Returns cues with output-relative seconds. start is a source offset in
     seconds and speed is FFmpeg atempo (0.5..2). No new music is synthesized.
     """
-    filters = edited_audio_filter(start, speed, duration)
     duration = float(duration); start = float(start); speed = float(speed); path = Path(path)
-    raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(path),
-                                   '-vn', '-af', filters, '-ar', str(SAMPLE_RATE), '-ac', '2',
-                                   '-f', 'f32le', '-c:a', 'pcm_f32le', '-'])
+    raw = decode_pcm(path, duration, start, speed)
     audio = np.frombuffer(raw, dtype='<f4').reshape(-1, 2)
     if not len(audio):
         raise ValueError('Selected soundtrack contains no decoded samples')
