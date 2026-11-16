@@ -82,3 +82,12 @@ A revisão Clara PT2 usa `examples/reference_replays/329687_pt2/` e `visual_fide
 Na troca de pessoa, conservar plano aberto versus close, inserir a pessoa e sua cadeira como uma única camada, separar transformação final de tela da câmera global e manter oclusores de mesa em primeiro plano. O relógio explícito deve preservar a fala em ambos os lados de cada corte. Não repetir quadros de origem silenciosamente.
 
 Na troca de idioma, conservar composição de fontes, cursivas reais, hierarquia, palavras completas e perspectiva. Usar a mesma câmera do cenário para reprojetar lettering na parede. Conferir a velocidade e a entrada da órbita em vários quadros; um quadro parecido não comprova movimento parecido. Gerar variantes de assets apenas quando necessário, manter alpha, prompt, proveniência e versões. Salvar render, comparação, manifesto e instruções de encaixe junto dos materiais reutilizáveis.
+
+
+## Reconstrução geométrica por camadas: referência 329796
+
+Use `visual_fidelity/geometric_replay.py` versão 1.0.1 para faixas horizontais/verticais, X, polígonos, máscaras suaves, keyframes e composição com recorte em primeiro plano. A referência 329796 está em `examples/reference_replays/329796_geometric/`; pacote e mídia: https://drive.google.com/drive/folders/1YakP-w83hT2rQrmsKyDXm8KtZSawFJbT. A aprovação visual está PENDENTE e não se transfere da Clara PT2.
+
+Quando só existir o MP4 final, declare a recomposição de pixels fotográficos recuperados, marque regiões ocultas inferidas e mantenha a geometria independente dos assets. A comparação usando pixels da referência não prova generalização. Gere uma prova adicional trocando as fontes pelas mesmas máscaras/tempos. Para um novo bruto, refaça os recortes e reancore portais como viseiras; não reutilize coordenadas de uma pessoa como rastreamento de outra.
+
+Em transições suaves, `decompose_observed` restringe a base aproximada ao intervalo de cor que permite uma inserção sem clipping. A correção da emenda clara da colagem 180/195 foi incorporada ao motor e tem teste de regressão. A decomposição é não única; não a descreva como recuperação exata do material oculto. Preserve os parâmetros, camadas, áudio, proveniência, instruções e hashes no pacote. Não imponha fontes ou estética de referências anteriores a um vídeo sem tipografia.
