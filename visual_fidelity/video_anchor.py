@@ -350,7 +350,10 @@ def render(picture, destination, resolution, fps, layers, font, root):
                 profile_index=index-origin
                 roll=layer.glyph_profile
                 poses=poses_at(roll,profile_index,layer.last-layer.first)
-                if poses is not None:
+                if 'motion_frames' in effect:
+                    from editorial_engine.motion_assets import frame_rgba
+                    art=frame_rgba(effect['motion_frames'][index])
+                elif poses is not None:
                     art=make_art(effect,layer.size,font,color,root,poses,layer.profile_aspect)
                 else:
                     if key not in cache:

@@ -1,0 +1,23 @@
+{
+  "schema_version": "motionlab-scene/1",
+  "id": "authored-3d-proof",
+  "mode": "3d",
+  "width": 480,
+  "height": 270,
+  "fps": "24/1",
+  "frame_count": 48,
+  "background": null,
+  "nodes": [
+    {"id": "volume", "type": "box", "size": [1.6, 1.2, 0.8], "position": [-0.8, 0, 0], "material": {"color": "#14c8cd"}},
+    {"id": "ring", "type": "torus", "radius": 0.7, "tube": 0.15, "rings": 12, "segments": 24, "position": [1, 0, 0], "material": {"color": "#f5bd61"}}
+  ],
+  "camera": {"position": [2.4, 1.6, 6], "target": [0, 0, 0], "fov": 42, "near": 0.1, "far": 100},
+  "lights": [
+    {"type": "ambient", "color": "#ffffff", "intensity": 0.2},
+    {"type": "directional", "color": "#ffffff", "intensity": 0.8, "direction": [1, 2, 4]}
+  ],
+  "tracks": [
+    {"target": "volume", "property": "rotation", "keys": [{"t": 0, "value": [0, 0, 0], "ease": "linear"}, {"t": 2, "value": [0.5, 2.2, 0.2]}]},
+    {"target": "ring", "property": "rotation", "keys": [{"t": 0, "value": [0.3, -0.4, 0], "ease": "linear"}, {"t": 2, "value": [0.8, 1.8, 0.4]}]}
+  ]
+}

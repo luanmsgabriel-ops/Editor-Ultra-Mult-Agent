@@ -272,8 +272,35 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
                 from audiovisual.semantic_audio import verify_asset
                 verify_asset(item["asset"])
                 payload.update(kind="audio_asset", asset=item["asset"])
+            elif item["kind"] == "motion":
+                from .motion_assets import load_layer, frame_rate
+                path = Path(item["path"]).resolve()
+                layer = load_layer(path)
+                require(frame_rate(layer["fps"]) == rate, "motion_clock",
+                        "Render motion at the source frame rate before preparing its asset")
+                if layer.get("source_binding"):
+                    bound = layer["source_binding"]
+                    require(bound["source_sha256"] == source_hash and bound["frame_count"] == count,
+                            "motion_source", "Motion was authored for a different source")
+                payload.update(kind="motion_asset", path=str(path),
+                    motion={key: layer[key] for key in ("fps", "frame_count", "width", "height", "alpha", "origin")},
+                    source_binding=layer.get("source_binding"),
+                    files=[{"path": str(path), "sha256": file_sha256(path)},
+                           *[{"path": frame["path"], "sha256": frame["sha256"]} for frame in layer["frames"]],
+                           *[{"path": frame["glyph_ids_path"], "sha256": frame["glyph_ids_sha256"]}
+                             for frame in layer["frames"] if "glyph_ids_path" in frame]])
+                if item.get("sonic_candidates"):
+                    sonic_ref = item["sonic_candidates"]
+                    verify_file(sonic_ref["path"], sonic_ref["sha256"], "motion sound candidates")
+                    sonic = _load(sonic_ref["path"])
+                    require(sonic.get("schema_version") == "motionlab-sonic/1" and sonic.get("clock") == "scene_seconds",
+                            "sonic_schema", "Expected scene-clock motion sound candidates")
+                    require(sonic.get("scene_sha256") == layer["origin"].get("recipe_sha256"),
+                            "sonic_scene", "Sound candidates must identify the rendered scene recipe")
+                    payload["motion_audio_candidates"] = sonic
+                    payload["files"].append(sonic_ref)
             else:
-                raise ValueError("Supported prepared asset kinds are image and sfx")
+                raise ValueError("Supported prepared asset kinds are image, motion and sfx")
             proof = receipt(f"asset-{len(seen)}", payload)
             capability("asset:" + identifier, payload["kind"], proof)
     # Bind factual resource observations to overlapping events for explicit citations.

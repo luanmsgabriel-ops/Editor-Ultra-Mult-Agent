@@ -1,0 +1,304 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "id": "objects",
+      "title": "Objects in play",
+      "subtitle": "Three 3D objects, studio lighting and a cinematic camera.",
+      "kind": "3d",
+      "controls": [
+        {
+          "id": "shell",
+          "label": "Shell",
+          "type": "color",
+          "path": "shell",
+          "default": "#173bd5",
+          "help": "Radio color; leaves other objects unchanged."
+        },
+        {
+          "id": "knob",
+          "label": "Knob",
+          "type": "color",
+          "path": "knob",
+          "default": "#f34a13",
+          "help": "Center knob color."
+        },
+        {
+          "id": "display",
+          "label": "Display",
+          "type": "text",
+          "path": "display",
+          "default": "",
+          "help": "Optional LED text. Leave blank to keep the original sequence."
+        },
+        {
+          "id": "energy",
+          "label": "Object energy",
+          "type": "range",
+          "min": 0,
+          "max": 1.8,
+          "step": 0.05,
+          "path": "objectMotion",
+          "default": 1,
+          "help": "Object movement strength and speed; camera unchanged."
+        },
+        {
+          "id": "contrast",
+          "label": "Light contrast",
+          "type": "range",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "path": "look.lighting",
+          "default": 0.85,
+          "help": "Balance fill, rim and environment lighting."
+        }
+      ],
+      "moments": [
+        {
+          "label": "Radio",
+          "time": 0.6
+        },
+        {
+          "label": "Gyro",
+          "time": 2.6
+        },
+        {
+          "label": "Open cover",
+          "time": 4.7
+        },
+        {
+          "label": "Emblem",
+          "time": 5.6
+        },
+        {
+          "label": "Hero",
+          "time": 8.8
+        }
+      ],
+      "presets": [
+        {
+          "id": "original",
+          "label": "Original",
+          "values": {
+            "energy": 1,
+            "contrast": 0.85
+          },
+          "look": {}
+        },
+        {
+          "id": "sculpted",
+          "label": "Sculpted",
+          "values": {
+            "energy": 1.2,
+            "contrast": 0.78
+          },
+          "look": {
+            "lighting": {
+              "key": 360,
+              "fill": 0.035,
+              "rim": 4.6,
+              "environment": 0.57
+            },
+            "post": {
+              "exposure": 1.07,
+              "aoIntensity": 0.52,
+              "aberrationPx": 3.2
+            }
+          }
+        },
+        {
+          "id": "softbox",
+          "label": "Softbox",
+          "values": {
+            "energy": 0.8,
+            "contrast": 0.35
+          },
+          "look": {
+            "lighting": {
+              "key": 290,
+              "fill": 0.12,
+              "rim": 3.2,
+              "environment": 0.78
+            },
+            "post": {
+              "exposure": 1.08,
+              "aoIntensity": 0.28,
+              "aberrationPx": 2.2,
+              "vignette": 0.13
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "procedural",
+      "title": "Motion Lab / Procedural Systems",
+      "subtitle": "Vector fields, parametric structures and hundreds of elements synced to techno.",
+      "kind": "2d",
+      "controls": [
+        {
+          "id": "title",
+          "label": "Title",
+          "type": "text",
+          "path": "graphics.title",
+          "default": "MOTION",
+          "help": "Main text in the 2D scenes."
+        },
+        {
+          "id": "accent",
+          "label": "Accent",
+          "type": "color",
+          "path": "graphics.accent",
+          "default": "#c2ff38",
+          "help": "Shape and transition color."
+        },
+        {
+          "id": "density",
+          "label": "Density",
+          "type": "range",
+          "min": 4,
+          "max": 18,
+          "step": 1,
+          "path": "graphics.density",
+          "default": 10,
+          "help": "Number of repeated elements."
+        },
+        {
+          "id": "speed",
+          "label": "Pace",
+          "type": "range",
+          "min": 0.25,
+          "max": 2.5,
+          "step": 0.05,
+          "path": "graphics.speed",
+          "default": 1,
+          "help": "Motion speed; duration and frame rate unchanged."
+        }
+      ],
+      "moments": [
+        {
+          "label": "Flow",
+          "time": 0.9
+        },
+        {
+          "label": "Torus",
+          "time": 2.7
+        },
+        {
+          "label": "Swarm",
+          "time": 4.5
+        },
+        {
+          "label": "Waves",
+          "time": 6.3
+        },
+        {
+          "label": "Tunnel",
+          "time": 8.1
+        },
+        {
+          "label": "Final",
+          "time": 9.6
+        }
+      ],
+      "presets": [
+        {
+          "id": "original",
+          "label": "Original",
+          "values": {
+            "title": "MOTION",
+            "accent": "#c2ff38",
+            "density": 10,
+            "speed": 1
+          }
+        },
+        {
+          "id": "punch",
+          "label": "Punch",
+          "values": {
+            "title": "MOTION",
+            "accent": "#ff632e",
+            "density": 15,
+            "speed": 1.35
+          }
+        },
+        {
+          "id": "calm",
+          "label": "Calm",
+          "values": {
+            "title": "MOTION",
+            "accent": "#75baff",
+            "density": 6,
+            "speed": 0.7
+          }
+        }
+      ]
+    },
+    {
+      "id": "pop",
+      "title": "PLAY.EXE / Pop Motion",
+      "subtitle": "Floating player, 3D type and a rhythmic city. 120 BPM.",
+      "kind": "hybrid",
+      "controls": [
+        {"id":"fisheye","label":"Fish-eye","type":"range","min":0,"max":0.6,"step":0.01,"path":"graphics.fisheye","default":0.3,"help":"Lens curvature across the full composition. Zero disables the effect."},
+        {"id":"cameraMotion","label":"Camera movement","type":"range","min":0,"max":1,"step":0.05,"path":"graphics.cameraMotion","default":1,"help":"Zoom, pan and roll intensity. Zero keeps the composition fixed."},
+        {
+          "id": "accent",
+          "label": "Sticker accent",
+          "type": "color",
+          "path": "graphics.accent",
+          "default": "#ff66a7",
+          "help": "Color of stickers and graphic rings."
+        },
+        {
+          "id": "speed",
+          "label": "Lettering energy",
+          "type": "range",
+          "min": 0.25,
+          "max": 2.5,
+          "step": 0.05,
+          "path": "graphics.speed",
+          "default": 1,
+          "help": "Intensity of lettering motion and beat accents."
+        }
+      ],
+      "moments": [
+        {
+          "label": "Play",
+          "time": 1
+        },
+        {
+          "label": "Bass",
+          "time": 3.5
+        },
+        {
+          "label": "Move",
+          "time": 6
+        },
+        {
+          "label": "Finale",
+          "time": 9
+        }
+      ],
+      "presets": [
+        {
+          "id": "original",
+          "label": "Pop",
+          "values": {
+            "accent": "#ff66a7",
+            "speed": 1
+          }
+        },
+        {
+          "id": "electric",
+          "label": "Electric",
+          "values": {
+            "accent": "#6bddf5",
+            "speed": 1.5
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "repository": "https://github.com/okkazoo/MOTNGRFX",
+  "commit": "8c0ddc816616a95f55bddc606eecea3fd5ba5ef1",
+  "license": "Apache-2.0",
+  "copyright": "Copyright 2026 okkazoo",
+  "files": [
+    {
+      "path": "upstream/mograph/modules/words/_depth.py",
+      "upstream_path": "mograph/modules/words/_depth.py",
+      "snapshot_sha256": "572cc37af05d713dc0d8718eebdf3ad6a204b7cef665cc01a76a1abe8295feef",
+      "normalization": "UTF-8; CRLF normalized to LF; trailing newline retained"
+    },
+    {
+      "path": "upstream/mograph/modules/words/hinge_unfold.py",
+      "upstream_path": "mograph/modules/words/hinge_unfold.py",
+      "snapshot_sha256": "5bc9d5ecdb2b6d3f4b440d1ca92b0392b8e78d3cfbdfe14db5cc863847047585",
+      "normalization": "UTF-8; CRLF normalized to LF; trailing newline retained"
+    },
+    {
+      "path": "upstream/tools/app/overlay_mode.py",
+      "upstream_path": "tools/app/overlay_mode.py",
+      "snapshot_sha256": "4413dd03c8168e0fb695d46170908ebd23920ec97c24307ea3f5cacd79baedbc",
+      "normalization": "UTF-8; CRLF normalized to LF; trailing newline retained"
+    },
+    {
+      "path": "upstream/tools/mathtype/kit/camera.py",
+      "upstream_path": "tools/mathtype/kit/camera.py",
+      "snapshot_sha256": "6690a7c911e6032e70e862338dcefeff5d20d2a2193c2070672bd3588271e280",
+      "normalization": "UTF-8; CRLF normalized to LF; trailing newline retained"
+    }
+  ],
+  "executed_module": "portable.py",
+  "adaptations": [
+    "tools/mathtype/kit/camera.py: NumPy role easing, rotation and specialized perspective projection",
+    "mograph/modules/words/hinge_unfold.py + _depth.py: five-stage per-glyph hinge mechanic, explicit timing",
+    "tools/app/overlay_mode.py: weighted per-word/per-glyph occlusion measurement; no layer-order substitution"
+  ],
+  "not_vendored": [
+    "fonts",
+    "weights",
+    "ComfyUI",
+    "reference footage",
+    "private media"
+  ],
+  "full_upstream_runtime_executed": false,
+  "tree": "b625b3b4b649ba6cb02c30df561d249217770f37",
+  "commit_api": "https://api.github.com/repos/okkazoo/MOTNGRFX/git/commits/8c0ddc816616a95f55bddc606eecea3fd5ba5ef1",
+  "head_ref_api": "https://api.github.com/repos/okkazoo/MOTNGRFX/git/ref/heads/main",
+  "commit_date": "2026-11-03T18:37:19Z"
+}

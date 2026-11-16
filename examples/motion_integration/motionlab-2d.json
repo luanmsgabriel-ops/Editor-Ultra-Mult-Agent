@@ -1,0 +1,19 @@
+{
+  "schema_version": "motionlab-scene/1",
+  "id": "authored-2d-proof",
+  "mode": "2d",
+  "width": 480,
+  "height": 270,
+  "fps": "24/1",
+  "frame_count": 48,
+  "background": null,
+  "nodes": [
+    {"id": "bar", "type": "rect", "x": 60, "y": 112, "width": 64, "height": 44, "cornerRadius": 10, "fill": "#ff6d4a"},
+    {"id": "circle", "type": "circle", "x": 330, "y": 134, "radius": 25, "fill": "#14c8cd"}
+  ],
+  "tracks": [
+    {"target": "bar", "property": "x", "keys": [{"t": 0, "value": 60, "ease": "inOut"}, {"t": 1, "value": 260}, {"t": 2, "value": 60}]},
+    {"target": "circle", "property": "y", "keys": [{"t": 0, "value": 180, "ease": "smooth"}, {"t": 1, "value": 65}, {"t": 2, "value": 180}]}
+  ],
+  "cuts": []
+}

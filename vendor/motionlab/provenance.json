@@ -1,0 +1,117 @@
+{
+  "schema": "motionlab-vendor/1",
+  "repository": "https://github.com/AndreXes03/motion-lab",
+  "commit": "6a7f1ca62b7b30d534fe181f912606ad4cfc6718",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "src/engine/animation.js",
+      "sha256": "c7d59c9dfc54a0d63f34118b8bc637880bbc89294b582c6e18d806cd933af574",
+      "git_blob_sha1": "bf113afd860f408ed3e95c8a8dd0bb37011a7172",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/animation.js"
+    },
+    {
+      "path": "src/engine/timeline.js",
+      "sha256": "65e8ede13c34af546020b94b9c9f4d352eac58405cd26a1529e8064f7fa1d838",
+      "git_blob_sha1": "d9db184f77a83b6cf2d7b71499094573e868726d",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/timeline.js"
+    },
+    {
+      "path": "src/engine/animation-groups.js",
+      "sha256": "27942d8480fc7d46fad060e53869dc71cccdb621a386d001484d0ceee5b7f07e",
+      "git_blob_sha1": "dfcf1e460a74210c434f3374ce3adaedfb53992d",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/animation-groups.js"
+    },
+    {
+      "path": "src/engine/parameter-animation.js",
+      "sha256": "060d0971a929658b72d018947a07341239af9e0ec3e43f08dfd01cb69e696d5d",
+      "git_blob_sha1": "5bff992d789950b869b33c582ae073674a819d56",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/parameter-animation.js"
+    },
+    {
+      "path": "src/engine/procedural.js",
+      "sha256": "39d2286116a315be01219ef5a6b24de2915a11cf153bb3f28065862d947c1662",
+      "git_blob_sha1": "60b4ac62b2798534055645466817687f868b3f94",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/procedural.js"
+    },
+    {
+      "path": "src/engine/temporal.js",
+      "sha256": "3c904fc8aaf92647a379d5996ae74c57035038d6579f3edf5d8893fd450fcabe",
+      "git_blob_sha1": "f255555865d0f8b979a330aeb8fa3405a0d12a8b",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/temporal.js"
+    },
+    {
+      "path": "src/engine/sound-procedural.js",
+      "sha256": "ee38a733c38c5d8f3019a16b27a01035f43e764d215af309903ca226cd546b2d",
+      "git_blob_sha1": "780d7e67b9186d1426bcf5d162d438c732b797d5",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/sound-procedural.js"
+    },
+    {
+      "path": "src/engine/control-catalog.js",
+      "sha256": "2a8b0e583a1c02bc61046b0add14eb380555ea8eb09171384868fbf5687f94f9",
+      "git_blob_sha1": "a927ebff51f85977fc485ee9c958f12286ddfbd0",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/control-catalog.js"
+    },
+    {
+      "path": "src/engine/scene-capabilities.js",
+      "sha256": "0edeec030264b207085ebaa2a317c332e7411a229cbcb357eecf686c9aeba0b9",
+      "git_blob_sha1": "cded4a526f142798813c1ef7457b87b3d3aef104",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/scene-capabilities.js"
+    },
+    {
+      "path": "src/engine/legacy-scene.js",
+      "sha256": "1f35bd35566fba574942791f31b6e5c9a264b06d9f65e1e1b25eac9ce3baa63a",
+      "git_blob_sha1": "a3ce61e9c3f62d7be37918a50b5ea6fc545821f6",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/legacy-scene.js"
+    },
+    {
+      "path": "src/engine/project-controls.js",
+      "sha256": "438ee24f0f066238ed82c7b2b469a11dd55ce7950182655120b145ad6f294ea1",
+      "git_blob_sha1": "ba8c59b6bfea02400f23945dd834c494b9ae17e2",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/engine/project-controls.js"
+    },
+    {
+      "path": "src/scene-registry.js",
+      "sha256": "4d181b2031eb6351b141ced48f14bd95bc3829d9d8cc97b3ba3771d4aa1d2182",
+      "git_blob_sha1": "dd618d9c0c79ff71aeefaf02c5eed53925e0131b",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/scene-registry.js"
+    },
+    {
+      "path": "src/config.js",
+      "sha256": "72701d518d5193c116f37f577633479a3fefe963bf57cec18072386ff90d55bb",
+      "git_blob_sha1": "265a96deef955401847e3b2f4ded5625a0684a5a",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/src/config.js"
+    },
+    {
+      "path": "project/control-selections.json",
+      "sha256": "2f867ce76ae9de271f622201fa842ec83035273b09ddae5ea9f25cecfbb32da7",
+      "git_blob_sha1": "4abd13cda77577bcc1d287817ae19bed86ad3366",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/project/control-selections.json"
+    },
+    {
+      "path": "project/look.json",
+      "sha256": "6a03e32c69d3d7cb5df8077eda6d7ceaf99016612c74e742a0dce5b1d0de78da",
+      "git_blob_sha1": "b6fa252f2aa614b29dde009251c8e08ae525742c",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/project/look.json"
+    },
+    {
+      "path": "project/studio.json",
+      "sha256": "b8e88f6a369f3733208cee1531423b6e892b6c4dbad0f3cbe7eaa5045b48aad7",
+      "git_blob_sha1": "3f4de192417a532ba161512088d86752db48dd9c",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/project/studio.json"
+    },
+    {
+      "path": "package.json",
+      "sha256": "47e882e8c8073bbab1730e8f9bd9f3c2af8a501b40309b39da77aa10a78742af",
+      "git_blob_sha1": "485283e8d34eb89d76df945758bcfcaa9d37cb5a",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/package.json"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "82ad932302cb5477dda9e9e080c245e75d808f3f354adb11e2d420db69ebbb0c",
+      "git_blob_sha1": "c826df6365f2e4347741181df7114ab0337a15a9",
+      "url": "https://github.com/AndreXes03/motion-lab/blob/6a7f1ca62b7b30d534fe181f912606ad4cfc6718/LICENSE"
+    }
+  ],
+  "scope": "Unmodified source subset; no post-cutoff Framevolve contributions or demo media."
+}

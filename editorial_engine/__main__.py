@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+import sys
 
 from .contracts import ValidationError
 from .directions import build_request, call_provider, plan_direction
@@ -73,10 +74,16 @@ def parser():
     patch.add_argument("--review", type=Path, required=True)
     patch.add_argument("--output", type=Path, required=True)
     patch.add_argument("--review-output", type=Path, required=True)
+    motion = sub.add_parser("motion", help="Measure, author and render motion using the pinned adapters")
+    motion.add_argument("motion_args", nargs=argparse.REMAINDER)
     return root
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "motion":
+        from .motion import main as motion_main
+        return motion_main(argv[1:])
     argparser = parser()
     args = argparser.parse_args(argv)
     try:

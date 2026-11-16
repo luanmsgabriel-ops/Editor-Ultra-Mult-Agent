@@ -1,0 +1,1 @@
+{"name":"editor-ultra-motionlab-bridge","private":true,"type":"module","version":"1.0.0","dependencies":{"@napi-rs/canvas":"0.1.100","three":"0.180.0"}}

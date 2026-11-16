@@ -1,0 +1,28 @@
+{
+  "schema_version": "motionlab-scene/1",
+  "id": "independent-groups",
+  "mode": "2d",
+  "width": 640,
+  "height": 360,
+  "fps": "24/1",
+  "frame_count": 48,
+  "background": null,
+  "cuts": [1],
+  "nodes": [
+    {"id": "bar", "type": "rect", "x": 40, "y": 120, "width": 100, "height": 40, "fill": "#eb663b"},
+    {"id": "dot", "type": "circle", "x": 40, "y": 220, "radius": 20, "fill": "#3180ed"}
+  ],
+  "groups": {
+    "slow": {"start": 0, "end": 2, "rate": 0.5, "keys": [
+      {"t": 0, "value": 0, "ease": "linear"}, {"t": 2, "value": 1}
+    ]}
+  },
+  "tracks": [
+    {"target": "bar", "property": "x", "keys": [
+      {"t": 0, "value": 40, "ease": "inOut"}, {"t": 2, "value": 490}
+    ]},
+    {"target": "dot", "property": "x", "group": "slow", "keys": [
+      {"t": 0, "value": 40, "ease": "inOut"}, {"t": 2, "value": 570}
+    ]}
+  ]
+}

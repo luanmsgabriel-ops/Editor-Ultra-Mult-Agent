@@ -44,6 +44,10 @@ Uma imagem amostrada não comprova movimento contínuo. Não descreva sons não 
 Não corrija uma falha espacial com uma camada de tela silenciosamente. Liste as limitações da evidência.
 Use region [x,y,width,height] normalizada para reservar a área visual real, inclusive a animação.
 SFX exige alvo em amostras a 48000 Hz e intervalo que contenha pré-roll e cauda audíveis, além de âncora revisada.
+Camadas motion_asset contêm animação real em PNGs RGBA. Use native.motion_layer ou native.motion_behind
+com asset_start_frame explícito quando necessário. Preserve FPS e cobertura; não repita frames para preencher tempo.
+Consulte motion_guidance como possibilidades, nunca como obrigação estética. Receitas ainda não renderizadas
+não são assets prontos. Amostras de uma animação não comprovam continuidade nem legibilidade durante todo o movimento.
 Uma referência informa gramática e ritmo. As âncoras, a fala e os espaços vêm do vídeo atual.
 Nunca declare aprovação do usuário nem revisão do render antes de assistir ao render real.
 """
@@ -67,7 +71,7 @@ def build_request(analysis: dict, catalog: dict, brief: str, *, reference_profil
         require(lesson.get("status") == "user_approved" and bool(lesson.get("confirmation")),
                 "unapproved_lesson", "Only explicitly approved lessons may influence a new direction")
         approved_lessons.append(clone(lesson))
-    resources, asset_previews = [], []
+    resources, asset_previews, motion_previews = [], [], []
     for cap in analysis["capabilities"]:
         if cap["status"] != "verified":
             continue
@@ -85,16 +89,31 @@ def build_request(analysis: dict, catalog: dict, brief: str, *, reference_profil
                 buffer = io.BytesIO()
                 preview.save(buffer, format="PNG")
             asset_previews.append((cap["id"], base64.b64encode(buffer.getvalue()).decode("ascii")))
+        if receipt.get("kind") == "motion_asset" and include_images and len(motion_previews) < 8:
+            from .motion_assets import load_layer, contact_sheet
+            bound = [entry for entry in receipt.get("files", []) if entry["path"] == receipt["path"]]
+            require(len(bound) == 1, "motion_preview", "Motion preview needs a bound manifest")
+            verify_file(bound[0]["path"], bound[0]["sha256"], cap["id"])
+            layer = load_layer(receipt["path"])
+            sheet = contact_sheet(layer)
+            buffer = io.BytesIO()
+            sheet.save(buffer, format="PNG")
+            motion_previews.append((cap["id"], base64.b64encode(buffer.getvalue()).decode("ascii")))
         resources.append({"capability_id": cap["id"], "name": cap["name"],
                           "kind": receipt.get("kind"), "metadata": receipt.get("catalog_metadata", {}),
+                          "motion_asset": receipt.get("motion") if receipt.get("kind") == "motion_asset" else None,
+                          "motion_audio_candidates": receipt.get("motion_audio_candidates"),
                           "audio_asset": receipt.get("asset") if receipt.get("kind") == "audio_asset" else None})
     sample_evidence = _sample([e for e in analysis["evidence"] if "artifact" in e and e["kind"] == "visual"], max_frames)
     content = []
+    from .motion_guidance import motion_guidance
     request_payload = {"brief": brief, "analysis": analysis, "catalog": catalog, "resources": resources,
+        "motion_guidance": motion_guidance(),
         "reference_profile": reference_profile, "approved_lessons": approved_lessons,
         "review_scope": {"kind": "sampled_frames_and_supplied_evidence", "continuous_motion_review": False,
                          "listened_audio": False, "image_evidence_ids": [e["id"] for e in sample_evidence] if include_images else [],
-                         "image_asset_capability_ids": [identifier for identifier, _ in asset_previews]},
+                         "image_asset_capability_ids": [identifier for identifier, _ in asset_previews],
+                         "motion_asset_capability_ids": [identifier for identifier, _ in motion_previews]},
         "response_contract": {
             "schema_version": "1.0",
             "provenance": {"kind": "human or model", "actor": "actual reviewer/model", "method": "actual evidence reviewed"},
@@ -127,6 +146,9 @@ def build_request(analysis: dict, catalog: dict, brief: str, *, reference_profil
                             {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")}}])
         for identifier, preview in asset_previews:
             content.extend([{"type": "text", "text": f"Available IMAGE ASSET preview (not source footage): capability {identifier}"},
+                            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + preview}}])
+        for identifier, preview in motion_previews:
+            content.extend([{"type": "text", "text": f"MOTION ASSET sampled contact sheet, not continuous playback: capability {identifier}"},
                             {"type": "image_url", "image_url": {"url": "data:image/png;base64," + preview}}])
     body = {"messages": [{"role": "system", "content": DIRECTOR_INSTRUCTIONS}, {"role": "user", "content": content}],
             "response_format": {"type": "json_object"}}

@@ -8,7 +8,7 @@ O motor não configura um diretor automaticamente. `prepare` extrai fatos técni
 
 O adaptador nativo trabalha com **uma fonte CFR, com timestamp inicial zero, sem remontagem, retime ou mudança da grade de quadros**. Os intervalos de análise e decisão usam `clock: "source"`; a revisão usa `clock: "output"`. A coincidência atual entre esses relógios não autoriza transportar timecodes de outra montagem.
 
-As primitivas existentes de `visual_fidelity` continuam responsáveis pela composição. Os módulos novos organizam direção, contratos, recursos e revisão; não instalam tracking, segmentação, reconstrução de câmera ou modelos generativos. Capacidade ausente, desconhecida, incompleta ou vinculada a outra fonte bloqueia a intervenção. Uma alternativa exige proposta e justificativa próprias. O executor não troca uma órbita por cartão nem uma projeção por camada de tela silenciosamente.
+As primitivas existentes de `visual_fidelity` continuam responsáveis pela composição. Os módulos de direção organizam contratos, recursos e revisão; os executores locais de [motion](motion-integration.md) acrescentam cenas e tipografia animadas como recursos verificáveis. Essa incorporação não instala tracking, segmentação, reconstrução de câmera ou modelos generativos. Capacidade ausente, desconhecida, incompleta ou vinculada a outra fonte bloqueia a intervenção. Uma alternativa exige proposta e justificativa próprias. O executor não troca uma órbita por cartão nem uma projeção por camada de tela silenciosamente.
 
 A API do provider está implementada, mas **não foi exercitada com um modelo externo ao vivo nesta entrega**. O CLAP estava indisponível no runtime verificado, e sua inferência com pesos reais não foi exercitada. Testes de contrato e renders sintéticos confirmam o comportamento técnico exercitado, sem demonstrar julgamento semântico de um modelo ou aprovação estética de um vídeo real.
 
@@ -39,6 +39,8 @@ Os exemplos abaixo partem da raiz do repositório. Substitua os caminhos pelos m
 | `render-v1.artifact.json` | Identidade do MP4, decisões executadas, recursos e checagens |
 | `review-v1-*.json` | Estado persistente de revisão e histórico de relatórios |
 | `patch-v2.json` | Substituições localizadas contra uma versão exata |
+| `motion-v1/motion-layer.json` | Sequência RGBA, FPS local, hashes por quadro e origem do renderer |
+| `motion-v1/inventory.json` | Asset `kind: "motion"` consumível por `prepare --assets` |
 
 Um SHA-256 identifica bytes. Um recibo registra a origem e o método de uma verificação. Nenhum dos dois, isoladamente, comprova que uma observação está correta, que uma máscara recorta bem o sujeito ou que um efeito combina com o trecho.
 
@@ -72,9 +74,44 @@ Todas as opções de recursos são opcionais; inclua apenas as que existem. Omit
 
 Os dados temporais devem identificar a mesma fonte e seu relógio. A transcrição usa segmentos ordenados com `start`, `end` e `text`, além de `source_sha256`; explicite `clock: "source"`. Pose, proteção, máscaras e projeção também precisam conservar FPS e grade de quadros. A preparação rejeita entradas que declarem outro relógio. Uma máscara em grade reduzida exige resolução declarada e normalização registrada, conservando os originais e hashes dos arquivos efetivamente usados.
 
-O inventário de assets separa imagem de SFX. Para imagem, registre `id`, `kind: "image"`, `path` e metadados curatoriais como descrição, funções editoriais, origem e licença. Para som, `kind: "sfx"` recebe em `asset` o registro verificado do índice de áudio. IDs e nomes de arquivo servem para identidade; a adequação editorial precisa de curadoria, audição, preview ou outra observação explícita do conteúdo.
+O inventário distingue imagem, motion e SFX. Para imagem, registre `id`, `kind: "image"`, `path` e metadados curatoriais como descrição, funções editoriais, origem e licença. Para motion, `kind: "motion"` recebe em `path` o manifesto `motion-layer/1` de uma sequência renderizada, com PNGs RGBA straight, FPS racional, frame count, raster e hashes. Para som, `kind: "sfx"` recebe em `asset` o registro verificado do índice de áudio. IDs e nomes de arquivo servem para identidade; a adequação editorial precisa de curadoria, audição, preview ou outra observação explícita do conteúdo.
 
-A preparação mínima, sem tracking, proteção ou assets, pode ser suficiente para decupagem e uma decisão motivada de preservação. Ela não torna automaticamente executáveis os sete efeitos do catálogo.
+A preparação mínima, sem tracking, proteção ou assets, pode ser suficiente para decupagem e uma decisão motivada de preservação. Ela não torna automaticamente executáveis os efeitos do catálogo.
+
+### Produzir e importar uma camada de motion
+
+Use o [fluxo de motion](motion-integration.md) quando a direção precisar de animação autorada, tipografia extrudada, grupos independentes, uma transição ou cena gráfica. Consulte `motion probe` antes de escolher o backend. OpenKatana, Motion Lab legado MIT e MOTNGRFX têm escopos próprios; receita ainda não renderizada não constitui capacidade pronta.
+
+```bash
+python -m editorial_engine motion render motionlab \
+  examples/motion_integration/motionlab-2d.json trabalho/motion-v1 \
+  --samples 4 --asset-id motion-explicacao
+
+python -m visual_fidelity contextual-edit prepare \
+  midia/bruto.mp4 trabalho/analise-motion-v1 \
+  --assets trabalho/motion-v1/inventory.json \
+  --protection midia/protecao.json \
+  --mattes midia/mattes
+```
+
+Configure FPS e duração da receita a partir do bruto antes desse render. O inventário gerado tem a forma abaixo; os arquivos referidos precisam existir:
+
+```json
+{
+  "assets": [{
+    "id": "motion-explicacao",
+    "kind": "motion",
+    "path": "/projeto/exports/motion-v1/motion-layer.json",
+    "description": "Descrição curatorial do conteúdo e da função proposta"
+  }]
+}
+```
+
+`prepare` confere todos os quadros, alpha, hashes e FPS. Se existir `source_binding`, confere também a identidade e o relógio da fonte à qual a sequência pertence. O frame inicial da decisão recebe o frame local indicado por `asset_start_frame`; os demais seguem um a um até o fim do intervalo. Não há repetição, congelamento, reordenação ou retime para completar uma animação curta.
+
+`native.motion_layer` requer `motion_asset` e proteção; `native.motion_behind` requer também `subject_mask`. O alpha é transformado pelo mesmo caminho usado na renderização, preservando proporção e verificando proteção e visibilidade. Um piso positivo de visibilidade por letra exige mapas de IDs dos glifos; ele não pode ser comprovado apenas pelo alpha global. Falha de máscara ou cobertura exige correção ou nova proposta explícita.
+
+Motion Lab e MOTNGRFX podem produzir volume em câmera sintética por CPU. Isso demonstra uma cena 3D autorada, sem resolver a câmera da filmagem nem demonstrar fixação no chão. A aplicação no espaço real continua sujeita às evidências de tracking, plano, profundidade e câmera do bruto. MP4s achatados de inspeção não substituem os PNGs RGBA da camada.
 
 ## 2. Preparar o pedido de direção
 
@@ -94,7 +131,9 @@ As posições, tracking, fala e espaços disponíveis pertencem ao vídeo atual.
 
 O pedido informa quais imagens foram realmente incluídas. `--max-frames` aceita de 2 a 96 amostras; o padrão é 24. `--no-images` prepara somente o conteúdo textual e estrutural. Uma resposta do provider não pode anotar um frame que não recebeu. Amostras isoladas não provam movimento contínuo, e transcrição não comprova audição.
 
-O pedido inclui também previews de até 12 imagens do inventário, identificadas como assets e separadas dos quadros da fonte. Prepare uma seleção de candidatos antes de enviá-los. O provider só pode selecionar uma imagem cujo preview recebeu; descrição técnica, ID e SHA não substituem a observação do asset. Busca de som deve entregar candidatos com semântica e proveniência próprias, e a âncora interna precisa estar revisada antes do render final.
+O pedido inclui também previews de até 12 imagens e folhas amostradas de até 8 camadas de motion do inventário, identificadas como assets e separadas dos quadros da fonte. Prepare uma seleção de candidatos antes de enviá-los. O provider só pode selecionar uma imagem cujo preview recebeu; descrição técnica, ID e SHA não substituem a observação do asset. As cartas `motion_guidance` apresentam opções e requisitos, sem impor estilo nem escolher pela presença de palavras. Folhas de motion mostram apenas os frames identificados, sem comprovar reprodução contínua ou legibilidade durante toda a animação.
+
+Quando o inventário inclui candidatos sonoros de motion, o pedido conserva sua relação com o hash da receita renderizada e seu clock local. Eles não são áudios ou ataques já aprovados. Busca de som deve entregar candidatos com semântica e proveniência próprias, e a âncora interna precisa estar revisada antes do render final.
 
 `--lessons caminho.json` aceita uma lista de lições com `status: "user_approved"` e confirmação explícita. Registre a confirmação verdadeira; uma observação do agente não vira aprovação do usuário. As lições entram como contexto editorial, sem substituir evidência da fonte atual.
 
@@ -163,7 +202,7 @@ Inspecione os campos que explicam a decisão:
 
 A política pode ser fornecida por `--policy arquivo.json`. Os controles atuais são `weights`, `minimum_score`, `opportunity_bonus`, `repetition_penalty`, `max_effect_repetitions`, `max_visual_layers` e `max_audio_layers`. Registre o motivo editorial da alteração. Maximizar a quantidade de efeitos e minimizar toda intervenção não são metas do seletor.
 
-## Catálogo dos sete adaptadores nativos
+## Catálogo dos adaptadores nativos
 
 `contextual-edit catalog --output caminho.json` exporta os mesmos manifestos. O estado `ready` significa que há um adaptador implementado; a disponibilidade para uma fonte ainda exige recibos e dependências válidos no intervalo escolhido.
 
@@ -172,6 +211,8 @@ A política pode ser fornecida por `--policy arquivo.json`. Os controles atuais 
 | `native.kinetic_type` | Tipografia cinética | Título, fontes reais, região de tela e regiões protegidas; legenda acessível continua sendo uma responsabilidade própria |
 | `native.overlay` | Imagem em camada de tela | Asset verificado, região protegida e envelope da animação reservado |
 | `native.behind_subject` | Imagem com oclusão pelo sujeito | Asset, máscara temporal e proteção; a máscara precisa ser revisada no render |
+| `native.motion_layer` | Sequência animada em camada de tela | `motion_asset`, proteção, FPS igual ao bruto e cobertura integral; `asset_start_frame` escolhe o início local |
+| `native.motion_behind` | Sequência animada com oclusão pelo sujeito | `motion_asset`, máscara temporal e proteção; controles `min_visible_fraction` e `min_glyph_visible_fraction`, este último condicionado a IDs reais dos glifos |
 | `native.projected_asset` | Imagem projetada em plano | Quads medidos e contínuos, asset, região e proteção; não resolve volume ou câmera 3D |
 | `native.body_orbit` | Tipografia orbital em torno do corpo | Pose contínua, máscara, fontes e evidência de passagens dianteira/traseira; reserva o quadro inteiro no seu canal |
 | `native.hand_accent` | Gráfico acompanhando a mão | Tracking da palma no lado pedido, máscara e proteção; reserva o quadro inteiro no seu canal |
@@ -195,7 +236,7 @@ Fontes são necessárias quando houver tipografia. `--script-font` pode ser omit
 
 O adapter bloqueia planos não executáveis e recursos alterados. Conferências do render incluem decodificação, FPS, contagem de quadros e integridade da fonte. O recibo registra as decisões compiladas e permanece com revisão perceptiva `unverified` e aprovação `pending`.
 
-Intervenções nativas exportam MP4. A preservação integral por cópia de bytes conserva a extensão da fonte. A composição ordena fundo com oclusão, superfície, gráficos de tela, corpo e mão explicitamente; essa ordem não depende do nome ou do início temporal da proposta. A tipografia é encaixada com sua proporção original na região reservada.
+Intervenções nativas exportam MP4. A preservação integral por cópia de bytes conserva a extensão da fonte. A composição ordena fundo com oclusão, superfície, gráficos de tela, corpo e mão explicitamente; essa ordem não depende do nome ou do início temporal da proposta. Motion atrás do sujeito segue a camada de fundo; motion em tela segue a camada gráfica. A tipografia e as sequências preservam sua proporção na região reservada.
 
 Para som, o mix preserva o áudio original como base e aplica ducking ao bus de SFX quando há áudio da fonte. Esse controle reage à mixagem original inteira, sem alegar separação automática de voz. Há margem de ganho, limitador e relatório do áudio codificado. Posição em amostras é aferida no PCM anterior à codificação; AAC pode adicionar padding, que permanece separado no relatório. O ataque percebido, a inteligibilidade e a pertinência do som dependem de audição do render.
 
@@ -292,6 +333,19 @@ O CLAP é carregado sob demanda a partir do cache local; o módulo não instala 
 
 No adaptador nativo, o alvo usa 48.000 amostras por segundo. Trims e âncora interna pertencem ao PCM do asset; a normalização registra arredondamentos. O intervalo editorial precisa reservar o som inteiro após o trim, incluindo pré-roll e cauda. Mantenha fonte, arquivo de áudio indexado, capacidade, proposta e relatório de mix vinculados pelos respectivos hashes.
 
+### Candidatos derivados da animação
+
+`motion sonic-candidates` mede o estado animado de uma receita Motion Lab e produz candidatos em `scene_seconds`, com evento, instante, intensidade heurística e evidências. `motion map-sonic` recebe a fonte, os frames inicial/final da aplicação e `asset_start_frame`, e devolve alvos em amostras de 48 kHz com erro de quantização registrado. Exige FPS compatível e cobertura integral; eventos excluídos do trecho permanecem listados. Um alvo arredondado para fora do intervalo é rejeitado.
+
+```bash
+python -m editorial_engine motion map-sonic \
+  trabalho/motion-v1/sonic-candidates.json midia/bruto.mp4 \
+  --source-first-frame 48 --source-last-frame 96 --asset-start-frame 0 \
+  --output trabalho/sonic-na-fonte.json
+```
+
+O exemplo pressupõe uma sequência com pelo menos 48 frames, mesmo FPS do bruto e uma fonte com pelo menos 96 frames. O intervalo de fonte é `[48,96)`. Esse mapeamento não seleciona arquivo SFX, não mede loudness e não comprova ataque ouvido. O agente de som compara os candidatos com fala/música, escolhe um `audio_asset`, revisa a âncora e entrega uma proposta `native.sfx` completa.
+
 ## Receitas e execução retomável
 
 [editorial_engine/workflows.py](../editorial_engine/workflows.py) oferece `validate_recipe`, `bind_workflow`, `preflight_recipe`, `resolve_recipe` e `WorkflowLedger`. Trata-se de uma API Python com callback de execução; **não há comando de geração nem provider externo configurado por esse ledger**.
@@ -300,7 +354,7 @@ O integrador fornece disponibilidade medida e um executor `executor(bound_workfl
 
 As reservas organizam o limite com base nos valores declarados. O callback externo deve impor o teto de gasto; o ledger não controla cobranças de um serviço independente. Encerramento bem-sucedido e artefato existente continuam separados da revisão perceptiva.
 
-Consulte [higgsfield-reuse.md](higgsfield-reuse.md) para a origem dos padrões estudados e seus limites. O código desta integração é próprio; nenhum estúdio externo ou modelo foi incorporado como se já estivesse configurado.
+Consulte [higgsfield-reuse.md](higgsfield-reuse.md) para a origem dos padrões estudados e seus limites. Os contratos e o ledger são código próprio. A incorporação seletiva e licenciada de código dos três executores locais de motion está identificada no [guia de integração](motion-integration.md), com revisões fixadas e provas separadas; ela não configura um modelo generativo externo.
 
 ## Referências de implementação
 
@@ -311,6 +365,10 @@ Consulte [higgsfield-reuse.md](higgsfield-reuse.md) para a origem dos padrões e
 - [planner.py](../editorial_engine/planner.py): elegibilidade, conciliação, oportunidades e patches.
 - [native.py](../editorial_engine/native.py): compilação para as primitivas existentes.
 - [audio_render.py](../editorial_engine/audio_render.py): mix, ducking e conferência de áudio.
+- [motion.py](../editorial_engine/motion.py): CLI dos executores e exportação para o inventário.
+- [motion_assets.py](../editorial_engine/motion_assets.py): sequências RGBA, hashes, mapeamento de quadros e visibilidade.
+- [motion_events.py](../editorial_engine/motion_events.py): relógio dos candidatos sonoros no bruto.
+- [motion_guidance.py](../editorial_engine/motion_guidance.py): cartas de possibilidades para direção explícita.
 - [review.py](../editorial_engine/review.py): revisão vinculada ao arquivo e histórico.
 - [semantic_audio.py](../audiovisual/semantic_audio.py): índice, CLAP opcional e relógios de spotting.
 - [__main__.py](../editorial_engine/__main__.py): opções atuais dos comandos.

@@ -1,0 +1,23 @@
+{
+  "schema": "motngrfx-motion/1",
+  "text": "AÇÃO",
+  "fps": "24/1",
+  "frame_count": 48,
+  "width": 480,
+  "height": 270,
+  "font_size": 74,
+  "extrusion_px": 18,
+  "center": [0.5, 0.5],
+  "color": [246, 227, 181],
+  "side_color": [104, 53, 27],
+  "supersampling": 1,
+  "animation": {
+    "module": "rotate",
+    "easing": "smooth",
+    "keyframes": [
+      {"frame": 0, "rotation_deg": [-28, 10, -4], "scale": 1, "offset_px": [0, 0, 0]},
+      {"frame": 47, "rotation_deg": [28, 10, 4], "scale": 1, "offset_px": [0, 0, 0]}
+    ]
+  },
+  "read_window": {"start_frame": 0, "end_frame": 48}
+}

@@ -1,0 +1,580 @@
+{
+  "schema": "editor-ultra-vendor/1",
+  "upstream": "https://github.com/rk0neki/OpenKatana",
+  "commit": "b9282bf0740a7df5b5a8862b5e289ef4cd642641",
+  "version": "0.1.3",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "LICENSE",
+      "git_blob_sha1": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357
+    },
+    {
+      "path": "NOTICE",
+      "git_blob_sha1": "956f6065370fd89f7ce27b358d033a0288a90c15",
+      "sha256": "70f5e8aa0c77db39f528eb60442419c5675bbe7c3cd506a9c1261509d3f5a3a8",
+      "bytes": 506
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "git_blob_sha1": "610bd240574d14b6bb6a02181cf46e3a642d5b41",
+      "sha256": "1b4272f97944d83a85000d78970fb50c7f0daba29eea1ed42e363fea459345f0",
+      "bytes": 11736
+    },
+    {
+      "path": "licenses/Comfy-workflow-templates-MIT.txt",
+      "git_blob_sha1": "ec6ae8a4821329f417a3e74e6dd108f499d08290",
+      "sha256": "5dccd61c80c847cd6b22fa98124010163ab8646e573557a16a5cae31122f2056",
+      "bytes": 1074
+    },
+    {
+      "path": "licenses/OpenKatana-MIT.txt",
+      "git_blob_sha1": "cdc6d589266dffa50ec860a3f5f53ae3f8271934",
+      "sha256": "96905d73ff1fcd4e8a63cbe95e003cb1ad3ba678f8d89bbc818ae85924832fe3",
+      "bytes": 1080
+    },
+    {
+      "path": "openkatana/__init__.py",
+      "git_blob_sha1": "fe41fd02324e4d05e7164e0e6e9a87bac06a7934",
+      "sha256": "3d66c25b36c43ba6a07082bc00805e64ccfe0cc2822fff0d501a13a2f311a3a4",
+      "bytes": 93
+    },
+    {
+      "path": "openkatana/audio.py",
+      "git_blob_sha1": "fdc906668e541af21e07048a0a9214f938498408",
+      "sha256": "bcac6632345fff496fb5bb55c96e7743843b9e6aabb9aedf1080d3d6bc040b2c",
+      "bytes": 14868
+    },
+    {
+      "path": "openkatana/audio_analysis.py",
+      "git_blob_sha1": "af8b0920e8653a8aa0db237562efd7c904de1cee",
+      "sha256": "4675b03d295eeaa53bc5323842454ef3028a52eb0eb06401b924e68f8eab683c",
+      "bytes": 16630
+    },
+    {
+      "path": "openkatana/blender_bridge.py",
+      "git_blob_sha1": "4f3cf35acdb7c28fc8a2bd2ed3d43adc5079f90a",
+      "sha256": "ee02790eb79fd13515ce6fe99c00f17b99449c5284aebf705ecf00a4e29063da",
+      "bytes": 3843
+    },
+    {
+      "path": "openkatana/blender_worker.py",
+      "git_blob_sha1": "327bdbe6760181a5738e62affd16f008fd6b1ac1",
+      "sha256": "6d0dd59606f6190b00fcb2a3fb18436897c97406837a65631db070023d6da021",
+      "bytes": 2834
+    },
+    {
+      "path": "openkatana/bundled_fonts.py",
+      "git_blob_sha1": "399cabded3a537cd94e66f53ff9e7b37d228f11d",
+      "sha256": "08cb43ed93a2fba56ecc69edaa393b477431b21fd9a720b813a4a92e2ca832ed",
+      "bytes": 1538
+    },
+    {
+      "path": "openkatana/camera_path.py",
+      "git_blob_sha1": "b390ea10d48c3aed30ba0074fd6facac789d6f5d",
+      "sha256": "0f69841dc096e39de05178e2e4b5464f4fe2328231238a70e296b3beb3b74948",
+      "bytes": 9181
+    },
+    {
+      "path": "openkatana/contracts.py",
+      "git_blob_sha1": "edb4ddf3bafa4d1fece4d80a23db9626ca507ee5",
+      "sha256": "470be603c868c91f5849aaa2bc9c84300a7da805da2723073324863f1dfd89b3",
+      "bytes": 15902
+    },
+    {
+      "path": "openkatana/decor.py",
+      "git_blob_sha1": "00d2f9de458e181ba5978efa30835820f1d15ec3",
+      "sha256": "be4fc621cf35633bf8222bbadbce95c9ba896578424c4fd7459521c9ce5eab94",
+      "bytes": 7511
+    },
+    {
+      "path": "openkatana/dotfont.py",
+      "git_blob_sha1": "3e4779a73373bef12a35ca164f3e5180054a2dbe",
+      "sha256": "e2330ff078449f703b4007abc52698b813635647d36ea17f4a7d28e8177b0e50",
+      "bytes": 4277
+    },
+    {
+      "path": "openkatana/effects.py",
+      "git_blob_sha1": "2d9e27211318f8612f4f7619b9370371d0b845c7",
+      "sha256": "f409d742f043e6987c6755fcc6f11f3d4b6d5d1271f5dddc8ee40ebd78f50905",
+      "bytes": 8622
+    },
+    {
+      "path": "openkatana/expanded.py",
+      "git_blob_sha1": "375a351430448b89b3d1d6bd08a863a472dd9e29",
+      "sha256": "5a71ea98b1dca0dc2ad5cd52a39436db3fb429535b810fc48d55e188fd780e56",
+      "bytes": 7882
+    },
+    {
+      "path": "openkatana/faces.py",
+      "git_blob_sha1": "5640d66063dd106ac8065232902ee85e3dac134e",
+      "sha256": "2364be63e81963d70fa986aaa0d682637164db419a16dc77b43b6b891deb8da1",
+      "bytes": 2572
+    },
+    {
+      "path": "openkatana/fontcov.py",
+      "git_blob_sha1": "0e4c1bebda43d879dce64513ce3dffad0a3a4566",
+      "sha256": "aa57e0e35f8f445559b5d8ffce39645675e5a240beb62130fc4b415a620cdae8",
+      "bytes": 3453
+    },
+    {
+      "path": "openkatana/fx_blur.py",
+      "git_blob_sha1": "b98cbc826a0a5e9661c94edc80f43f75ed0f223b",
+      "sha256": "5a0d2985bcafd083c3f3e3de1a84fa53f54958f3f7301ae4d497888a06435491",
+      "bytes": 5202
+    },
+    {
+      "path": "openkatana/fx_distort.py",
+      "git_blob_sha1": "eddf856cf1b122b38ca91eaf75b3d7bc87ad838b",
+      "sha256": "9524a52afc79cd74370f58f21996e7f093eb4364b1e784e0c054858705c5ec2e",
+      "bytes": 3885
+    },
+    {
+      "path": "openkatana/fx_generate.py",
+      "git_blob_sha1": "c4dddc4f5c730bb5eb46b394d71defe2ecf81d7a",
+      "sha256": "2d16a94c0bb97027bc77fe6a0c6ae93f988ea9d4209b3e815be9fcc1e8966497",
+      "bytes": 5255
+    },
+    {
+      "path": "openkatana/fx_light.py",
+      "git_blob_sha1": "ab5802e9552fc2959771727f71c6b6b20c1d3aa7",
+      "sha256": "093dc992219d620822bb5cebffa96fe3e3acec4137af3fb11d225244106b1566",
+      "bytes": 2998
+    },
+    {
+      "path": "openkatana/fx_stylize.py",
+      "git_blob_sha1": "47db3b22812635e08c530dd535c805d997951df3",
+      "sha256": "c0c06f4d4362197dab577684d8b0c90a133a69a7df364d72267fbcddfe6a0117",
+      "bytes": 3163
+    },
+    {
+      "path": "openkatana/fx_time.py",
+      "git_blob_sha1": "a5a27e11ea849a0580923b94533b3948de1c5318",
+      "sha256": "653485ac0d50650e13c0cfc5368a8cb4dd4392ab0271157435dbfa3caa66598d",
+      "bytes": 2579
+    },
+    {
+      "path": "openkatana/graffiti.py",
+      "git_blob_sha1": "da45399786009ca533005e937b13b68fa2102ac2",
+      "sha256": "241c96332e1644052bdef97b4eb48d704a276457b2f09fa2c5a3077be209435f",
+      "bytes": 3676
+    },
+    {
+      "path": "openkatana/hooks.py",
+      "git_blob_sha1": "ae7f81c70b08fb31e1e0b3ab1912d653c1c22e2a",
+      "sha256": "95c098a830de45a291cacca221b52a949db1b1287031c2bd76eda04c5247ce2e",
+      "bytes": 6024
+    },
+    {
+      "path": "openkatana/http_runtime.py",
+      "git_blob_sha1": "ce254345c64405ade1b436dfe808e024d4b43477",
+      "sha256": "8070a035a1d1c6447dfc8efbbc6588445aceee5b6a625663f11b455e990dafec",
+      "bytes": 496
+    },
+    {
+      "path": "openkatana/local_fx.py",
+      "git_blob_sha1": "224c2220aba685cbb26bebe46990d1eb9013f3ec",
+      "sha256": "a92a651dbe9dc6753e9143a217cea6098d8545483d5e332a54a279a87532c920",
+      "bytes": 9477
+    },
+    {
+      "path": "openkatana/native.py",
+      "git_blob_sha1": "1e3f6ff9ddabe51a961885966bef24014ce46771",
+      "sha256": "c500461f1a331c69cfc6e9b2877787d1063f278e46c9b6dc95565dc0c3a9920e",
+      "bytes": 31125
+    },
+    {
+      "path": "openkatana/overlays.py",
+      "git_blob_sha1": "a793ccb427b702373c7c89f9954104f549f6a0a1",
+      "sha256": "8fcdce242da7bb2b1d99b0cc64c99cefe5da276d915aa6510afb6d0aca7cdef3",
+      "bytes": 4434
+    },
+    {
+      "path": "openkatana/page_render.py",
+      "git_blob_sha1": "3b0ff1bd3d466aff964cfa6ee6de65957a9720d4",
+      "sha256": "c85a1bf15e686432dc54a93a155e928ea87cbfa9e27f80a0b6553dcc625bafb2",
+      "bytes": 5281
+    },
+    {
+      "path": "openkatana/production.py",
+      "git_blob_sha1": "bb97a93303defd0676c0d7ddb151526330e33687",
+      "sha256": "96268af2aed26d527be6b0bdf6ab06538f3da9564fe22b0cbf332f831eb1acd7",
+      "bytes": 12195
+    },
+    {
+      "path": "openkatana/qa.py",
+      "git_blob_sha1": "9e1a0d2d134b2f20a6d917936b742a62c55f0ee6",
+      "sha256": "2337dbb6c86955b564bef05f2c48788a2832dd409a87c6aff532431641619df8",
+      "bytes": 8115
+    },
+    {
+      "path": "openkatana/reference_measure.py",
+      "git_blob_sha1": "24d811326ae8c9c37a53c6290725660366aab315",
+      "sha256": "76ed6a0e5c7f02dbfab99b6c662805603aa5c5ce34d61793480b388383f0cea2",
+      "bytes": 17170
+    },
+    {
+      "path": "openkatana/render.py",
+      "git_blob_sha1": "564afe9bc1b83a7b8553b64c73338dca4e982b21",
+      "sha256": "229ce55c897cf4505fdefba6a712308fa397c3ab1d25161a5bf2e85da66fcf35",
+      "bytes": 18208
+    },
+    {
+      "path": "openkatana/scene3d.py",
+      "git_blob_sha1": "7e4351ec3388184ebea131be7c9d1656c5fa9483",
+      "sha256": "5497fc58b27954665377c50e7f67bf20d94a495a63dd6e7489fd6412a9d708b4",
+      "bytes": 31047
+    },
+    {
+      "path": "openkatana/sfx.py",
+      "git_blob_sha1": "e3614fffae5554991bdcbb1f62a1a56c57269b61",
+      "sha256": "c159190bed60886bb2574401bc4a763c7fd72dfef99ce7f41aa3cee83aff167b",
+      "bytes": 6258
+    },
+    {
+      "path": "openkatana/specials.py",
+      "git_blob_sha1": "865a3c6a3b9f47b0233f4a2e5064b1e6fc11380c",
+      "sha256": "5495db5296f2a477fdb78eabcace648552c6b46d121d384335813c90c1083e61",
+      "bytes": 5309
+    },
+    {
+      "path": "openkatana/stickers.py",
+      "git_blob_sha1": "f2bce0fac9a09aa26511221218bb370ee2ce9fe1",
+      "sha256": "f8f3cff1e01d1aee6f233c12d792a27812cc2cb12e645ee472e4d48aed79b0ee",
+      "bytes": 6772
+    },
+    {
+      "path": "openkatana/storyboard.py",
+      "git_blob_sha1": "d49137619cae1e0ce24c5b2286da3fd011220793",
+      "sha256": "18f2f811079d99c7c029c2071c01f9ce3da0dd96a896cfde4973353f91817d09",
+      "bytes": 10364
+    },
+    {
+      "path": "openkatana/studio_looks.py",
+      "git_blob_sha1": "bbc8c9d06bbb577201cf2e84df98fcf3dbbc56c6",
+      "sha256": "22d24c5c397e5473e1a2586c0a8ffdd4eb594d68b28b0040a63e5cbddcfa5223",
+      "bytes": 9651
+    },
+    {
+      "path": "openkatana/temporal.py",
+      "git_blob_sha1": "991928a85d7b3fda3269be79b7f9b2b15129f5b2",
+      "sha256": "442bce1f05a75b4e213da8d1dccd8ad4b9d5e1e308bb85d86b1039272bc449ee",
+      "bytes": 1392
+    },
+    {
+      "path": "openkatana/transitions.py",
+      "git_blob_sha1": "2f6365aed88b4abd53f391797fff1a5cc18aaf88",
+      "sha256": "3843149f88eaee54e69e23e4cd2397320ecb354d2aa2c4135a5e381b4f2636b0",
+      "bytes": 8480
+    },
+    {
+      "path": "openkatana/typography.py",
+      "git_blob_sha1": "a68f33967f86cb2fc5e22eb973d43f74741872bd",
+      "sha256": "5b857183e9f3a42369eef76d3c5da40f82a6aa553346bed0240b18ce52c5a640",
+      "bytes": 7282
+    },
+    {
+      "path": "openkatana/warnings.py",
+      "git_blob_sha1": "cd9d835cf6e8ebeef4e9c5a01454497b0ae92b7c",
+      "sha256": "0b4c8e65dae9980645d2c4a85d5f419ef1923356f59fed9d2fb751ffa58e0604",
+      "bytes": 5489
+    },
+    {
+      "path": "openkatana/web/decor.js",
+      "git_blob_sha1": "c71b4c827bf7d0ae3d46d5aad63c89ab2a924de8",
+      "sha256": "056d07b3193e5e554940e5d5108fbc9dd41316709d7f6f92d675c60982ebc206",
+      "bytes": 23511
+    },
+    {
+      "path": "openkatana/web/effects.js",
+      "git_blob_sha1": "35a7c1b3836bc2619f9c44947352299b6b8220ca",
+      "sha256": "ec42a75e4685bafff91cf86be4ec17fac4e040637aea0a487676099eac9fba29",
+      "bytes": 18769
+    },
+    {
+      "path": "openkatana/web/engine.js",
+      "git_blob_sha1": "727ca71d4d7331038cc85ae68dece3359d87cd36",
+      "sha256": "cefdaf15ca934c31a66767e3b93331dd92d2399e225524a82f0f5255bde88631",
+      "bytes": 44970
+    },
+    {
+      "path": "openkatana/web/faces.js",
+      "git_blob_sha1": "e85e86c9f12bc1fb1a0307cf4ff5ab2d242547b8",
+      "sha256": "edbb418270ae3c853252066f8c878a58768684c988c5757441e6b66500ef6807",
+      "bytes": 3339
+    },
+    {
+      "path": "openkatana/web/fx_blur.js",
+      "git_blob_sha1": "f376cf1ce2f2a2785f983fc4e05603d8601dc16c",
+      "sha256": "c08bbe3a7364afcb5d323fd28245d3182e77a70db1190ab201bdbd53e732c87c",
+      "bytes": 23987
+    },
+    {
+      "path": "openkatana/web/fx_distort.js",
+      "git_blob_sha1": "7fe312fdf784b30328f7f998bfcbea96f7e47f56",
+      "sha256": "c1443080a5ea9f7532483ae1ff63dff73ef1338a066c21382f7ff8ac099ba423",
+      "bytes": 14818
+    },
+    {
+      "path": "openkatana/web/fx_generate.js",
+      "git_blob_sha1": "944919f1ea6943a824701a5a0b17a7a41c36241e",
+      "sha256": "a16aa21ddd6d531a7a110b322ee6752f2dd28e69961024682a7075d7986edbcc",
+      "bytes": 24700
+    },
+    {
+      "path": "openkatana/web/fx_light.js",
+      "git_blob_sha1": "b9d4d30e5864995962a1f2c6e7358de65cb42aeb",
+      "sha256": "eadcfdd5b2912bb4624aa8b70d7999cefaaaee8127937e7042e9c4cc5096ee28",
+      "bytes": 19658
+    },
+    {
+      "path": "openkatana/web/fx_stylize.js",
+      "git_blob_sha1": "86c6c78aa494dc15b6c89c61880d73551a7a5398",
+      "sha256": "19e2e015956f65614ae92f04cad8e0ac992fc7518a5dc7643db24becfb604881",
+      "bytes": 15165
+    },
+    {
+      "path": "openkatana/web/fx_time.js",
+      "git_blob_sha1": "c5a30925b68ddf29aa26df904a1d5d8041f31941",
+      "sha256": "95a9b8d74a26b310fd7d3d0fe10d59b43091d446c4b28109977d78a38ec225b8",
+      "bytes": 9347
+    },
+    {
+      "path": "openkatana/web/graffiti.js",
+      "git_blob_sha1": "b8a10f76d0ef202d3a9c94d57baabd7994e4e214",
+      "sha256": "7f127c03310d621a6012a2e396fdf1b0e3648ed24dd9eecc8d73f7c801fe7ae8",
+      "bytes": 10814
+    },
+    {
+      "path": "openkatana/web/hooks.js",
+      "git_blob_sha1": "0b2fa750bdfa0e8afd62e9e2183a176306940c3a",
+      "sha256": "4ea415ec9b028502b5ce597d47109f9461a871bda25c0b66a3a97e7e2e7d812a",
+      "bytes": 3784
+    },
+    {
+      "path": "openkatana/web/implicit3d.js",
+      "git_blob_sha1": "f4cefb65dae9b2273a0c85711dc820549e79e92f",
+      "sha256": "370623906f00af95e899c7e9a1a478458fb64a68181c6208021a2bb374cef42d",
+      "bytes": 4031
+    },
+    {
+      "path": "openkatana/web/letterforms.js",
+      "git_blob_sha1": "799aad8ef77eae3fcdb6a6622b0e6d47755915e4",
+      "sha256": "f0f010eb1b2118ee3650c1367e4ac0038a00722856c8fa64f30c7280e26c11aa",
+      "bytes": 2755
+    },
+    {
+      "path": "openkatana/web/localfx.js",
+      "git_blob_sha1": "fb2750a233d13ff8965c83ab8185b416c676b82e",
+      "sha256": "bd5d72573a658d973dc864fa80a64f4f720cd8df0bfd483afd2a1f2de5b17129",
+      "bytes": 35762
+    },
+    {
+      "path": "openkatana/web/render.html",
+      "git_blob_sha1": "1920aa747f2396878f3ede9dae81ea49952ea630",
+      "sha256": "8b2285f74ab4af51eb184e951fe6f05954fe1e0121613eba5f68373653a631e1",
+      "bytes": 922
+    },
+    {
+      "path": "openkatana/web/scene3d.html",
+      "git_blob_sha1": "0d86c66ed961957db90fc5cd854e2b3b06c2f594",
+      "sha256": "0fff3a71ba0adceeeae290f5414437392fef4e042c30ad12af1ed86f5ba237a8",
+      "bytes": 466
+    },
+    {
+      "path": "openkatana/web/scene3d.js",
+      "git_blob_sha1": "8f07b88c5844775bdcebe87bece386988e1c4ae8",
+      "sha256": "af02e1757c9698708f8e1a3d560b24ffa464c47bb86f3d44becd3b211fbeb529",
+      "bytes": 15109
+    },
+    {
+      "path": "openkatana/web/stickers.js",
+      "git_blob_sha1": "b55c0236a9a0874df529d78f89e67112f61f2fc1",
+      "sha256": "8c06e886bcc615591bc31350f44b19efee8f2586ea9ac18a43064c81ba86a510",
+      "bytes": 6630
+    },
+    {
+      "path": "openkatana/web/studiofx.js",
+      "git_blob_sha1": "37d1fdea5c8c1c2a9ed37cdc62f21563710ba2bf",
+      "sha256": "85b80b11909247f74e83913200c6d3cf1c77effed021730b0d2c951dec35bb64",
+      "bytes": 23917
+    },
+    {
+      "path": "openkatana/web/transitions.js",
+      "git_blob_sha1": "13fbc56137dfa7b47549233bad31974eea183b88",
+      "sha256": "b4c36a432ce911a35a1adaa2bcb60ea54dd3d850479a4f614ff1cd18ac57fe02",
+      "bytes": 25813
+    },
+    {
+      "path": "openkatana/web/typography.js",
+      "git_blob_sha1": "cef5ad08e1294b7fbae4f817e1dc333a80a52177",
+      "sha256": "ef3ecb537d7a1fe96c95e44fffc9ccfd0b6d4cc371f5fd95fc9d5cb9324053f9",
+      "bytes": 5145
+    },
+    {
+      "path": "openkatana/web/vendor3d/cannon-es/LICENSE",
+      "git_blob_sha1": "f1a0ed0a402538a15a0f417efe4359c68b8e0014",
+      "sha256": "4714d0272f50cb21fe46fe29333c7c600d3c85b5ebd2a80f4db07e8cfccbf5b2",
+      "bytes": 1125
+    },
+    {
+      "path": "openkatana/web/vendor3d/cannon-es/dist/cannon-es.js",
+      "git_blob_sha1": "d075cb95413d4b8a15a61349782cbd9e479ce957",
+      "sha256": "f0700cbd3a482954949b9d58c1b0f76dcc74767750297647a39d8c40dd63d37c",
+      "bytes": 346256
+    },
+    {
+      "path": "openkatana/web/vendor3d/cannon-es/package.json",
+      "git_blob_sha1": "6d51921c9e6c4e4e9968cf4209ba0d8cc87734ba",
+      "sha256": "82a4915fedad350872f2b5cf8a84ea326c73f4eeea841d941fe267f41ac7e453",
+      "bytes": 2031
+    },
+    {
+      "path": "openkatana/web/vendor3d/manifest.json",
+      "git_blob_sha1": "286f9e220c61a7c304a97b05c5b0fec461723ac6",
+      "sha256": "2014b003c95bf2ce8b95df654f7dbcd0e9d7f309dc75fc765fd9093c1240a93a",
+      "bytes": 3231
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/LICENSE",
+      "git_blob_sha1": "cf781430404b0ae0ba7d8dea3457a3515dd7c9b9",
+      "sha256": "bfe119ea4fd413f5f7ca3fcd63adb0c4a073ed39daa2fe7d3e6b769e21272601",
+      "bytes": 1081
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/build/three.core.js",
+      "git_blob_sha1": "7dcd0fbcbc04b8d9a20ecb96c1ce344cb55150d5",
+      "sha256": "eb077d2417f61d3e6d9264c317cabc4ea35769ed6b0ab533067292a550784c20",
+      "bytes": 1403455
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/build/three.module.js",
+      "git_blob_sha1": "477ca4dafa7af919a2b9818e01b5ae25198d4aa4",
+      "sha256": "c8211c69345d2e9949dc7a8ac969380497aa0600a5a8ac6a459c8cd02dd9cb8a",
+      "bytes": 603113
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/environments/RoomEnvironment.js",
+      "git_blob_sha1": "2f2bedd77a6417a8855fea7143903252a890637c",
+      "sha256": "c20f0b4677f6128a138d7152b85cbef9091f4f45cdfa05adca04d40c1697c7ae",
+      "bytes": 4899
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/loaders/GLTFLoader.js",
+      "git_blob_sha1": "38f8c14fb500631f01d39cd54c202eefddcf0987",
+      "sha256": "67ac5551fdafa6e349bd80c8f8e5e39c136d6b2fb1ad647db9abb21dc86f9e4a",
+      "bytes": 114739
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/loaders/HDRLoader.js",
+      "git_blob_sha1": "3a1ada92b19400f3b96dd8701041e11af583c677",
+      "sha256": "d7053cfc4019f520335ae07e0fe82b4ef5a66b6766e8b253d066616184995e89",
+      "bytes": 12456
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/loaders/RGBELoader.js",
+      "git_blob_sha1": "4dc5748da82b9515876a58c7b12b3db2f4d74fbc",
+      "sha256": "6c08f9c441040a61a188ad7711078da4df48f8c5ac3b3725dd6f10ac9ff81162",
+      "bytes": 268
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/BokehPass.js",
+      "git_blob_sha1": "3bc06db46f53055d244c8287ca4b2fb350d4e984",
+      "sha256": "5b9b0bc5cee6e24b2417da95f40eb2d178943c2ffbacbc4c2993a89d0597bfb3",
+      "bytes": 5531
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/EffectComposer.js",
+      "git_blob_sha1": "cc807df391d6d01b7eb5c7097fbc6fe8ad96084a",
+      "sha256": "4b8c855f28eed2570bed898adc0ab89c585a8a281ecb6d905c09d00697f9f50a",
+      "bytes": 8477
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/MaskPass.js",
+      "git_blob_sha1": "3a2afff8cf261faa6972d87c4843580901eac7ad",
+      "sha256": "7cd08eee9d5d6f5578beaddbdcbe9c384f6873810af27f22ab7db3ceeb127aa3",
+      "bytes": 4694
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/OutputPass.js",
+      "git_blob_sha1": "1148de644671f9af49023dcd50bbd3993d2f678c",
+      "sha256": "f5b81c96e76b6b28b4b3ba8c41c4aeb982b1e03f3d82883242d951b2ab082fa2",
+      "bytes": 4029
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/Pass.js",
+      "git_blob_sha1": "50acb4784ee0d67f34f5efcb574b55d0b083c81b",
+      "sha256": "444b409c235ead986893c472e720da1b779a56985c7d10b279c7944b52bd61c5",
+      "bytes": 4218
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/RenderPass.js",
+      "git_blob_sha1": "c85f0e559a7a7813f911e87ef24a589fd61f2a0f",
+      "sha256": "fd91229aacc5830e3984b0f2bdefcf566163ea028f4c1f1ab233fa6665a133ac",
+      "bytes": 4112
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/ShaderPass.js",
+      "git_blob_sha1": "ce72fcf13ec3daff78b940fe2bfc78def01729e8",
+      "sha256": "e2500a5913b26bbf5148ceaae644c6edcff06a18b01494ee37bf856353d2ab9d",
+      "bytes": 3228
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/postprocessing/UnrealBloomPass.js",
+      "git_blob_sha1": "5ad6fc0ce4ac2a9d5f09fefab745a57d15c97402",
+      "sha256": "d92742959879b461f25348b2abddc7ca0d48527e7718340bcfa29fa771e2799a",
+      "bytes": 14388
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/shaders/BokehShader.js",
+      "git_blob_sha1": "8bead5eb08817f43f320bf1dfa23e1bb43011d5b",
+      "sha256": "c47a17eae9f70405025a5149a68f1265de5d5dba5d61282927fb94b0bb3d0619",
+      "bytes": 5940
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/shaders/CopyShader.js",
+      "git_blob_sha1": "6deb24849e1dd080f35af75728d29028920f1fb3",
+      "sha256": "a33057d5ac91c43304c186ac0e8816e62bb2ed471d3a00ff3018dfd5c0389718",
+      "bytes": 729
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/shaders/LuminosityHighPassShader.js",
+      "git_blob_sha1": "16ff4e69f7cf741409060477770d4c91e62a944a",
+      "sha256": "5044f780b6e6cf863947f64c36fe1587132f7fbe395ada863cd1e5f0388dcf1e",
+      "bytes": 1291
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/shaders/OutputShader.js",
+      "git_blob_sha1": "5f257829fe655f74252d67585e1d63e035c05b67",
+      "sha256": "353479f77a8d7e2629d49ccac9fc2f5dbfdda5442e0adf867b00377a2fcb0cb2",
+      "bytes": 1876
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/examples/jsm/utils/BufferGeometryUtils.js",
+      "git_blob_sha1": "c84dc7b2bbc99849373e17a6efae609e326f9536",
+      "sha256": "fda7e946b8e0b5ab39b779206589e7a1079a22eb24efb89d7223e03fdfb1f751",
+      "bytes": 35539
+    },
+    {
+      "path": "openkatana/web/vendor3d/three/package.json",
+      "git_blob_sha1": "fb4fe9d2224cffaf922f006cbff4b4adda87ecf5",
+      "sha256": "aa42494664dba4cf76d89c6975ee38321a402f09a048672e190bad6f13beec93",
+      "bytes": 4635
+    },
+    {
+      "path": "openkatana/web/webgl_helpers.js",
+      "git_blob_sha1": "592b7667617ceb7fc01f3c5ef41edb9ee1d50163",
+      "sha256": "5ed25fa488725d7f9d60694c7d9f1b3bfb4f6e6c18a7aa930c1c9f45f84d3865",
+      "bytes": 5503
+    },
+    {
+      "path": "openkatana/webgl_authoring.py",
+      "git_blob_sha1": "51fe928c70cce63aa68adaf563edb3f9de76618a",
+      "sha256": "64838eee8902f6eb86b3dc116d8e9f9b71bf15083e9f90883aee615592cac4bb",
+      "bytes": 4905
+    }
+  ],
+  "scope": "Local reference/audio analysis and timeline/WebGL/Blender rendering; no agent API, UI, models, weights, font binaries or cloud adapters bundled."
+}

@@ -18,3 +18,6 @@ out/
 __pycache__/
 
 .venv-scene3d/
+node_modules/
+.pytest_cache/
+*.frames/

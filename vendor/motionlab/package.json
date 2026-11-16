@@ -1,0 +1,69 @@
+{
+  "name": "motion-lab",
+  "version": "1.0.0",
+  "description": "Code-driven 2D and 3D rendering for vibe motion",
+  "main": "index.js",
+  "scripts": {
+    "viewer": "node scripts/cli.mjs viewer",
+    "frame": "node scripts/cli.mjs frame",
+    "contact": "node scripts/cli.mjs contact",
+    "preview": "node scripts/cli.mjs preview",
+    "export": "node scripts/cli.mjs export",
+    "verify": "node scripts/cli.mjs verify",
+    "build": "vite build",
+    "test:sound": "node scripts/test-sound.mjs",
+    "sound:bank": "node scripts/export-sfx-bank.mjs",
+    "soundtrack": "node scripts/soundtrack.mjs",
+    "test:sound:2d": "node scripts/test-sound-2d.mjs",
+    "test:product-kit": "node scripts/test-product-kit.mjs",
+    "photoreal": "node scripts/photoreal.mjs",
+    "test:photoreal": "node scripts/test-photoreal.mjs",
+    "test:controls": "node scripts/test-adaptive-controls.mjs",
+    "test:controls:browser": "node scripts/test-adaptive-controls-browser.mjs",
+    "test:controls:contract": "node scripts/test-scene-control-contract.mjs",
+    "controls": "node scripts/controls.mjs",
+    "prebuild": "node scripts/test-scene-control-contract.mjs && node scripts/test-motion-workflow.mjs && node scripts/test-render-policy.mjs && node scripts/cycles/test.mjs && node scripts/test-browser-export.mjs && node scripts/test-workspace-model.mjs && node scripts/test-authored-motion-protocol.mjs && node scripts/test-motion-source-seek.mjs && node scripts/test-motion-curve-preview.mjs && node scripts/test-render-frame-view.mjs && node scripts/test-pulse-controls.mjs && node scripts/test-graphic-controls.mjs && node scripts/test-curve-interaction.mjs && node scripts/test-studio-update.mjs",
+    "test:controls:scenes": "node scripts/test-scene-tools-browser.mjs",
+    "test:motion:workflow": "node scripts/test-motion-workflow.mjs",
+    "test:render-policy": "node scripts/test-render-policy.mjs",
+    "test:cycles": "node scripts/cycles/test.mjs",
+    "test:compositor": "node scripts/test-simple-compositor.mjs",
+    "cycles": "node scripts/cycles.mjs",
+    "composite": "node scripts/composite.mjs",
+    "test:mixed:studio": "node scripts/test-mixed-studio.mjs",
+    "test:workflow:browser": "node scripts/test-workflow-browser.mjs",
+    "test:public:studio": "node scripts/test-public-studio.mjs",
+    "test:renderer:api": "node scripts/test-renderer-studio-api.mjs",
+    "test:motion:interaction": "node scripts/test-motion-interaction-browser.mjs",
+    "test:export:browser": "node scripts/test-browser-export.mjs",
+    "test:export:browser:recording": "node scripts/test-browser-export-recording.mjs",
+    "test:motion:fluid": "node scripts/test-fluid-editor-browser.mjs",
+    "studio": "node scripts/launch-studio.mjs"
+  },
+  "keywords": [
+    "threejs",
+    "motion-design",
+    "procedural-animation",
+    "3d",
+    "local-rendering"
+  ],
+  "author": "Andrea Salvo",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "playwright": "^1.64.0",
+    "sharp": "^0.35.5",
+    "three": "^0.186.1",
+    "vite": "^8.3.4"
+  },
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AndreXes03/motion-lab.git"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -12,7 +12,7 @@ O repo usa Python 3.11+ e ffprobe. O piloto requer FFmpeg (libass, zscale e libx
 
 O fluxo padrão para escolher efeitos em um novo bruto é `python -m visual_fidelity contextual-edit`. Ele prepara quadros reais, fala e recibos de rastreamento; recebe direção explícita de uma pessoa, do agente no host ou de um modelo multimodal configurado; concilia propostas e executa as operações viáveis. Cada decisão guarda intenção, evidência, intervalo, efeito, âncora, parâmetros e justificativa. Eventos sem decisão bloqueiam o render; preservar também exige justificativa explícita.
 
-O catálogo nativo executa tipografia cinética, imagens em tela, imagens atrás do sujeito, projeções em superfícies medidas, órbita corporal, acento na palma e SFX. Máscaras e trajetórias pertencem ao bruto atual. Os requisitos são conferidos antes da execução, as animações respeitam as regiões reservadas e as revisões ficam ligadas aos hashes do plano e do arquivo renderizado. Operações 3D ou geração de novos planos usam adaptadores externos explícitos; não são presumidas pelo catálogo.
+O catálogo nativo executa tipografia cinética, imagens e sequências animadas em tela ou atrás do sujeito, projeções em superfícies medidas, órbita corporal, acento na palma e SFX. Máscaras e trajetórias pertencem ao bruto atual. Os requisitos são conferidos antes da execução, as animações respeitam as regiões reservadas e as revisões ficam ligadas aos hashes do plano e do arquivo renderizado. Cenas 3D autoradas podem ser produzidas pelos executores locais de motion; integração espacial na filmagem continua exigindo câmera, plano ou tracking medidos. Geração por modelo externo exige configuração explícita.
 
 Leia o [guia de direção contextual](docs/contextual-editing.md) para preparar o projeto e executar `prepare`, `request`, `plan`, `render`, `review` e `patch`. O comando opcional `direct` chama um endpoint multimodal configurado; o host também pode produzir `direction.json` após examinar as fontes. Não há substituição da análise por palavras-chave quando o modelo está indisponível.
 
@@ -20,7 +20,24 @@ A [comparação de alternativas ao Higgsfield](docs/higgsfield-reuse.md) documen
 
 A busca semântica de áudio em `audiovisual.semantic_audio` admite CLAP local opcional e diferencia indexação técnica de embeddings reais. O render de SFX usa o ataque interno do arquivo, reamostragem explícita, ducking pelo áudio original e controle de picos. Aprovação perceptiva de sincronismo, inteligibilidade e direção continua registrada separadamente dos testes.
 
-O [registro de validação](docs/validation-contextual-edit.md) descreve os 315 testes executados e distingue as provas de render/PCM da avaliação ainda necessária com modelo e filmagem reais.
+O [registro histórico de validação contextual](docs/validation-contextual-edit.md) descreve a bateria de 315 testes daquela etapa e distingue as provas de render/PCM da avaliação com modelo e filmagem reais. A validação da expansão de motion fica em [registro próprio](docs/validation-motion-integration.md); a contagem histórica não representa a suíte atual.
+
+## Criação de motion e aplicação ao bruto
+
+`python -m editorial_engine motion` reúne OpenKatana, Motion Lab legado MIT e MOTNGRFX portátil. OpenKatana mede referência/áudio e executa timeline e efeitos; Motion Lab oferece cenas 2D, grupos independentes, blur por subframes e 3D por CPU; MOTNGRFX produz tipografia extrudada com rotação ou articulação por glifo. O diretor escolhe a receita pela função do trecho. Consulte o [guia de integração de motion](docs/motion-integration.md) para instalação, licenças fixadas, exemplos e disponibilidade medida por backend.
+
+```sh
+python -m editorial_engine motion probe --output trabalho/motion-probe.json
+python -m editorial_engine motion guidance --output trabalho/motion-guidance.json
+python -m editorial_engine motion render motionlab examples/motion_integration/motionlab-2d.json trabalho/motion-v1 --samples 4 --asset-id motion-explicacao
+python -m editorial_engine prepare midia/bruto.mp4 trabalho/analise-motion-v1 --assets trabalho/motion-v1/inventory.json --protection midia/protecao.json
+```
+
+Configure a receita com o FPS do bruto e uma duração que cubra a decisão antes de renderizar. O export gera PNGs RGBA com alpha straight, `motion-layer.json`, inventário `kind: "motion"` e hashes por frame. `native.motion_layer` compõe a sequência; `native.motion_behind` exige também matte do sujeito. O relógio da camada é mapeado por `asset_start_frame`, sem repetição, congelamento ou retime implícitos. Fonte, máscara, proteção e eventual vínculo da camada precisam coincidir com o bruto atual.
+
+Candidatos SFX derivados do movimento entram na direção com evidências e tempo local. `motion map-sonic` os leva ao relógio da fonte; escolher um som, revisar seu ataque e ouvir a mixagem continuam etapas explícitas. Geometria 3D em câmera sintética não demonstra câmera resolvida na filmagem, e um contato de frames não comprova playback contínuo ou aprovação do usuário.
+
+## Inventário e verificação do projeto
 
 ```sh
 python -m pip install -r requirements-dev.txt

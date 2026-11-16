@@ -1,0 +1,7 @@
+-r visual_fidelity/requirements.txt
+# Optional Chromium/WebGL route; the primary Canvas route uses Node below.
+playwright>=1.45,<2
+uharfbuzz>=0.37,<1
+# Node dependencies have exact package-lock files. Run npm ci --ignore-scripts
+# in editorial_engine/backends/motionlab and vendor/openkatana/adapter-node.
+# FFmpeg/FFprobe and optional Blender are separate system installations.

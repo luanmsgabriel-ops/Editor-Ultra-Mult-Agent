@@ -172,22 +172,34 @@ def motion(corners, phase, style, fit_inside=False):
     return corners,float(alpha)
 
 
-def composite(frame, art, corners, opacity=1., occlusion=None):
-    h,w = frame.shape[:2]
+def warp_rgba_patch(art, corners, resolution):
+    """Return the exact premultiplied BGRA patch used by composition and QC."""
+    w,h = resolution
     dst = (np.asarray(corners,dtype='float32')*[w,h]).astype('float32')
     # Limit warping and blending to the visible footprint.
     xy_min=np.maximum(0,np.floor(dst.min(axis=0)).astype(int))
     xy_max=np.minimum([w,h],np.ceil(dst.max(axis=0)).astype(int)+1)
     x,y=xy_min
     width,height=xy_max-xy_min
-    if width<1 or height<1 or opacity<=0:
-        return
+    if width<1 or height<1:
+        return None
     ah,aw=art.shape[:2]
     src=np.float32([[0,0],[aw-1,0],[aw-1,ah-1],[0,ah-1]])
     matrix=cv2.getPerspectiveTransform(src,(dst-xy_min).astype('float32'))
     bgra=art[:,:,[2,1,0,3]].astype('float32')/255
     bgra[:,:,:3]*=bgra[:,:,3,None]
     patch=cv2.warpPerspective(bgra,matrix,(int(width),int(height)),flags=cv2.INTER_LINEAR)
+    return int(x),int(y),patch
+
+
+def composite(frame, art, corners, opacity=1., occlusion=None):
+    if opacity<=0:
+        return
+    warped=warp_rgba_patch(art,corners,frame.shape[1::-1])
+    if warped is None:
+        return
+    x,y,patch=warped
+    height,width=patch.shape[:2]
     gain=opacity
     if occlusion is not None:
         gain=opacity*(1-occlusion[y:y+height,x:x+width,None].astype('float32')/255)
