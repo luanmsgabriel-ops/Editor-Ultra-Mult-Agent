@@ -1,8 +1,21 @@
 import copy,unittest
 import numpy as np
-from visual_fidelity.geometric_replay import mask,compose,evaluate,frame_schedule
+from visual_fidelity.geometric_replay import mask,compose,evaluate,frame_schedule,decompose_observed
 
 class GeometricReplayTests(unittest.TestCase):
+    def test_inverse_soft_composition_avoids_out_of_gamut_seams(self):
+        rng=np.random.default_rng(329796)
+        observed=rng.integers(0,256,(9,13,3),dtype=np.uint8)
+        guessed=255-observed
+        alpha=np.linspace(0,1,117,dtype=np.float32).reshape(9,13)
+        before=guessed.copy()
+        base,insert=decompose_observed(observed,guessed,alpha)
+        restored=compose(base,insert,alpha)
+        self.assertLessEqual(np.abs(restored.astype(int)-observed).max(),1)
+        np.testing.assert_array_equal(guessed,before)
+        np.testing.assert_array_equal(base[alpha==0],observed[alpha==0])
+        np.testing.assert_array_equal(insert[alpha==1],observed[alpha==1])
+        with self.assertRaises(ValueError):decompose_observed(observed,guessed,np.full((9,13),np.nan))
     def test_replacement_endpoints_and_foreground_full_occlusion(self):
         base=np.zeros((9,13,3),np.uint8);base[:]=[0,40,220]
         insert=np.zeros_like(base);insert[:]=[240,20,0]
