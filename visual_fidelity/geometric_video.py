@@ -8,7 +8,7 @@ from collections import OrderedDict
 import argparse,hashlib,json,subprocess
 import cv2,numpy as np
 from .geometric_replay import mask,compose,VERSION as MASK_VERSION
-VERSION='1.0.0'
+VERSION='1.0.1'
 
 def viewport(image,view,width,height):
     """Aspect-preserving crop with center in normalized input coordinates and zoom>=1."""
@@ -53,6 +53,15 @@ class Sources:
     def close(self):
         for c in self.caps.values():c.release()
 
+def fit_insert(image,view,coverage):
+    """Fit a source crop to a portal's visible bounds, preserving image aspect."""
+    H,W=coverage.shape;result=np.zeros((H,W,3),np.uint8)
+    ys,xs=np.where(coverage>.001)
+    if len(xs):
+        x0,x1=int(xs.min()),int(xs.max())+1;y0,y1=int(ys.min()),int(ys.max())+1
+        result[y0:y1,x0:x1]=viewport(image,view,x1-x0,y1-y0)
+    return result
+
 def render(manifest,output):
     manifest=Path(manifest);root=manifest.parent;data=json.loads(manifest.read_text());W,H=data['width'],data['height'];fps=data['fps'];frames=data['frames']
     if len(data['frame_bindings'])!=frames or [b['frame'] for b in data['frame_bindings']]!=list(range(frames)):raise ValueError('Frame bindings must cover output exactly')
@@ -67,6 +76,8 @@ def render(manifest,output):
             if a is None:raise FileNotFoundError(b['mask_file'])
             a=viewport(a,b['base'].get('view',[.5,.5,1]),W,H).astype(np.float32)/255
         else:a=mask(b.get('mask',{'kind':'empty'}),W,H,frame=b['frame'])
+        if b.get('fit_insert_to_mask'):
+            binding=b['insert'];insert=fit_insert(sources.frame(binding),binding.get('view',[.5,.5,1]),a)
         fg=None
         if b.get('foreground'):
             f=b['foreground'];rgb=sources.frame(f);alpha=cv2.imread(str(root/f['matte']),0)
