@@ -11,7 +11,7 @@ import cv2,numpy as np
 from .geometric_replay import mask,compose,VERSION as MASK_VERSION
 from .edit_contract import validate_edit
 from .music_sync import edited_audio_filter
-VERSION='1.1.0'
+VERSION='1.2.0'
 
 def viewport(image,view,width,height):
     """Aspect-preserving crop with center in normalized input coordinates and zoom>=1."""
@@ -65,6 +65,17 @@ def fit_insert(image,view,coverage):
         result[y0:y1,x0:x1]=viewport(image,view,x1-x0,y1-y0)
     return result
 
+def compose_layers(base, foreground, layers):
+    """Compose independent masked inserts in subject-relative depth order."""
+    image = base
+    for depth in ('behind_subject', 'in_front_of_subject'):
+        if depth == 'in_front_of_subject':
+            image = compose(image, foreground, np.ones(image.shape[:2], np.float32))
+        for position, insert, coverage in layers:
+            if position == depth:
+                image = compose(image, insert, coverage)
+    return image
+
 def render(manifest,output):
     manifest=Path(manifest);root=manifest.parent;data=json.loads(manifest.read_text());W,H=data['width'],data['height'];fps=data['fps'];frames=data['frames']
     duration=float(frames/Fraction(str(fps)))
@@ -75,15 +86,7 @@ def render(manifest,output):
     proc=subprocess.Popen(cmd,stdin=subprocess.PIPE)
     def layer(b):return viewport(sources.frame(b),b.get('view',[.5,.5,1]),W,H)
     for b in data['frame_bindings']:
-        base=layer(b['base']);insert=layer(b.get('insert',b['base']))
-        if 'mask_file' in b:
-            a=cv2.imread(str(root/b['mask_file']),0)
-            if a is None:raise FileNotFoundError(b['mask_file'])
-            a=viewport(a,b['base'].get('view',[.5,.5,1]),W,H).astype(np.float32)/255
-        else:a=mask(b.get('mask',{'kind':'empty'}),W,H,frame=b['frame'])
-        a*=float(np.clip(b.get('mask_opacity',1),0,1))
-        if b.get('fit_insert_to_mask'):
-            binding=b['insert'];insert=fit_insert(sources.frame(binding),binding.get('view',[.5,.5,1]),a)
+        base = layer(b['base'])
         fg=None
         if b.get('foreground'):
             f=b['foreground'];rgb=sources.frame(f);alpha=cv2.imread(str(root/f['matte']),0)
@@ -91,7 +94,28 @@ def render(manifest,output):
             if rgb.shape[:2]!=alpha.shape:raise ValueError('Matte must match source raster')
             view=f.get('view',[.5,.5,1]);rgb=viewport(rgb,view,W,H);alpha=viewport(alpha,view,W,H)
             fg=place_foreground(rgb,alpha,f.get('box',[0,0,1,1]),W,H)
-        image=compose(base,insert,a,fg)
+        if 'layers' in b:
+            rendered_layers = [
+                (item['depth'], layer(item['insert']), mask(item['mask'], W, H, frame=b['frame']))
+                for item in b['layers']
+            ]
+            image = compose_layers(base, fg, rendered_layers)
+        else:
+            if 'mask_file' in b:
+                alpha = cv2.imread(str(root / b['mask_file']), 0)
+                if alpha is None:
+                    raise FileNotFoundError(b['mask_file'])
+                alpha = viewport(alpha, b['base'].get('view', [.5, .5, 1]), W, H).astype(np.float32) / 255
+            else:
+                alpha = mask(b.get('mask', {'kind': 'empty'}), W, H, frame=b['frame'])
+            alpha *= float(np.clip(b.get('mask_opacity', 1), 0, 1))
+            insert_binding = b.get('insert', b['base'])
+            if b.get('fit_insert_to_mask'):
+                insert = fit_insert(sources.frame(insert_binding),
+                                    insert_binding.get('view', [.5, .5, 1]), alpha)
+            else:
+                insert = layer(insert_binding)
+            image = compose(base, insert, alpha, fg)
         if b.get('tint'):
             t=b['tint'];ta=cv2.imread(str(root/t['matte']),0)
             if ta is None:raise FileNotFoundError(t['matte'])
@@ -116,6 +140,8 @@ def render(manifest,output):
     report={'dependency_sha256':dependencies,'edit_contract':contract,'video_engine':VERSION,'mask_engine':MASK_VERSION,'frames':frames,'fps':fps,'width':W,'height':H,'input_hashes':sources.hashes,'manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest(),'engine_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'render_sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'approval':'pending'}
     if 'reference_cadence' in data:
         report['reference_cadence']=data['reference_cadence']
+    if 'reference_layers' in data:
+        report['reference_layers']=data['reference_layers']
     output.with_suffix('.json').write_text(json.dumps(report,indent=2));print(json.dumps(report));return report
 
 if __name__=='__main__':

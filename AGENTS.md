@@ -111,3 +111,7 @@ A música comanda o tempo de start/apex/reveal/cut/resolve. Usar analyze_audio n
 ## Medição e reaplicação da cadência
 
 Use `python -m visual_fidelity reference-cadence analyze` para medir batidas com Beat This!, cortes candidatos com TransNetV2 e movimento regional com RAFT. Confirme quais cortes são trocas de plano, trocas dentro das máscaras ou falsos positivos. Salve os marcos revisados, o mapa e os pesos identificados. Use `reference-cadence apply` para transferir tempos, fase musical ou máscaras medidas aos assets do novo bruto. Leia `visual_fidelity/REFERENCE_CADENCE.md`. Revise um trecho representativo com áudio antes de expandir para toda a montagem. A V2 da aplicação 330494 foi rejeitada por ritmo, velocidade dos cortes e aparência.
+
+## Leitura e reaplicação de efeitos em camadas
+
+Quando uma máscara composta tem formas independentes, preserve a identidade de cada forma. Use `reference-layers analyze` para ler a oclusão, detectar mudanças de conteúdo por faixa e guardar as evidências. Use `reference-layers apply` após compilar a cadência, com a paleta de imagens e os recortes do novo sujeito. Valide profundidade e trocas no render. Consulte `visual_fidelity/REFERENCE_LAYERS.md`.

@@ -50,6 +50,23 @@ def validate_edit(data, root):
     plan = data.get('asset_plan')
     if not plan or not plan.get('slots'):
         raise ValueError('Visual asset plan with reference evidence is required')
+    for binding in frames:
+        if 'layers' not in binding:
+            continue
+        if not binding['layers'] or not binding.get('foreground', {}).get('matte'):
+            raise ValueError('Layered compositions require masks and a subject matte')
+        if not (root / binding['foreground']['matte']).is_file():
+            raise ValueError('Missing subject matte for layered composition')
+        layer_ids = set()
+        for layer in binding['layers']:
+            if layer['depth'] not in {'behind_subject', 'in_front_of_subject'} or layer['id'] in layer_ids:
+                raise ValueError('Layers require resolved depth and unique names')
+            layer_ids.add(layer['id'])
+            asset = data['assets'][layer['insert']['source']]
+            if not (root / asset['path']).is_file():
+                raise ValueError('Missing independent layer asset')
+            if asset.get('origin') == 'generated' and not (root / asset.get('provenance', '__missing__')).is_file():
+                raise ValueError('Generated layer asset needs provenance')
     for slot in plan['slots']:
         if not slot.get('evidence') or not slot.get('role'):
             raise ValueError('Asset slot lacks reference evidence or visual role')
@@ -69,9 +86,10 @@ def validate_edit(data, root):
         if not 0 <= a < b <= len(frames):
             raise ValueError('Invalid asset slot interval')
         for binding in frames[a:b]:
-            for layer in ('base', 'insert', 'foreground'):
-                if binding.get(layer, {}).get('source') in keys:
-                    uses.append(binding['frame']); break
+            sources = [binding.get(layer, {}).get('source') for layer in ('base', 'insert', 'foreground')]
+            sources.extend(layer['insert']['source'] for layer in binding.get('layers', []))
+            if any(source in keys for source in sources):
+                uses.append(binding['frame'])
         if len(uses) < slot.get('min_visible_frames', 1):
             raise ValueError('Planned asset is not consumed in its scene: ' + slot['id'])
         report['asset_slots'].append({'id':slot['id'], 'bound_frames':len(uses),
