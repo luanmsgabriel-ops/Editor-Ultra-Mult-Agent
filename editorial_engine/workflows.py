@@ -69,6 +69,27 @@ def _canonical(value: Any) -> str:
         raise WorkflowError("Contract values must be finite JSON values") from exc
 
 
+def _declares_video_generation(plan: Mapping, recipe: Mapping) -> bool:
+    """Check explicit task contracts, never guess from node/provider names.
+
+    The ledger is not a sandbox for arbitrary Python. Local processing is a
+    caller attestation; a declared external_video/video_generation task cannot
+    use that attestation to override the prompt-export rule.
+    """
+    declarations = [plan, recipe]
+    request = plan.get("request") if isinstance(plan, Mapping) else None
+    if isinstance(request, Mapping):
+        declarations.append(request)
+    for declaration in declarations:
+        if not isinstance(declaration, Mapping):
+            continue
+        if declaration.get("operation") in {"external_video", "video_generation"}:
+            return True
+        if declaration.get("execution_kind") == "video_generation":
+            return True
+    return False
+
+
 def _strings(value: Any):
     if isinstance(value, str):
         yield value
@@ -529,6 +550,27 @@ class WorkflowLedger:
             job.pop("token", None)
             return job
 
+    def unresolved_production_jobs(self, request_sha256: str) -> list[dict]:
+        """Find historical pending jobs even after an export directory changes.
+
+        No reservation is created or reconciled here. This lookup keeps an
+        execution-policy change from disguising an old video job as a new
+        external task merely because the former adapter is no longer used.
+        """
+        if not isinstance(request_sha256, str) or not _SHA.fullmatch(request_sha256):
+            raise WorkflowError("A production request SHA-256 is required")
+        with self._connect() as db:
+            rows = db.execute("SELECT key,specification FROM jobs WHERE status IN ('unknown','running') ORDER BY updated,key").fetchall()
+        keys = []
+        for row in rows:
+            specification = json.loads(row["specification"])
+            plan = specification.get("plan", {})
+            request = plan.get("request", {}) if isinstance(plan, Mapping) else {}
+            if isinstance(request, Mapping) and request.get("request_sha256") == request_sha256:
+                keys.append(row["key"])
+        jobs = [self.get_job(key, verify_artifact=False) for key in keys]
+        return [job for job in jobs if job and job["status"] in {"unknown", "running"}]
+
     def _unknown(self, key: str, token: str, reason: str) -> None:
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -611,6 +653,8 @@ class WorkflowLedger:
         old = self.get_job(key)
         if old and (old["status"] != "failed" or not retry_failed):
             return {**old, "reused": True}
+        if _declares_video_generation(plan, recipe):
+            raise PreflightBlocked("video_generation_prompt_only: export the authored video prompts and import user-supplied returned media; no video-generation callback was called")
         check = preflight_recipe(recipe, availability)
         if check["status"] != "ready":
             raise PreflightBlocked("; ".join(check["reasons"]))

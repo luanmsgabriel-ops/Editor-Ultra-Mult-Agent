@@ -136,8 +136,28 @@ class PromptTests(unittest.TestCase):
             self.assertIn("clear, warm alto", clip["prompt"])
             self.assertIn("A próxima parada fica aqui.", clip["prompt"])
             self.assertEqual(clip["settings"]["duration_s"], 10)
-            self.assertIn("profile_needed", {i["code"] for i in clip["issues"]})
+            self.assertIn("provider_neutral", {i["code"] for i in clip["issues"]})
+            self.assertFalse(next(i for i in clip["issues"] if i["code"] == "provider_neutral")["blocking"])
             self.assertEqual(clip["export_sha256"], digest({k: v for k, v in clip.items() if k != "export_sha256"}))
+
+    def test_ready_neutral_prompts_do_not_require_a_provider_or_enable_execution(self):
+        pack = compile_pack(plan_fixture(), ready=True)
+        self.assertEqual(pack["status"], "ready")
+        self.assertTrue(pack["prompt_export"]["provider_neutral"])
+        self.assertEqual(pack["execution_policy"]["mode"], "prompt_export_only")
+        self.assertFalse(pack["execution_policy"]["automatic_video_generation"])
+        self.assertFalse(pack["generation_performed"])
+        self.assertTrue(all(c["settings"]["tool"] is None for c in pack["clips"]))
+        text = render_markdown(pack)
+        self.assertNotIn("select a capability profile before ready export", text)
+        self.assertIn("chosen external tool", text)
+
+    def test_neutral_prompt_readiness_preserves_missing_media_checks(self):
+        plan = plan_fixture(strategy="observed_frame")
+        pack = compile_pack(plan, ready=True)
+        self.assertEqual(pack["status"], "partially_ready")
+        self.assertIn("return_needed", codes(pack, 1))
+        self.assertEqual(pack["clips"][1]["status"], "blocked")
 
     def test_ready_export_is_per_clip_without_automatic_approval(self):
         pack = compile_pack(plan_fixture(strategy="observed_frame"), profile=profile_fixture(), ready=True)

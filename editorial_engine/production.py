@@ -24,6 +24,7 @@ from PIL import Image, ImageFont
 from .contracts import (ValidationError, clone, digest, integer, mapping, nonempty,
                         number, require, sequence, sha256)
 from .workflows import WorkflowLedger, ExecutionUnknown, artifact_evidence
+from .video_generation_policy import execution_policy
 
 
 REQUEST_SCHEMA = "production-request/1"
@@ -35,6 +36,10 @@ INPUT_KINDS = OUTPUT_KINDS | {"json", "file", "font"}
 PREPARATION_KINDS = {"transcript", "pose", "mattes", "planar_tracking"}
 MANUAL_OPERATIONS = {"chat_image", "external_video", "voice", "music", "sfx",
                      "transcript", "pose", "mattes", "planar_tracking", "manual_asset", "procedural"}
+# These authored operations describe local rendering/processing, not temporal
+# synthesis through a video model. Other video callbacks need a host-registered
+# execution_kind; request JSON cannot grant that capability.
+LOCAL_VIDEO_OPERATIONS = {"motion_recipe", "planar_portal", "template", "procedural"}
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
@@ -220,14 +225,20 @@ class Adapter:
     output_kinds: tuple[str, ...]
     version: str = "1"
     simulated: bool = False
+    execution_kind: str | None = None
 
     def descriptor(self):
         code = getattr(self.executor, "__code__", None)
         if code is None and self.executor is not None:
             code = getattr(getattr(self.executor, "__call__", None), "__code__", None)
-        return {"id": self.id, "version": self.version, "operations": list(self.operations),
-                "output_kinds": list(self.output_kinds), "simulated": self.simulated,
-                "callback_code_sha256": hashlib.sha256(marshal.dumps(code)).hexdigest() if code else None}
+        value = {"id": self.id, "version": self.version, "operations": list(self.operations),
+                 "output_kinds": list(self.output_kinds), "simulated": self.simulated,
+                 "callback_code_sha256": hashlib.sha256(marshal.dumps(code)).hexdigest() if code else None}
+        # Preserve identities of existing non-video ledger jobs when the host
+        # has not added a new execution declaration.
+        if self.execution_kind is not None:
+            value["execution_kind"] = self.execution_kind
+        return value
 
 
 class AdapterRegistry:
@@ -237,11 +248,13 @@ class AdapterRegistry:
         self._adapters = {}
 
     def register(self, adapter_id, executor, *, operations, output_kinds,
-                 version="1", simulated=False):
+                 version="1", simulated=False, execution_kind=None):
         _id(adapter_id, "adapter_id")
         require(callable(executor), "production_adapter", "Register a Python callable")
         nonempty(version, "adapter.version")
         require(type(simulated) is bool, "production_adapter", "simulated must be boolean")
+        require(execution_kind is None or execution_kind == "local_processing", "production_adapter",
+                "A host adapter may explicitly declare local_processing; video synthesis is prompt export only")
         require(adapter_id not in self._adapters, "production_adapter", "Adapter id is already registered")
         require(isinstance(operations, (list, tuple)) and operations and isinstance(output_kinds, (list, tuple))
                 and output_kinds and all(isinstance(kind, str) for kind in output_kinds),
@@ -249,7 +262,7 @@ class AdapterRegistry:
         for name in operations:
             _id(name, "adapter.operation")
         require(set(output_kinds) <= OUTPUT_KINDS, "production_adapter", "Unknown adapter output kind")
-        adapter = Adapter(adapter_id, executor, tuple(operations), tuple(output_kinds), version, simulated)
+        adapter = Adapter(adapter_id, executor, tuple(operations), tuple(output_kinds), version, simulated, execution_kind)
         self._adapters[adapter_id] = adapter
         return adapter
 
@@ -766,7 +779,10 @@ def execute_request(request, output_dir, *, executor=None, registry=None, ledger
     require(ledger is None or isinstance(ledger, WorkflowLedger), "production_ledger", "Use the existing WorkflowLedger")
     root = Path(output_dir).resolve()
     _export_request(data, root)
-    adapter = _adapter(data, executor, registry)
+    external_video = data["operation"] == "external_video"
+    # A supplied callable, adapter ID or request flag cannot enable video model
+    # execution. Keep the external task portable and let the user return media.
+    adapter = None if external_video else _adapter(data, executor, registry)
     builtin_motion = data["operation"] == "motion_recipe" and adapter is None and data["adapter_id"] in (None, "bundled.motion")
     builtin_portal = data["operation"] == "planar_portal" and adapter is None and data["adapter_id"] in (None, "bundled.planar_portal")
     builtin = builtin_motion or builtin_portal
@@ -809,6 +825,21 @@ def execute_request(request, output_dir, *, executor=None, registry=None, ledger
                     ledger={key: old_job.get(key) for key in ("key", "status", "attempt", "cost", "error")},
                     issues=[old_job["error"]] if old_job.get("error") else [],
                     executor_report=_job_report(old_job, {}), actual_cost=old_job["cost"]["actual"], reused=True)
+    if external_video and ledger is not None:
+        pending = ledger.unresolved_production_jobs(data["request_sha256"])
+        require(len(pending) <= 1, "production_ledger",
+                "Reconcile all historical pending jobs for this video request before exporting a new state: "
+                + ", ".join(job["key"] for job in pending))
+        if pending:
+            old_job = pending[0]
+            value = _execution(data, root, old_job["status"],
+                adapter=old_job["specification"].get("plan", {}).get("adapter"),
+                ledger={key: old_job.get(key) for key in ("key", "status", "attempt", "cost", "error")},
+                issues=[old_job["error"]] if old_job.get("error") else [],
+                executor_report=_job_report(old_job, {}), reused=True)
+            if previous is None:
+                _write_once(previous_path, value)
+            return value
     if data["unresolved"]:
         return _execution(data, root, "blocked", adapter=descriptor, issues=data["unresolved"])
     # A local successful import can satisfy a manual task. An unresolved ledger
@@ -820,6 +851,20 @@ def execute_request(request, output_dir, *, executor=None, registry=None, ledger
     if ledger is None and previous and previous["status"] in {"unknown", "running", "failed"}:
         if previous["status"] != "failed" or not retry_failed:
             return _seal({**previous, "reused": True}, "execution_sha256")
+    if external_video:
+        policy = execution_policy()
+        _write_once(root / "VIDEO-GENERATION-POLICY.json", policy)
+        value = _execution(data, root, "awaiting_external_generation", reused=previous is not None,
+                           issues=[{"code": "video_generation_prompt_only",
+                                    "message": "Video generation exports prompts and settings. Generate in the tool you choose and import the returned video."}])
+        value = _seal({**value, "execution_policy": policy}, "execution_sha256")
+        if previous is None:
+            _write_once(previous_path, value)
+        return value
+    if data["output_kind"] == "video" and adapter is not None:
+        require(data["operation"] in LOCAL_VIDEO_OPERATIONS or adapter.execution_kind == "local_processing",
+                "video_generation_prompt_only",
+                "Video synthesis exports prompts only. An unfamiliar video callback requires host-registered local_processing metadata.")
     instance, instance_evidence = (None, None)
     if data["operation"] == "template":
         instance, instance_evidence = _instantiate(data, root)

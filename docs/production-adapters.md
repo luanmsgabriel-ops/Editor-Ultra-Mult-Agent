@@ -8,6 +8,12 @@ editorial intent, invoke ChatGPT from local Python, install models, import Pytho
 names from JSON, execute package bootstraps or treat a template preview as a new
 render.
 
+Video synthesis is always **prompt export only**. An `external_video` request
+never invokes a supplied executor or adapter. It exports instructions/settings
+and returns `awaiting_external_generation` until the user supplies actual media.
+Choosing a provider, account or registered avatar is not required. This rule does
+not disable local editing, compositing, procedural rendering or text direction.
+
 The main API is:
 
 ```python
@@ -59,6 +65,14 @@ Operations such as `chat_image`, `external_video`, `voice`, `music`, `sfx`,
 selection or automatic route substitution. Other operation IDs are allowed for
 explicit host adapters. An unknown `adapter_id` is an unresolved adapter, not an
 importable module or shell command.
+
+For `external_video`, even an explicit adapter ID or callable cannot change the
+manual route. The export includes `VIDEO-GENERATION-POLICY.json` and makes no
+budget reservation. Local `motion_recipe`, `planar_portal`, `template` and
+`procedural` operations remain available. Another video-processing operation
+must have `execution_kind="local_processing"` registered by the trusted host
+in `AdapterRegistry.register`; JSON parameters cannot confer that classification.
+These contracts do not sandbox or inspect arbitrary Python callback semantics.
 
 `unresolved` contains decisions genuinely required before production, such as
 missing narration text or an unspecified data value. A request with unresolved
@@ -342,6 +356,7 @@ unresolved job. The coordinator remains responsible for that operational scope.
 |---|---|
 | `blocked` | Authoring requirements remain. Refine the request explicitly. |
 | `awaiting_external` | Useful manual instructions exported. Obtain the real file in the selected tool. |
+| `awaiting_external_generation` | Video prompts/settings exported. The user generates externally and imports the returned clip; no generation callback or new budget reservation. |
 | `awaiting_adapter` | Named adapter is not registered. Configure it in host code or use manual import. |
 | `instantiated_not_rendered` | Template variant exists, with no produced resource. Render it via an explicit callback/tool. |
 | `succeeded` | A typed result is technically verified; inspect its separate `produced_unreviewed`/`simulated_result` status. |

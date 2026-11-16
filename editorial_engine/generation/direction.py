@@ -17,12 +17,20 @@ from pathlib import Path
 from ..contracts import (clone, digest, integer, mapping, nonempty, number,
                          require, sequence, sha256, validate_analysis, verify_file)
 from .contracts import PLAN_SCHEMA, ROLES, STRATEGIES, EVIDENCE_SCOPES, validate_plan
+from ..video_generation_policy import execution_policy
 
 
 DIRECTOR_INSTRUCTIONS = """Você é o responsável pela direção de um projeto audiovisual.
 Escreva um plano de geração original e verificável, no contrato fornecido. A tarefa
 é planejar a produção e preparar instruções exportáveis. Esta chamada não gera
 mídia e não prova que a direção foi executada.
+
+Regra permanente de execução: toda geração de vídeo termina em exportação de
+prompts por tomada, configurações, referências, continuidade e montagem. O usuário
+gera os vídeos fora do motor e devolve os arquivos. Não abra geradores, consulte
+cadastro de avatar, selecione fornecedor nem submeta jobs de vídeo. Um perfil
+opcional serve somente para adaptar instruções e conferir compatibilidade.
+Nenhum nome de pessoa, referência ou perfil autoriza geração automática.
 
 Use o objetivo, o roteiro, as preferências atuais e a referência deste projeto.
 Respostas atuais substituem preferências anteriores, sem nova confirmação de
@@ -70,9 +78,11 @@ O host vincula o contrato de recriação à resposta; não o substitua por sua p
 
 Planeje duração por tomada, não por imagem individual. Para cada tomada descreva
 preparação, ação principal e conclusão; ações simultâneas podem compartilhar
-tempo. Escolha 4, 6, 8 ou 10 segundos somente quando a atuação couber e o perfil
-da ferramenta aceitar. Esses valores são opções de planejamento, não limites
-universais. Separe duração gerada, intervalo útil, margens para corte e emendas.
+tempo. Planeje 4, 6, 8 ou 10 segundos quando a atuação couber. Sem perfil, esses
+valores são requisitos autorados sujeitos à compatibilidade da ferramenta
+externa, não capacidades verificadas nem limites universais. Se um perfil
+opcional foi fornecido, confira os valores declarados. Separe duração gerada,
+intervalo útil, margens para corte e emendas.
 Se uma tomada precisar de mais tempo, divida em ações coerentes ou use uma
 capacidade confirmada; não acelere automaticamente a atuação ou a fala.
 Divida ambientes em tomadas com prompts próprios, exceto quando uma passagem
@@ -274,9 +284,9 @@ def briefing(answers: dict, *, profile=None) -> dict:
         ask("identity", ["identity", "identity_references"],
             "Quais características e referências de pessoa, figurino ou objeto devem permanecer entre os clipes?")
     if resolved.get("subject_mode") == "avatar" and "avatar_status" not in resolved and "has_avatar" not in resolved:
-        ask("avatar_status", ["avatar_status"], "A identidade já existe em imagens ou está cadastrada na ferramenta escolhida?",
+        ask("avatar_status", ["avatar_status"], "Você já tem imagens ou uma ficha visual da pessoa para orientar os prompts?",
             choices=[("reference_images", "Tenho imagens de referência"),
-                     ("registered", "Está cadastrada na ferramenta"), ("needed", "Preciso criar a identidade")])
+                     ("visual_description", "Tenho uma descrição visual"), ("needed", "Preciso criar a identidade")])
     if "voice_source" not in resolved:
         ask("voice_source", ["voice_source", "source_audio"], "De onde vem a voz deste vídeo?",
             choices=[("source", "Usar meu áudio existente"), ("reference", "Usar uma referência de voz"),
@@ -292,15 +302,13 @@ def briefing(answers: dict, *, profile=None) -> dict:
         ask("text_policy", ["text_policy"], "Como tratar textos, logos e elementos que precisam ficar exatos?",
             choices=[("post", "Compor na edição"), ("generated", "Solicitar na geração, com revisão"),
                      ("none", "Sem texto ou logo")])
-    if "target_tool" not in resolved and "capabilities" not in resolved:
-        ask("target_tool", ["target_tool"], "Já escolheu onde vai gerar os clipes? O plano pode continuar independente da ferramenta.",
-            choices=[("undecided", "Definir depois"), ("selected", "Informar ferramenta, modelo e modo")])
     if (_present(resolved.get("target_tool")) and resolved["target_tool"] != "undecided"
             and "clip_duration_s" not in resolved and "capabilities" not in resolved):
         ask("clip_limits", ["clip_duration_s", "capabilities"],
             "Quais durações e tipos de referência esse modo da ferramenta aceita?")
 
     return {"schema": "video-generation-briefing/1", "resolved": resolved,
+            "execution_policy": execution_policy(),
             "next_questions": questions[:3], "missing": [q["id"] for q in questions],
             "assumptions": assumptions,
             "ready_for_direction": not any(q["required_for_direction"] for q in questions),
@@ -610,6 +618,7 @@ def build_request(answers: dict, *, profile=None, analysis=None, assets=None,
                         image_scope="supplied_still_samples_not_continuous_playback",
                         provider_input_use="not_executed")
     payload = {"briefing": intake, "brief": {key: clone(resolved[key]) for key in _BRIEF_FIELDS if key in resolved},
+               "execution_policy": execution_policy(),
                "editorial_inputs": resolved, "analysis": verified, "assets": inventory,
                "review_scope": review_scope, "response_contract": contract,
                "authoring_context": authoring_context, "reference_context": reference_context,
@@ -632,6 +641,7 @@ def build_request(answers: dict, *, profile=None, analysis=None, assets=None,
     require(len(json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8")) <= max_request_bytes,
             "request_budget", "Direction request exceeds the explicit byte budget; reduce samples or context explicitly")
     return {"schema": "video-generation-director-request/1", "briefing": intake, "brief": payload["brief"],
+            "execution_policy": execution_policy(),
             "response_contract": contract, "review_scope": review_scope,
             "analysis_sha256": digest(verified) if verified is not None else None,
             "reference_context_sha256": digest(reference_context) if reference_context is not None else None,

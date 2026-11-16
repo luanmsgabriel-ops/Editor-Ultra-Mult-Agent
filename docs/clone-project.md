@@ -252,7 +252,7 @@ As funções abaixo têm papéis próprios:
 | --- | --- |
 | `queue PROJETO pedido.json` | Registra uma necessidade tipada; não executa comandos contidos em dados |
 | `queue-assets PROJETO` | Gera pedidos `asset-<id>` para recursos `needed` do plano de geração atual |
-| `produce PROJETO pedido` | Executa adaptador disponível ou exporta a tarefa; registra resultado, estado e custo informado |
+| `produce PROJETO pedido` | Para geração de vídeo, exporta o pedido e aguarda retorno externo; demais operações executam adaptador autorizado ou exportam a tarefa |
 | `receive-resource PROJETO pedido arquivo --provenance origem.json` | Importa resultado externo real do tipo solicitado |
 | `fulfill PROJETO asset_id pedido` | Incorpora o resultado à lacuna exata de uma nova revisão do plano de geração |
 | `adopt PROJETO pedido nova-entrada --role PAPEL --purpose TEXTO` | Cadastra o resultado como nova entrada concreta do projeto |
@@ -272,7 +272,9 @@ Transcrição, pose, mattes e tracking planar exigem vínculo com hash, FPS, qua
 
 O registro de adaptadores é controlado pelo host Python, por `AdapterRegistry.register(...)` e `project.produce(..., registry=registro)` ou `executor=callback`. O callback recebe pedido, diretório novo, chave do job e eventual instância de template. Deve devolver arquivo/hash, custo real e proveniência, ou uma falha explicitamente conhecida. JSON não importa um módulo nem registra shell para executar.
 
-O adaptador nativo `motion_recipe` liga receitas declarativas aos backends Motion Lab e MOTNGRFX suportados, conforme suas dependências instaladas. Outros serviços de imagem, voz, vídeo, ASR, segmentação e tracking precisam de callback configurado ou importação externa. A CLI `produce` não carrega callbacks arbitrários por caminho.
+O adaptador nativo `motion_recipe` liga receitas declarativas aos backends Motion Lab e MOTNGRFX suportados, conforme suas dependências instaladas. Serviços de imagem, voz, ASR, segmentação e tracking podem usar callback configurado ou importação externa. Geração de vídeo sempre exporta prompts para uso externo pelo usuário; `external_video` não chama callbacks mesmo quando fornecidos. Render local de templates, motion, portais e processamento procedural permanece disponível. Operações de vídeo não reconhecidas como locais exigem classificação `execution_kind="local_processing"` no registro confiável do host, nunca em JSON da solicitação. A CLI `produce` não carrega callbacks arbitrários por caminho.
+
+A política `prompt_export_only` também aparece no estado do projeto e nos pacotes de prompts. Não exige ferramenta ou avatar cadastrado. O pacote neutro registra as referências que precisam ser anexadas; a geração externa não equivale a arquivo recebido nem a aprovação visual. Após o usuário devolver o vídeo, `receive`/`receive-resource` verificam a mídia e as etapas de edição continuam normalmente.
 
 Estados como `awaiting_external`, `awaiting_adapter` e `instantiated_not_rendered` indicam trabalho pendente. `running` ou `unknown` não autorizam repetição cega de um job. O ledger conserva identidade, reservas e custo; execução incerta requer reconciliação. Não há TTS, lip-sync ou modelo gerador genérico embutido nessa fila. A imagem no ChatGPT é uma ação do host com a ferramenta disponível, seguida do registro do resultado.
 

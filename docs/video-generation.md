@@ -4,6 +4,12 @@
 
 A compreensão da referência e as decisões criativas pertencem ao agente no host ou ao diretor humano. O compilador valida contratos e organiza instruções; não escolhe uma câmera por palavras-chave, não resolve continuidade visual por contagem de caracteres e não envia jobs a provedores.
 
+## Política de execução: sempre entregar os prompts
+
+Toda necessidade de geração de vídeo termina em **prompts por tomada, configurações, referências, continuidade e instruções de montagem**. O usuário executa esses prompts na ferramenta que escolher e devolve os vídeos para o motor conferir e editar. O fluxo não consulta avatares cadastrados nem exige um seletor de aparência de fornecedor. A identidade pertence à ficha e às referências do projeto.
+
+`video_generation_policy.execution_policy()` fornece `mode="prompt_export_only"`. Essa regra acompanha briefing, pedido ao diretor, pacote e estado do projeto. Uma solicitação `external_video` permanece manual mesmo que receba um callback; exportar um pedido não reserva crédito nem cria mídia. Processamento local de filmagens, render de templates/motion/3D e composição são operações próprias e continuam disponíveis. O endpoint de `generation direct` escreve direção textual; não é um gerador de vídeo.
+
 ## O que entra no plano
 
 O contrato `video-generation-plan/1` reúne objetivo, público, proporção, duração final, idioma, personagens, cenários, objetos, evidências, recursos a produzir, clipes e suas ligações. O exemplo autoral está em [`examples/video_generation/three-clips-plan.json`](../examples/video_generation/three-clips-plan.json).
@@ -34,7 +40,7 @@ Uma entrada de `joins` liga exatamente dois clipes consecutivos. Ela guarda raz�
 
 | Estratégia | O que o compilador usa | Condição para finalizar o próximo prompt |
 | --- | --- | --- |
-| `planned_frame` | A mesma imagem como fim do anterior e início do seguinte | Arquivo real e suporte declarado a cada papel no modelo escolhido |
+| `planned_frame` | A mesma imagem como fim do anterior e início do seguinte | Arquivo real; compatibilidade com esse papel é conferida quando houver perfil |
 | `observed_frame` | Um quadro explicitamente selecionado do vídeo devolvido | Recibo íntegro, observação do trecho e coerência do quadro com o corte útil |
 | `native_extension` | O vídeo anterior como entrada | Suporte a essa entrada e semântica explícita de duração da extensão |
 | `prompt_only` | Descrições completas de estado e movimento | Controle menor de continuidade, indicado no pacote |
@@ -58,7 +64,9 @@ Um perfil `video-generation-capabilities/1` identifica ferramenta, modelo, modo,
 
 O estado verificado do perfil é uma atestação fornecida pelo autor. A compilação não consulta a API em tempo real. Recursos desconhecidos não se tornam disponíveis por inferência. Um limite no campo de duração ou na entrada de imagem precisa ser atendido na interface do fornecedor; escrever a configuração no prompt não substitui esse ajuste.
 
-Sem perfil, o pacote é um rascunho útil, acompanhado das dependências pendentes. Com `--ready`, cada clipe é verificado separadamente. O primeiro pode estar pronto enquanto o segundo aguarda o vídeo anterior; isso permite produção sequencial. Prontidão significa que os requisitos declarados para exportar estão satisfeitos, não que a geração será fiel ou estará aprovada.
+Sem perfil, a exportação entrega prompts neutros e registra compatibilidade externa não verificada como nota. Escolher ferramenta ou modelo não é requisito. Com `--ready`, cada clipe é verificado separadamente; arquivos e quadros de continuidade que faltam continuam pendentes. O primeiro pode estar pronto enquanto o segundo aguarda o vídeo anterior. Prontidão significa que os requisitos declarados para uso manual dos prompts estão satisfeitos, não que algum serviço recebeu uma chamada, aceite os parâmetros ou produza um resultado aprovado.
+
+`prompt_export.status="complete"` informa que os textos foram exportados, inclusive quando `status="draft"` ou algum anexo continua pendente. `execution_policy.automatic_video_generation=false` permanece fixo. Se houver perfil, incompatibilidades declaradas continuam bloqueando a prontidão desse perfil, sem truncar textos ou alterar silenciosamente a direção.
 
 O pacote contém JSON, Markdown copiável e um `.txt` por clipe. Cada prompt repete as informações de identidade e estilo necessárias; não depende de expressões como “o mesmo do anterior”. Configurações e anexos ficam separados. O compilador preserva a prosa e as falas fornecidas, não traduz automaticamente. O idioma precisa ser revisado pelo autor. Não há preenchimento até um tamanho arbitrário nem truncamento silencioso quando o limite é excedido.
 
@@ -102,7 +110,13 @@ python -m editorial_engine generation assets examples/video_generation/three-cli
 python -m editorial_engine generation export examples/video_generation/three-clips-plan.json trabalho/prompts-v1
 ```
 
-Após preencher um perfil real e obter os arquivos necessários:
+Para conferir os arquivos necessários sem escolher ferramenta:
+
+```bash
+python -m editorial_engine generation export trabalho/plan-v2.json trabalho/prompts-neutros --ready
+```
+
+Se o usuário também solicitar adaptação a uma ferramenta, um perfil real pode ser fornecido opcionalmente:
 
 ```bash
 python -m editorial_engine generation export trabalho/plan-v2.json trabalho/prompts-v2 --profile trabalho/capabilities.json --ready

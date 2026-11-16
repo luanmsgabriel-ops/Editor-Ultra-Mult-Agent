@@ -18,6 +18,7 @@ import uuid
 
 from .contracts import (ValidationError, clone, digest, file_sha256, mapping,
                         nonempty, require, sequence, verify_file)
+from .video_generation_policy import execution_policy
 
 SPEC_SCHEMA = "clone-project-spec/1"
 PROJECT_SCHEMA = "clone-project/1"
@@ -26,8 +27,8 @@ ROUTES = {
     "montage": {"input_roles": ["footage"], "engine": "assembly", "label": "Montar vários vídeos"},
     "style_transfer": {"input_roles": ["footage", "reference"], "engine": "contextual", "label": "Aplicar a linguagem de uma referência"},
     "reconstruct": {"input_roles": ["footage", "reference"], "engine": "assembly", "label": "Recompor a referência com novas filmagens"},
-    "reference_generate": {"input_roles": ["reference"], "engine": "generation", "label": "Gerar novos personagens e cenas com referência"},
-    "original": {"input_roles": [], "engine": "generation", "label": "Criar sem referência"},
+    "reference_generate": {"input_roles": ["reference"], "engine": "generation", "label": "Preparar prompts de novos personagens e cenas com referência"},
+    "original": {"input_roles": [], "engine": "generation", "label": "Preparar prompts de vídeo sem referência"},
     "media_story": {"input_roles": [], "engine": "generation", "label": "Criar a partir de imagens, roteiro ou áudio"},
     "fill_gaps": {"input_roles": [], "engine": "generation", "label": "Produzir os trechos ou recursos que faltam"},
     "template": {"input_roles": ["template_library"], "engine": "production", "label": "Personalizar e renderizar um template"},
@@ -1194,13 +1195,19 @@ def project_status(directory):
     for key in records:
         if key.startswith("production:") and has(key):
             identifier = key.split(":", 1)[1]
+            request = _artifact(state, key)
+            prompt_only = request["operation"] == "external_video"
             execution = _artifact(state, "execution:" + identifier) if has("execution:" + identifier) else None
             production.append({"request_id": identifier, "status": "received" if usable_result(identifier)
                                else "simulated_not_usable" if has("result:" + identifier)
-                               else execution["status"] if execution else "queued"})
+                               else execution["status"] if execution else "queued",
+                               "execution_mode": "prompt_export_only" if prompt_only else "typed_production"})
             if not usable_result(identifier):
                 need("production_pending", "receive-resource" if execution else "produce",
-                     "Produção pendente: " + identifier, request_id=identifier)
+                     ("Receba o vídeo gerado pelo usuário fora do motor: " if execution else
+                      "Exporte o prompt, configurações e referências para geração externa pelo usuário: ") + identifier
+                     if prompt_only else "Produção pendente: " + identifier,
+                     request_id=identifier)
     if has("generation_plan"):
         for asset in _artifact(state, "generation_plan")["assets"]:
             if asset["status"] == "needed":
@@ -1229,9 +1236,9 @@ def project_status(directory):
         plan = _artifact(state, "generation_plan")
         missing = [c["id"] for c in plan["clips"] if not has("return:" + c["id"])]
         if not has("prompt_pack"):
-            need("prompt_export", "export", "Exporte os prompts e as dependências para a ferramenta escolhida")
+            need("prompt_export", "export", "Entregue os prompts por tomada, configurações, referências e continuidade; a escolha da ferramenta é externa")
         if missing:
-            need("missing_clips", "receive", "Importe os clipes realmente produzidos", clip_ids=missing)
+            need("missing_clips", "receive", "Receba os clipes que o usuário gerar externamente com os prompts e confira os arquivos", clip_ids=missing)
         else:
             need("assembly_ready", "assemble", "Planeje a montagem dos retornos verificados")
         state_name = "awaiting_media" if missing else "ready_assembly"
@@ -1262,6 +1269,7 @@ def project_status(directory):
             need("base_project_needed", "fork", "Retome o projeto existente para preservar planos, retornos e revisões")
         state_name = "awaiting_direction"
     return {"schema": "clone-project-status/1", "project_id": spec["id"], "revision": state["revision"],
+            "video_generation_policy": execution_policy(),
             "intent": spec["intent"], "route": ROUTES[spec["intent"]], "status": state_name,
             "work_items": items, "production": production,
             "artifacts": {key: {"status": value["status"], "path": value["path"],

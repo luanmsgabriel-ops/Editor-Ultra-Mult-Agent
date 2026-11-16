@@ -57,6 +57,18 @@ class AdaptiveBriefingTests(unittest.TestCase):
         self.assertNotIn("clip_duration_s", result["resolved"])
         self.assertNotIn("target_tool", result["missing"])
 
+    def test_neutral_workflow_never_asks_for_a_provider_and_policy_reaches_director(self):
+        answers = known_brief()
+        del answers["target_tool"]
+        result = briefing(answers)
+        self.assertEqual(result["next_questions"], [])
+        request = build_request(answers)
+        payload = json.loads(request["body"]["messages"][1]["content"])
+        self.assertEqual(payload["execution_policy"]["mode"], "prompt_export_only")
+        self.assertFalse(payload["execution_policy"]["automatic_video_generation"])
+        self.assertEqual(request["execution_policy"], payload["execution_policy"])
+        self.assertIn("Não abra geradores", request["body"]["messages"][0]["content"])
+
     def test_generated_duration_is_not_assumed_to_equal_final_duration(self):
         inputs = known_brief(clip_count=3, clip_duration_s=10, overlap_s=0.5)
         del inputs["target_duration_s"]
