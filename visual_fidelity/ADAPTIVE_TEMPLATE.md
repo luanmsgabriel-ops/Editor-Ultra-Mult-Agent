@@ -71,3 +71,19 @@ de enquadramento e gesto. A profundidade métrica e a posição de um plano
 no cômodo dependem da solução espacial. Quando ela falta, mantenha o
 bruto e aplique o estilo em espaço de tela. Revise o resultado em
 movimento, com atenção ao rosto e às mãos durante a entrada do gráfico.
+
+## Tratamento por função narrativa
+
+O perfil Clara ativa `editorial_motion`. Em trechos em que a imagem do
+apresentador precisa continuar, o motor revela tipografia sem tarjeta e
+pode marcar uma assinatura no gesto. Conceitos com ilustração pertinente,
+como falha de comunicação, duração, quantidade ou consulta de voo, podem
+virar cenas gráficas próprias de até 2,35 segundos, com transições diagonais
+de entrada e saída. A narração continua no mesmo relógio.
+
+A escolha fica em `visual_treatment` no relatório. Cues revisados podem
+informar `editorial` como `kinetic_type`, `signature`, `signal`, `clock`,
+`metric`, `location` ou `status`. Os tratamentos de tela respeitam a
+proteção de rosto e mãos. As cenas gráficas são cortes intencionais, separados
+do ambiente real, com perspectiva e profundidade desenhadas. Arte PNG
+externa e âncoras planas ou de câmera continuam disponíveis pelo compositor.

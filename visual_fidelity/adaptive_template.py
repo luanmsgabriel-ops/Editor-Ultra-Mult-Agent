@@ -14,6 +14,7 @@ import numpy as np
 
 from .anchor_graphics import motion
 from .context_art import make_card
+from .editorial_motion import CUTAWAYS, treatment
 from .reference_cadence import digest, video_clock
 from .video_anchor import Prepared, frames_of, load, prepare, render, screen_quad, shot_starts
 
@@ -100,7 +101,7 @@ def speech_cues(transcript, reviewed=None):
             'start':words[left][1], 'spoken_end':words[right][2],
             'treatment': 'metric' if re.search(r'\d', title) else
                          'alert' if icon in {'signal','cancel'} else 'headline',
-            **{k: extra[k] for k in ('icon_asset','provenance','anchor','spatial_evidence') if k in extra},
+            **{k: extra[k] for k in ('icon_asset','provenance','anchor','spatial_evidence','editorial') if k in extra},
         })
     return sorted(choices, key=lambda x:x['start'])
 
@@ -265,19 +266,38 @@ def build_layers(source, transcript, pose, style, root, condensed, script, revie
             gesture=None
         key=f'cue-{index+1:02d}'
         asset=f'{key}.png'
+        visual = treatment(dict(cue, gesture=gesture)) if style.get('editorial_motion') and not cue.get('anchor') else None
         if cue.get('icon_asset'):
             provenance = load(root/cue['provenance'])
             evidence = ' '.join(tokens(provenance.get('evidence','')))
             if evidence != cue['evidence'] or not provenance.get('concept','').strip():
                 raise ValueError('Custom icon provenance must identify its concept and supporting speech')
-        make_card(cue,style,condensed,script,root).save(root/asset)
+        # Preserve externally prepared artwork or spatial anchors through the legacy overlay path.
+        if not visual or cue.get('icon_asset'):
+            visual = None
+            make_card(cue,style,condensed,script,root).save(root/asset)
+        if visual in CUTAWAYS:
+            end = min(end, first+round(2.35*fps))
         anchor=cue.get('anchor') or {'mode':'screen'}
         effect={'id':key,'asset':asset,'frames':[first,end],'animation':style['animation'],
                 'entrance_seconds':style['entrance_seconds'],'anchor':anchor}
         marks=[first,*(c for c in cuts if first<c<end),end]
         details=dict(cue,output_frames=[first,end],gesture=gesture,rendered_frames=0,
                      asset=asset,anchor_mode=anchor['mode'],placements=[])
-        if anchor['mode']=='screen':
+        if visual:
+            effect.pop('asset')
+            effect['editorial_scene'] = {
+                'kind': visual, 'cue': cue, 'style': style,
+                'condensed': str(condensed.resolve()), 'script': str(script.resolve()),
+            }
+            details['asset'] = None
+            details['visual_treatment'] = visual
+        if visual in CUTAWAYS:
+            corners = {i: None for i in range(first,end)}
+            layers.append(Prepared(effect,first,end,corners,{}, {'mode':'cutaway'},resolution,{},None))
+            details['rendered_frames'] = len(corners)
+            details['anchor_mode'] = 'cutaway'
+        elif anchor['mode']=='screen':
             for a,b in zip(marks,marks[1:]):
                 corners,size=place_screen(a,b,protected,resolution)
                 if corners:

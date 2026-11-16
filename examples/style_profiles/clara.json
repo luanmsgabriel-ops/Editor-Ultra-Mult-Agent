@@ -2,6 +2,7 @@
   "id": "clara-pt2-visual-style",
   "paper": [255, 247, 236],
   "ink": [177, 12, 25],
+  "editorial_motion": true,
   "animation": "pop",
   "entrance_seconds": 0.25
 }

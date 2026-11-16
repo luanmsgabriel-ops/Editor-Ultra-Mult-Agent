@@ -18,6 +18,7 @@ from .anchor_tracking import track_planar
 from .anchor_ocr import contains, detect, engine
 from .auto_placement import choose_anchor
 from .body_anchors import build_orbit_art, follow_quad, orbit_geometry, render_orbit, track_sidecar
+from .editorial_motion import composite_editorial
 
 
 def load(path):
@@ -325,6 +326,9 @@ def render(picture, destination, resolution, fps, layers, font, root):
                 if index not in layer.corners:
                     continue
                 effect=layer.effect
+                if 'editorial_scene' in effect:
+                    composite_editorial(frame,layer,index,root,cache,fps)
+                    continue
                 color=tuple(effect.get('color',layer.palette.get(index,[246,248,249])))
                 starts=[n for n in layer.body_events if n<=index]
                 origin=starts[-1] if starts else layer.first
@@ -460,3 +464,4 @@ def main():
 
 if __name__=='__main__':
     main()
+
