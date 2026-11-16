@@ -43,6 +43,12 @@ Configure a receita com o FPS do bruto e uma duração que cubra a decisão ante
 
 Candidatos SFX derivados do movimento entram na direção com evidências e tempo local. `motion map-sonic` os leva ao relógio da fonte; escolher um som, revisar seu ataque e ouvir a mixagem continuam etapas explícitas. Geometria 3D em câmera sintética não demonstra câmera resolvida na filmagem, e um contato de frames não comprova playback contínuo ou aprovação do usuário.
 
+## Templates autorados e biblioteca privada
+
+`python -m editorial_engine templates` verifica bibliotecas portáteis por hash, apresenta fichas ao diretor e cria instâncias em diretórios novos com parâmetros explícitos. Código, fontes, imagens e demonstrações permanecem no pacote privado. A personalização preserva a versão original e gera um recibo das alterações; o comando não executa scripts contidos nos templates.
+
+Use `editorial_engine request --template-library caminho/library.json` para incluir os templates na direção contextual. Os requisitos de mídia, máscaras, câmera e runtime continuam visíveis. Um template catalogado ou uma demonstração fornecida não se transforma automaticamente em efeito nativo pronto; a sequência renderizada entra pelo contrato de motion já existente. Consulte o [guia de templates](docs/template-library.md).
+
 ## Inventário e verificação do projeto
 
 ```sh

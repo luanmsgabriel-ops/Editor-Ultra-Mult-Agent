@@ -36,6 +36,9 @@ def parser():
     brief.add_argument("--brief-file", type=Path)
     request.add_argument("--reference-profile", type=Path)
     request.add_argument("--lessons", type=Path)
+    request.add_argument("--template-library", type=Path, help="Private authored templates; these are not ready effect IDs")
+    request.add_argument("--template-root", type=Path, help="Explicit relocated library root, when needed")
+    request.add_argument("--template-id", action="append", dest="template_ids", help="Explicit template shortlist; repeat for several IDs")
     request.add_argument("--no-images", action="store_true")
     request.add_argument("--max-frames", type=int, default=24)
     request.add_argument("--output", type=Path, required=True)
@@ -78,6 +81,8 @@ def parser():
     motion.add_argument("motion_args", nargs=argparse.REMAINDER)
     generation = sub.add_parser("generation", help="Direct connected clips, export prompts and inspect returned video")
     generation.add_argument("generation_args", nargs=argparse.REMAINDER)
+    templates = sub.add_parser("templates", help="Inspect and instantiate a private, versioned motion template library")
+    templates.add_argument("template_args", nargs=argparse.REMAINDER)
     return root
 
 
@@ -89,6 +94,9 @@ def main(argv=None):
     if argv and argv[0] == "generation":
         from .generation.cli import main as generation_main
         return generation_main(argv[1:])
+    if argv and argv[0] == "templates":
+        from .templates import main as template_main
+        return template_main(argv[1:])
     argparser = parser()
     args = argparser.parse_args(argv)
     try:
@@ -106,7 +114,9 @@ def main(argv=None):
             result = build_request(read(args.analysis), read(args.catalog), brief,
                     reference_profile=read(args.reference_profile) if args.reference_profile else None,
                     lessons=read(args.lessons) if args.lessons else None,
-                    include_images=not args.no_images, max_frames=args.max_frames)
+                    include_images=not args.no_images, max_frames=args.max_frames,
+                    template_library=args.template_library, template_root=args.template_root,
+                    template_ids=args.template_ids)
         elif args.action == "direct":
             result = call_provider(read(args.request), endpoint=args.endpoint, model=args.model, api_key_env=args.api_key_env)
         elif args.action == "plan":

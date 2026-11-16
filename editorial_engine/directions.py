@@ -48,6 +48,11 @@ Camadas motion_asset contêm animação real em PNGs RGBA. Use native.motion_lay
 com asset_start_frame explícito quando necessário. Preserve FPS e cobertura; não repita frames para preencher tempo.
 Consulte motion_guidance como possibilidades, nunca como obrigação estética. Receitas ainda não renderizadas
 não são assets prontos. Amostras de uma animação não comprovam continuidade nem legibilidade durante todo o movimento.
+Quando houver template_library, use suas funções, composição e requisitos como opções de autoria.
+O ID de um template não é effect_id executável. Identifique em limitations os templates úteis que ainda exigem
+personalização, mídia, máscara ou render; o host prepara a instância antes de propor sua camada nativa.
+Preserve fontes, curvas, hierarquia e ordem de camadas da receita escolhida. Não use o fit lexical de um
+pacote legado para escolher estilo. Demonstração achatada, template opaco e overlay com alpha são recursos distintos.
 Uma referência informa gramática e ritmo. As âncoras, a fala e os espaços vêm do vídeo atual.
 Nunca declare aprovação do usuário nem revisão do render antes de assistir ao render real.
 """
@@ -60,12 +65,21 @@ def _sample(items: list, maximum: int) -> list:
 
 
 def build_request(analysis: dict, catalog: dict, brief: str, *, reference_profile=None,
-                  lessons=None, include_images=True, max_frames=24) -> dict:
+                  lessons=None, include_images=True, max_frames=24,
+                  template_library=None, template_root=None, template_ids=None) -> dict:
     analysis = validate_analysis(analysis, verify_files=True)
     catalog = validate_catalog(catalog)
     nonempty(brief, "brief")
     require(type(max_frames) is int and 2 <= max_frames <= 96, "max_frames", "Frame budget must be between 2 and 96")
     require(type(include_images) is bool, "include_images", "Image inclusion must be explicit")
+    require(template_library is not None or (template_root is None and template_ids is None),
+            "template_context", "Template root and IDs require an explicit library")
+    template_context = None
+    if template_library is not None:
+        from .templates import library_request
+        template_context = library_request(template_library, root=template_root,
+                                           template_ids=template_ids, verify_files=True,
+                                           summary=template_ids is None)
     approved_lessons = []
     for lesson in lessons or []:
         require(lesson.get("status") == "user_approved" and bool(lesson.get("confirmation")),
@@ -131,6 +145,8 @@ def build_request(analysis: dict, catalog: dict, brief: str, *, reference_profil
                 "bindings": {"manifest binding name": "existing capability id"}, "params": {},
                 "addresses": ["event opportunity id"], "region": [.1, .1, .4, .2]}]},
             "limitations": ["unresolved observations and unavailable opportunities"]}}
+    if template_context is not None:
+        request_payload["template_library"] = template_context
     for item in analysis["evidence"]:
         artifact = item.get("transcript_artifact")
         if artifact:

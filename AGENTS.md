@@ -150,6 +150,14 @@ Os eventos de `motion sonic-candidates` são candidatos derivados do movimento. 
 
 O registro de uma sequência importada atesta seus bytes; só declare execução do produtor quando ela ocorreu. Revise os frames codificados, cortes, relógio, alpha, máscaras e limites de visibilidade conforme o backend. Registre contatos como inspeção amostrada, mantendo playback, audição e aprovação do usuário separados. Reutilize o estado persistente de revisão contextual depois da composição final. Os resultados históricos de testes permanecem identificados pela etapa e não representam automaticamente a suíte atual.
 
+## Biblioteca privada de templates autorados
+
+Ao receber templates, consulte o índice da biblioteca de efeitos e sua coleção de templates. Use `python -m editorial_engine templates verify` para conferir o pacote e `templates request` para levar funções, composição, parâmetros, requisitos e limitações ao diretor. O comando `editorial_engine request --template-library` também incorpora esse contexto. Consulte `docs/template-library.md`. O catálogo de templates descreve projetos de autoria; cada instância precisa ser adaptada e renderizada antes de virar um recurso executável da timeline.
+
+Preserve os arquivos originais, versões, fontes, dependências e demonstrações. Instancie em diretório novo por bindings explícitos, com recibo das alterações. Não use caminhos de caches, máscaras ou tracking de uma demonstração como evidência do novo bruto. Para projetos legados, confira todos os assets e gere novamente os recursos que dependem da fonte. Não herde escolha de estilo por palavras-chave, transições alternadas por índice nem omissão silenciosa de mídia ausente como direção editorial.
+
+Mantenha separados catálogo, prévia fornecida, instanciação, runtime executado e aprovação visual. Um MP4 de demonstração não é overlay transparente. Para aplicar uma animação sobre filmagem, produza PNGs RGBA com relógio e alpha verificados e importe pelo contrato `motion-layer/1`. Templates de tela inteira, edições de filmagem e overlays têm usos próprios. Não retime apenas um atributo HTML quando duração, capítulos e curvas também estiverem definidos em outro relógio. Preserve o movimento autorado e refaça somente os vínculos exigidos pelo novo conteúdo.
+
 ## Direção de vídeos novos e prompts conectados
 
 Para gerar prompts de vídeo, leia `docs/video-generation.md` e use `python -m editorial_engine generation`. A direção detalhada é a base: cada cena tem intenção, ação concreta, posição, câmera, atuação, luz, fala e estado de saída. Defina esses elementos a partir do objetivo e das evidências. Não imponha quantidade de takes, câmera móvel, títulos, música ou tamanho mínimo de prompt a todos os estilos.
