@@ -1,4 +1,27 @@
-# Motion Kit 0.7.0 — recursos reutilizáveis
+# Motion Kit 0.8.0 — recursos reutilizáveis
+
+## Palco de produto e oclusores geométricos
+
+A versão0.8 acrescenta `device-screen-stage`, `measured-device-projection` e
+`curved-metal-blades`. Os manifestos0.7 continuam válidos somente para suas seis
+capacidades originais; uma técnica nova deve fixar0.8. A validação continua sem
+certificar semelhança visual ou aprovação do usuário.
+
+- `python -m visual_fidelity device-scene render recipe.json`: câmera e aparelho
+  independentes, chassis/lentes em geometria, UV estável, cards filhos no espaço,
+  tela preta/texturizada, materiais clay/matte/studio, PNG RGBA e projeções.
+- `visual_fidelity.device_camera.fit_device_pose`: ajusta a projeção a quatro
+  cantos medidos sob intrínsecos explicitamente assumidos. Não recupera de forma
+  única a câmera original ou a escala física; devolve resíduos e proveniência.
+- `python -m visual_fidelity blade-scene recipe.json`: lâminas metálicas curvas
+  fechadas, iluminação, câmera e trajetórias por quadro. São oclusores próprios,
+  separados do telefone e da tipografia.
+
+Leia [device_scene.md](../docs/device_scene.md),
+[device_camera.md](../docs/device_camera.md) e
+[blade_scene.md](../docs/blade_scene.md). A geração sintética por provedor mantém
+o contrato `prompt_export_only`; estes comandos executam render procedural local.
+
 
 Este kit incorpora seis classes de defeito observadas na revisão de uma referência. O motor contém os algoritmos; o projeto contém palavras, fontes licenciadas, assets, medições e parâmetros. Ajustar um projeto não deve criar uma cópia divergente do algoritmo.
 

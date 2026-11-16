@@ -19,5 +19,13 @@ class MotionKitContractTests(unittest.TestCase):
     def test_review_requires_evidence(self):
         m=self.manifest();m['features']['light-sweep']['status']='reviewed'
         with self.assertRaisesRegex(ValueError,'evidence'):validate_manifest(m)
+    def test_legacy_manifest_keeps_original_capability_contract(self):
+        m=self.manifest();m['engine_version']='0.7.0';m['required_features']=['orbit-occlusion']
+        result=validate_manifest(m)
+        self.assertEqual(result['engine_version'],'0.7.0')
+        self.assertEqual(result['validator_version'],VERSION)
+    def test_new_geometry_cannot_claim_legacy_implementation(self):
+        m=self.manifest();m['engine_version']='0.7.0';m['required_features']=['device-screen-stage']
+        with self.assertRaisesRegex(ValueError,'requires motion-kit'):validate_manifest(m)
 
 if __name__=='__main__':unittest.main()

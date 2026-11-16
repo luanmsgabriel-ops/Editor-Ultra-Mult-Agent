@@ -5,7 +5,8 @@ from pathlib import Path
 from PIL import Image
 from .light_sweep import Sweep, light_sweep
 
-VERSION='0.7.0'
+VERSION='0.8.0'
+LEGACY_VERSION='0.7.0'
 CAPABILITIES={
     'orbit-occlusion': {'module':'visual_fidelity.orbit_type','requires':['occluder','depth_order'],'kind':'projected-spatial'},
     'light-sweep': {'module':'visual_fidelity.light_sweep','requires':['surface_alpha'],'kind':'linear-light-composite'},
@@ -14,6 +15,12 @@ CAPABILITIES={
     'target-arrow-rig': {'module':'visual_fidelity.blender_motion_objects','requires':['separate_arrow','parent_transform'],'kind':'mesh-3d'},
     'metallic-keyhole': {'module':'visual_fidelity.blender_motion_objects','requires':['aperture_mask','bevel','moving_reflection'],'kind':'mesh-3d'},
 }
+LEGACY_CAPABILITIES=frozenset(CAPABILITIES)
+CAPABILITIES.update({
+    'device-screen-stage': {'module':'visual_fidelity.device_scene','requires':['independent_camera','screen_uv','frame_poses','asset_provenance'],'kind':'mesh-3d'},
+    'measured-device-projection': {'module':'visual_fidelity.device_camera','requires':['measured_corners','assumed_intrinsics','camera_provenance'],'kind':'planar-pose-calibration'},
+    'curved-metal-blades': {'module':'visual_fidelity.blade_scene','requires':['true_geometry','foreground_depth','frame_schedule'],'kind':'mesh-3d'},
+})
 
 
 def validate_manifest(manifest):
@@ -22,12 +29,15 @@ def validate_manifest(manifest):
     'reviewed' means a human/model inspection was recorded, not user approval.
     Store media in project assets, not the public repository or this registry.
     """
-    if manifest.get('engine_version')!=VERSION:raise ValueError('Pin the actual motion-kit version.')
+    pinned=manifest.get('engine_version')
+    if pinned not in (VERSION,LEGACY_VERSION):raise ValueError('Pin the actual motion-kit version.')
     required=manifest.get('required_features',[])
     if not required or len(required)!=len(set(required)):raise ValueError('Provide unique required_features.')
     used=manifest.get('features',{})
     for name in required:
         if name not in CAPABILITIES:raise ValueError(f'Unknown capability: {name}')
+        if pinned==LEGACY_VERSION and name not in LEGACY_CAPABILITIES:
+            raise ValueError(f'{name}: requires motion-kit {VERSION}; legacy manifests remain limited to their original capabilities.')
         item=used.get(name,{})
         if item.get('module')!=CAPABILITIES[name]['module']:
             raise ValueError(f'{name}: project is not wired to the registered engine module.')
@@ -43,7 +53,7 @@ def validate_manifest(manifest):
             raise ValueError(f"{asset.get('id')}: visible fragments cannot be reused as complete letters.")
         if asset.get('coverage')=='reconstructed-complete' and not asset.get('inferred_regions'):
             raise ValueError('Reconstructed lettering must disclose inferred regions.')
-    return {'engine_version':VERSION,'features':required,'contract_valid':True,
+    return {'engine_version':pinned,'validator_version':VERSION,'features':required,'contract_valid':True,
             'visual_similarity_certified':False,'user_approved':False}
 
 

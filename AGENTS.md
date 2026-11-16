@@ -1,5 +1,26 @@
 # Pós-produção audiovisual
 
+## Palco de produto e motion: referência331365
+
+Para celular/produto girando com conteúdo preso à tela, use
+`visual_fidelity.device_scene` e o comando `device-scene render`. Modele chassis,
+vidro, lentes e cards em espaço3D; a textura da interface fica nos UVs da tela.
+A câmera e o objeto têm controles independentes. `device_camera.fit_device_pose`
+calibra a projeção sob intrínsecos assumidos e registra resíduos; não representa
+recuperação da câmera original. Não troque o movimento por um PNG do aparelho.
+
+As janelas de motion9:16 são painéis próprios; não estique seu conteúdo para a
+proporção física do vidro. Para lâminas curvas que ocultam letras, use
+`blade_scene`, com geometria e relógio separados. Motion-kit0.8 registra essas
+capacidades e aceita manifestos0.7 somente para recursos antigos. Preserve o
+contrato de geração por prompts; os comandos de palco executam render local.
+
+Ao clonar legendas que revelam palavras, reserve a largura da frase completa e
+mantenha a linha de base. Compare a fonte por máscaras, registre a substituição
+e não chame uma candidata de fonte original. Confirme a continuidade do loop e
+a sincronia da trilha no MP4 entregue. A reconstrução331365v1 é uma versão para
+revisão, sem aprovação estética do usuário; arquivos privados ficam no catálogo.
+
 1. Preserve os originais e registre permissões, revisão, identidade e vínculo com os proxies. Trabalhe com assets e saídas em pastas distintas.
 2. Use as skills conforme a etapa. Em paralelo, cada agente entrega observações e propostas independentes. O editor responsável concilia mudanças e atualiza a timeline versionada.
 3. Assista ao bruto em contexto. Aumente a amostragem perto de gestos rápidos, trocas de mão, emendas, problemas de continuidade e cortes propostos. Registre arquivo, faixa de quadros, evidência e nível de certeza.
