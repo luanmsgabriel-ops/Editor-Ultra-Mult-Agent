@@ -1,0 +1,26 @@
+{
+  "schema": "clone-project-spec/1",
+  "id": "referencia-novos-personagens",
+  "intent": "reference_generate",
+  "brief": "Recriar a estrutura e o ritmo observados na referência usando novos personagens; registrar o que permanece e o que será substituído antes de dirigir as cenas.",
+  "inputs": [
+    {"id": "referencia", "role": "reference", "media_type": "video", "status": "needed", "purpose": "Referência a observar"},
+    {"id": "personagem", "role": "image", "media_type": "image", "status": "needed", "purpose": "Identidade do novo personagem"}
+  ],
+  "generation_answers": {
+    "mode": "adaptation",
+    "audience": "Público definido para a nova campanha.",
+    "aspect_ratio": "9:16",
+    "target_duration_s": 30,
+    "instruction_language": "en",
+    "dialogue_language": "pt-BR",
+    "subject_mode": "characters",
+    "voice_source": "new",
+    "audio_execution": "generation",
+    "text_policy": "post",
+    "target_tool": "undecided"
+  },
+  "preferences": {},
+  "requirements": [],
+  "settings": {"max_review_retries": 2}
+}

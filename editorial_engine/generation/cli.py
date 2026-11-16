@@ -35,6 +35,19 @@ def parser():
         if name == "request":
             command.add_argument("--analysis", type=Path)
             command.add_argument("--assets", type=Path)
+            command.add_argument("--reference-dossier", type=Path)
+            command.add_argument("--adaptation", type=Path)
+            command.add_argument("--include-images", action="store_true")
+            command.add_argument("--max-frames", type=int, default=24)
+            command.add_argument("--template-library", type=Path)
+            command.add_argument("--template-root", type=Path)
+            command.add_argument("--template-id", action="append", dest="template_ids")
+    direct = sub.add_parser("direct", help="Call a configured provider using the generation request contract")
+    direct.add_argument("request", type=Path)
+    direct.add_argument("--endpoint", required=True)
+    direct.add_argument("--model", required=True)
+    direct.add_argument("--api-key-env")
+    direct.add_argument("--output", type=Path, required=True)
     check = sub.add_parser("validate", help="Validate a directed plan and its duration arithmetic")
     check.add_argument("plan", type=Path)
     check.add_argument("--verify-files", action="store_true")
@@ -78,7 +91,15 @@ def main(argv=None):
             else:
                 result = build_request(_read(args.answers), profile=preferences,
                                        analysis=_read(args.analysis) if args.analysis else None,
-                                       assets=_read(args.assets) if args.assets else None)
+                                       assets=_read(args.assets) if args.assets else None,
+                                       reference_dossier=_read(args.reference_dossier) if args.reference_dossier else None,
+                                       adaptation=_read(args.adaptation) if args.adaptation else None,
+                                       include_images=args.include_images, max_frames=args.max_frames,
+                                       template_library=args.template_library, template_root=args.template_root,
+                                       template_ids=args.template_ids)
+        elif args.action == "direct":
+            from .provider import call_provider
+            result = call_provider(_read(args.request), endpoint=args.endpoint, model=args.model, api_key_env=args.api_key_env)
         elif args.action == "validate":
             plan = validate_plan(_read(args.plan), verify_files=args.verify_files)
             result = {"schema": "video-generation-validation/1", "status": "structurally_valid",

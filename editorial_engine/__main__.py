@@ -83,6 +83,8 @@ def parser():
     generation.add_argument("generation_args", nargs=argparse.REMAINDER)
     templates = sub.add_parser("templates", help="Inspect and instantiate a private, versioned motion template library")
     templates.add_argument("template_args", nargs=argparse.REMAINDER)
+    project = sub.add_parser("project", help="Connect inputs, direction, production, assembly and delivery in one versioned project")
+    project.add_argument("project_args", nargs=argparse.REMAINDER)
     return root
 
 
@@ -97,6 +99,9 @@ def main(argv=None):
     if argv and argv[0] == "templates":
         from .templates import main as template_main
         return template_main(argv[1:])
+    if argv and argv[0] == "project":
+        from .project_cli import main as project_main
+        return project_main(argv[1:])
     argparser = parser()
     args = argparser.parse_args(argv)
     try:

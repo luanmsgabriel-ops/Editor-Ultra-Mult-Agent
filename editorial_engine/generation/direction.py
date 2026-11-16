@@ -8,6 +8,8 @@ taking precedence over reusable preferences, including explicit false/empty.
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import re
 from pathlib import Path
@@ -91,6 +93,16 @@ Redija os campos destinados ao gerador no instruction_language solicitado; mante
 falas literais no dialogue_language. O compilador preserva a prosa, sem traduzir.
 Preencha brief.language_review apenas se um autor realmente revisou esses idiomas,
 identificando actor e method. Isso é atestação do revisor, não detecção automática.
+
+Se authoring_context estiver presente, seus references e evidence têm IDs
+portáveis e fatos atribuídos que podem ser preservados. reference_context contém
+decisões explícitas de manter/substituir, sem executar face swap ou gerar assets.
+Imagens efetivamente anexadas são enumeradas em image_manifest. Observe somente
+essas amostras para novas afirmações visuais: sampled_frames não é vídeo contínuo
+nem áudio ouvido. Identifique cada fonte, intervalo e escopo. Não invente arquivos
+ready: caminhos e hashes existentes devem vir do file_manifest recebido.
+Uma biblioteca de templates é contexto de autoria com funções e limitações; seus
+projetos não são efeitos nativos ou recursos renderizados disponíveis por padrão.
 
 O JSON de exemplo é apenas demonstrativo. Não transporte seus personagens, cenário,
 fala, estilo ou aprovação para este projeto. Responda com o plano inteiro conforme
@@ -394,15 +406,125 @@ def _verified_assets(assets):
     return result
 
 
-def build_request(answers: dict, *, profile=None, analysis=None, assets=None) -> dict:
+def _input_files(analysis, assets, references):
+    records = []
+
+    def add(item, identifier, role, kind=None):
+        name = nonempty(item.get("path"), identifier + ".path")
+        require(Path(name).is_absolute(), "absolute_path", "Use absolute local input paths", identifier)
+        sha256(item.get("sha256"), identifier + ".sha256")
+        verify_file(name, item["sha256"], identifier)
+        record = {"id": identifier, "role": role, "path": name, "sha256": item["sha256"]}
+        if kind:
+            record["kind"] = kind
+        records.append(record)
+
+    if analysis is not None:
+        for source in analysis["sources"]:
+            add(source, "source:" + source["id"], "source", source.get("kind", "video"))
+        for item in analysis["evidence"]:
+            for field in ("artifact", "transcript_artifact"):
+                if item.get(field):
+                    add(item[field], field + ":" + item["id"], field,
+                        "image" if field == "artifact" and item["kind"] == "visual" else "document")
+        for capability in analysis.get("capabilities", []):
+            if capability.get("status") == "verified":
+                proof = capability["verification"]
+                add({"path": proof["artifact_path"], "sha256": proof["artifact_sha256"]},
+                    "capability:" + capability["id"], "capability_proof", "document")
+    for item in assets:
+        if item["status"] == "ready":
+            add(item, "asset:" + item["id"], "asset", item["kind"])
+    for item in references:
+        add(item, "reference:" + item["id"], "reference", item.get("kind"))
+    return records
+
+
+def _images(analysis, assets, references, include_images, max_frames, max_image_bytes):
+    """Attach actual verified bytes; selecting samples is not semantic review."""
+    require(type(include_images) is bool, "include_images", "Image inclusion must be explicit")
+    integer(max_frames, "max_frames", minimum=1)
+    require(max_frames <= 96, "max_frames", "At most 96 source/asset images may be supplied")
+    integer(max_image_bytes, "max_image_bytes", minimum=1)
+    require(max_image_bytes <= 4 * 1024 * 1024, "image_budget", "Per-image budget cannot exceed 4 MiB")
+    candidates = []
+    if analysis is not None:
+        for item in analysis["evidence"]:
+            if item["kind"] == "visual" and item.get("artifact"):
+                candidates.append({"id": "evidence:" + item["id"], "origin": "analysis_sample",
+                                   "source_id": item["source_id"], "source_sha256": item["source_sha256"],
+                                   "interval": clone(item["interval"]), "path": item["artifact"]["path"],
+                                   "sha256": item["artifact"]["sha256"],
+                                   "frame": item["artifact"].get("frame")})
+    for item in assets:
+        if item["status"] == "ready" and item["kind"] == "image":
+            candidates.append({"id": "asset:" + item["id"], "origin": "asset_reference",
+                               "path": item["path"], "sha256": item["sha256"]})
+    sample_paths = {item["path"] for item in candidates}
+    for item in references:
+        if item.get("kind") == "image" and item["path"] not in sample_paths:
+            candidates.append({"id": "reference:" + item["id"], "origin": "reference_image",
+                               "reference_id": item["id"], "path": item["path"], "sha256": item["sha256"]})
+            sample_paths.add(item["path"])
+    if not include_images:
+        return [], [], [item["id"] for item in candidates]
+    if len(candidates) > max_frames:
+        indices = ([0] if max_frames == 1 else
+                   [round(i * (len(candidates) - 1) / (max_frames - 1)) for i in range(max_frames)])
+        selected = [candidates[i] for i in indices]
+    else:
+        selected = candidates
+    selected_ids = {item["id"] for item in selected}
+    parts, manifest = [], []
+    from PIL import Image
+    for item in selected:
+        verify_file(item["path"], item["sha256"], item["id"])
+        raw = Path(item["path"]).read_bytes()
+        require(len(raw) <= max_image_bytes, "image_budget", "Image exceeds the explicit byte budget", item["id"])
+        try:
+            with Image.open(io.BytesIO(raw)) as picture:
+                mime = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}.get(picture.format)
+                require(mime is not None and getattr(picture, "n_frames", 1) == 1, "image_format",
+                        "Use a still PNG, JPEG or WebP sample", item["id"])
+                width, height = picture.size
+                picture.verify()
+        except (OSError, ValueError) as exc:
+            if hasattr(exc, "issues"):
+                raise
+            raise ValueError("Image sample cannot be decoded: " + item["id"]) from exc
+        record = {**clone(item), "mime_type": mime, "bytes": len(raw), "width": width, "height": height,
+                  "scope": "single_still_image"}
+        manifest.append(record)
+        parts.extend([{"type": "text", "text": "Supplied image " + item["id"] + "; metadata: " + json.dumps(record, ensure_ascii=False)},
+                      {"type": "image_url", "image_url": {"url": "data:" + mime + ";base64," + base64.b64encode(raw).decode("ascii")}}])
+    return parts, manifest, [item["id"] for item in candidates if item["id"] not in selected_ids]
+
+
+def build_request(answers: dict, *, profile=None, analysis=None, assets=None,
+                  reference_dossier=None, adaptation=None, include_images=False,
+                  max_frames=24, max_image_bytes=4 * 1024 * 1024,
+                  max_request_bytes=20 * 1024 * 1024,
+                  template_library=None, template_root=None, template_ids=None) -> dict:
     """Build a JSON request for host direction. No network or media generation.
 
     Supplied editorial analysis and ready assets are bound to actual file bytes.
-    Their descriptions remain attributed observations. No images are embedded;
-    the host must inspect local sources to make new perceptual claims.
+    Their descriptions remain attributed observations. include_images explicitly
+    embeds verified still-image bytes for a configured multimodal director; this
+    builder does not execute that director or claim that it viewed the images.
     """
+    from ..reference_direction import (analysis_context, generation_context,
+                                       validate_dossier, verified_analysis)
     context = _flatten(answers, "answers")
-    verified = validate_analysis(analysis, verify_files=True) if analysis is not None else None
+    require((reference_dossier is None) == (adaptation is None), "reference_adaptation",
+            "Supply both the reference dossier and its explicit keep/replace contract")
+    reference_context = None
+    if reference_dossier is not None:
+        dossier = validate_dossier(reference_dossier, verify_files=True)
+        require(analysis is None or digest(analysis) == dossier["analysis_sha256"], "reference_analysis_changed",
+                "Supplied analysis and dossier must describe the same source revision")
+        analysis = dossier["analysis"]
+        reference_context = generation_context(dossier, adaptation, verify_files=True)
+    verified = verified_analysis(analysis, verify_files=True) if analysis is not None else None
     if verified is not None:
         for item in verified["evidence"]:
             for field in ("artifact", "transcript_artifact"):
@@ -414,6 +536,27 @@ def build_request(answers: dict, *, profile=None, analysis=None, assets=None) ->
             context["references"] = [{"id": source["id"], "path": source["path"], "sha256": source["sha256"]}
                                      for source in verified["sources"]]
     inventory = _verified_assets(assets)
+    authoring_context = reference_context or (analysis_context(verified) if verified is not None else {"references": [], "evidence": []})
+    references = clone(authoring_context["references"])
+    # Existing brief-only references remain conversational data unless complete
+    # file identities were explicitly supplied. Never invent paths for them.
+    for item in context.get("references", []) if isinstance(context.get("references"), list) else []:
+        if isinstance(item, dict) and all(field in item for field in ("id", "kind", "role", "path", "sha256")):
+            if not any(r["path"] == item["path"] and r["sha256"] == item["sha256"] for r in references):
+                require(not any(r["id"] == item["id"] for r in references), "reference_collision", "Reference IDs collide")
+                references.append(clone(item))
+    authoring_context = {**clone(authoring_context), "references": references}
+    files = _input_files(verified, inventory, references)
+    image_parts, image_manifest, omitted_images = _images(verified, inventory, references, include_images, max_frames, max_image_bytes)
+    require(template_library is not None or (template_root is None and template_ids is None),
+            "template_context", "Template root and IDs require an explicit library")
+    templates = None
+    if template_library is not None:
+        from ..templates import library_request
+        templates = library_request(template_library, root=template_root, template_ids=template_ids,
+                                    verify_files=True, summary=template_ids is None)
+    integer(max_request_bytes, "max_request_bytes", minimum=1)
+    require(max_request_bytes <= 20 * 1024 * 1024, "request_budget", "Request budget cannot exceed 20 MiB")
     intake = briefing(context, profile=profile)
     resolved = intake["resolved"]
     contract = response_contract()
@@ -424,21 +567,34 @@ def build_request(answers: dict, *, profile=None, analysis=None, assets=None) ->
     review_scope = {"kind": "supplied_text_and_verified_file_identity",
                     "source_bytes_verified": verified is not None,
                     "ready_asset_bytes_verified": [a["id"] for a in inventory if a["status"] == "ready"],
-                    "images_embedded": False, "continuous_motion_review": False, "listened_audio": False,
+                    "images_embedded": bool(image_manifest), "continuous_motion_review": False, "listened_audio": False,
                     "semantic_inference_executed": False, "user_approval_recorded": False}
+    review_scope.update(image_ids=[item["id"] for item in image_manifest], omitted_image_ids=omitted_images,
+                        image_scope="supplied_still_samples_not_continuous_playback",
+                        provider_input_use="not_executed")
     payload = {"briefing": intake, "brief": {key: clone(resolved[key]) for key in _BRIEF_FIELDS if key in resolved},
                "editorial_inputs": resolved, "analysis": verified, "assets": inventory,
                "review_scope": review_scope, "response_contract": contract,
+               "authoring_context": authoring_context, "reference_context": reference_context,
+               "template_library": templates, "file_manifest": files, "image_manifest": image_manifest,
+               "request_limits": {"max_frames": max_frames, "max_image_bytes": max_image_bytes,
+                                  "max_request_bytes": max_request_bytes},
                "example": {"purpose": "Illustrative original plan, never a reviewed result or a style requirement",
                            "plan": example},
                "limitations": ["The host still needs to author and review the direction.",
                                "File integrity does not certify an observation, identity or audiovisual quality.",
                                "Capabilities supplied in the brief are declarations, not a live provider check."]}
+    payload_text = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    content = ([{"type": "text", "text": payload_text}] + image_parts) if image_parts else payload_text
     body = {"messages": [{"role": "system", "content": DIRECTOR_INSTRUCTIONS},
-                          {"role": "user", "content": json.dumps(payload, ensure_ascii=False, allow_nan=False)}],
+                          {"role": "user", "content": content}],
             "response_format": {"type": "json_object"}}
+    require(len(json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8")) <= max_request_bytes,
+            "request_budget", "Direction request exceeds the explicit byte budget; reduce samples or context explicitly")
     return {"schema": "video-generation-director-request/1", "briefing": intake, "brief": payload["brief"],
             "response_contract": contract, "review_scope": review_scope,
             "analysis_sha256": digest(verified) if verified is not None else None,
+            "reference_context_sha256": digest(reference_context) if reference_context is not None else None,
+            "template_library_sha256": templates["library_sha256"] if templates is not None else None,
             "assets_sha256": digest(inventory), "request_sha256": digest(body), "body": body,
             "model_inference_executed": False, "media_generation_executed": False}

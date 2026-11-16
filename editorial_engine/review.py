@@ -62,6 +62,26 @@ def new_review(plan: dict, rendered_artifact: dict, *, max_retries: int = 2) -> 
     })
 
 
+def continue_review(previous: dict, plan: dict, rendered_artifact: dict, *, reason: str,
+                    consume_retry: bool = False) -> dict:
+    """Start coverage for new bytes while retaining prior evidence and budget.
+
+    Used across assembly, contextual finishing and externally finished returns.
+    No check or approval of an older film transfers to a new render.
+    """
+    _validate_state(previous)
+    nonempty(reason, "reason")
+    result = new_review(plan, rendered_artifact, max_retries=previous["max_retries"])
+    used = max(previous["retry_count"], result["retry_count"]) + int(consume_retry)
+    require(used <= result["max_retries"], "retry_limit", "Review repair budget is exhausted")
+    result["retry_count"] = used
+    result["archived_reviews"] = clone(previous["archived_reviews"])
+    result["archived_reviews"].append({"plan_sha256": previous["plan_sha256"],
+        "render_sha256": previous.get("render_sha256"), "reports": previous["reports"],
+        "status": previous["status"], "reason": reason})
+    return _seal(result)
+
+
 def _covered(ranges: list[dict], duration_s: float) -> tuple[bool, float]:
     cursor, covered = 0.0, 0.0
     for item in sorted(ranges, key=lambda value: (value["start_s"], value["end_s"])):

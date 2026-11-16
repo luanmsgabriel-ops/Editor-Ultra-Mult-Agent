@@ -1,0 +1,13 @@
+{
+  "schema": "clone-project-spec/1",
+  "id": "editar-bruto",
+  "intent": "edit",
+  "brief": "Editar a fala e as oportunidades visuais do vídeo atual; escolher cada intervenção pela sua função e preservar o que não exige intervenção.",
+  "inputs": [
+    {"id": "bruto", "role": "footage", "media_type": "video", "status": "needed", "purpose": "Filmagem atual a editar"}
+  ],
+  "generation_answers": {},
+  "preferences": {},
+  "requirements": [],
+  "settings": {"max_review_retries": 2}
+}

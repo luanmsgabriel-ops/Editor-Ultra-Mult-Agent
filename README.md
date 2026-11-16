@@ -8,6 +8,23 @@ Abra o repositório no Codex com acesso aos arquivos do projeto. Informe fontes,
 
 O repo usa Python 3.11+ e ffprobe. O piloto requer FFmpeg (libass, zscale e libx264), NumPy e fontes do sistema. Reconstruir o letreiro requer também Blender e Pillow.
 
+## Projeto Clone: da entrada à entrega
+
+`python -m editorial_engine project` conecta os motores em um projeto persistente: entradas com papel explícito, direção, produção de recursos, retorno dos clipes, montagem real, acabamento, revisão e pacote de entrega. O estado aponta a próxima ação e os arquivos que perderam validade quando uma fonte ou decisão muda. As onze entradas incluem editar um bruto, montar vários, adaptar referência, recompor com novas filmagens/pessoas, gerar sem referência, partir de imagens/áudio/roteiro, preencher lacunas, personalizar templates, receber clipes e revisar versões.
+
+```sh
+python -m editorial_engine project routes
+python -m editorial_engine project init trabalho/campanha examples/project_flow/original.json
+python -m editorial_engine project advance trabalho/campanha
+python -m editorial_engine project status trabalho/campanha
+```
+
+O [manual do projeto](docs/clone-project.md) reúne comandos e conexões. O [dossiê de referência](docs/reference-direction.md) define o que manter e substituir; o [provider de direção de geração](editorial_engine/generation/provider.py) envia imagens verificadas a um endpoint configurado e valida o plano retornado. A [fila de produção](docs/production-adapters.md) conecta motion local, instâncias de template, callbacks explícitos e exportação/importação manual de imagens, vídeo, voz e recursos de percepção. A [montagem](docs/assembly.md) executa cortes e transições entre fontes reais, com trims, formato e áudio declarados.
+
+Os serviços externos continuam exigindo adaptador ou retorno manual. Um pedido de imagem não equivale a uma imagem gerada; um template instanciado ainda precisa de render; a montagem conserva as pendências de pós. A entrega final exige revisão contínua do arquivo atual. É possível entregar prompts ou uma prévia antes dessa revisão. Para executar uma prova local de três clipes, sem modelos externos, use `python -m examples.project_flow.demo --output trabalho/prova-clone`.
+
+A [validação das conexões](docs/validation-clone-project.md) registra o gate desta etapa: 538 testes e 57 subtestes passaram, além da demonstração local de três clipes com duas transições e duração final medida. As simulações de provider permanecem identificadas.
+
 ## Direção contextual de novos vídeos
 
 O fluxo padrão para escolher efeitos em um novo bruto é `python -m visual_fidelity contextual-edit`. Ele prepara quadros reais, fala e recibos de rastreamento; recebe direção explícita de uma pessoa, do agente no host ou de um modelo multimodal configurado; concilia propostas e executa as operações viáveis. Cada decisão guarda intenção, evidência, intervalo, efeito, âncora, parâmetros e justificativa. Eventos sem decisão bloqueiam o render; preservar também exige justificativa explícita.
@@ -24,7 +41,7 @@ O [registro histórico de validação contextual](docs/validation-contextual-edi
 
 ## Direção e geração de prompts de vídeo
 
-`python -m editorial_engine generation` organiza briefing, personagens, cenas, imagens pendentes e ligações entre clipes; exporta prompts autossuficientes com configurações e anexos separados para a ferramenta escolhida. Ao receber os vídeos, registra metadados, quadros selecionados e dependências por hash. A direção é escrita pelo host; o compilador verifica contratos e duração, sem enviar jobs nem apresentar validação técnica como qualidade visual. Consulte o [guia de geração](docs/video-generation.md) e o [exemplo autoral de três clipes de dez segundos](examples/video_generation/three-clips-plan.json).
+`python -m editorial_engine generation` organiza briefing, personagens, cenas, imagens pendentes e ligações entre clipes; exporta prompts autossuficientes com configurações e anexos separados para a ferramenta escolhida. Ao receber os vídeos, registra metadados, quadros selecionados e dependências por hash. A direção pode ser escrita pelo host ou solicitada pelo comando `generation direct` a um endpoint configurado. O compilador verifica contratos e duração; não apresenta validação técnica como qualidade visual. Consulte o [guia de geração](docs/video-generation.md), a [direção com referências verificadas](docs/reference-direction.md) e o [exemplo autoral de três clipes de dez segundos](examples/video_generation/three-clips-plan.json).
 
 A [validação desta integração](docs/validation-video-generation.md) registra 453 testes e 42 subtestes aprovados, incluindo encadeamento e revisão de retornos com vídeos sintéticos reais. Essa evidência técnica não representa aprovação estética de um gerador externo.
 

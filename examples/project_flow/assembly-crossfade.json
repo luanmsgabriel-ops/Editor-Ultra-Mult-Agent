@@ -1,0 +1,16 @@
+{
+  "schema": "video-assembly/1",
+  "id": "example-explicit-overlap",
+  "revision": 1,
+  "sources": [
+    {"id": "take-a", "path": "/media/replace-with-real-take-a.mp4", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    {"id": "take-b", "path": "/media/replace-with-real-take-b.mp4", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
+  ],
+  "clips": [
+    {"id": "opening", "source_id": "take-a", "use": {"start_s": 0, "end_s": 4}, "fit": "cover", "reframe_fps": "resample", "audio": {"mode": "source", "gain_db": -3}},
+    {"id": "closing", "source_id": "take-b", "use": {"start_s": 0, "end_s": 4}, "fit": "cover", "reframe_fps": "resample", "audio": {"mode": "source", "gain_db": -3}}
+  ],
+  "joins": [{"from": "opening", "to": "closing", "transition": "crossfade", "duration_s": 0.5}],
+  "output": {"fps": "30/1", "width": 1080, "height": 1920, "audio": {"mode": "source", "sample_rate": 48000, "channels": 2, "missing": "silence"}},
+  "pending_post": [{"id": "post:closing:exact-title", "kind": "text", "status": "pending", "timeline_interval": {"start_s": 5, "end_s": 7.5}, "instruction": {"text": "Título literal a compor depois", "brief": "Definir tipografia e posição com a direção; a montagem não aplica este título."}}]
+}
