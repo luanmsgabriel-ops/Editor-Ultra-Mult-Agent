@@ -101,7 +101,7 @@ def render(manifest,output):
     if audio:
         p=root/audio['path'];speed=audio.get('speed',1)
         if not .5<=speed<=2:raise ValueError('Audio tempo must be .5..2')
-        filters=f"atrim=start={audio.get('start',0)},asetpts=PTS-STARTPTS,atempo={speed},atrim=duration={frames/fps},afade=t=out:st={frames/fps-.18}:d=.18"
+        filters=f"atrim=start={audio.get('start',0)},asetpts=PTS-STARTPTS,atempo={speed},atrim=duration={frames/fps},afade=t=out:st={frames/fps-.18}:d=0.18"
         subprocess.run(['ffmpeg','-v','error','-y','-i',str(silent),'-i',str(p),'-map','0:v','-map','1:a','-c:v','copy','-af',filters,'-c:a','aac','-b:a','192k','-t',str(frames/fps),'-movflags','+faststart',str(output)],check=True);silent.unlink()
         sources.hashes['audio']=hashlib.sha256(p.read_bytes()).hexdigest()
     else:silent.replace(output)
