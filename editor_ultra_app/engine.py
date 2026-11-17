@@ -992,6 +992,8 @@ class EngineAdapter:
                 "The base must match the reference raster, frame count and constant frame clock")
         request = self._current_clone_images(record)
         needs = request["needs"] if request else []
+        require(bool(request) != bool(spec.no_generated_images_reason and spec.no_generated_images_reason.strip()),
+                "clone_image_assessment", "Register the needed PNGs or explain why no generated images improve this reconstruction")
         by_id = {item["id"]: item for item in needs}
         require(set(spec.images) == set(by_id), "clone_images_pending",
                 "Provide a verified PNG for each current image request")
@@ -1095,6 +1097,7 @@ class EngineAdapter:
         stage.update(status="awaiting_direction", preview_kind="reconstruction",
                      image_request_digest=digest(request), image_needs=needs, clock=clock,
                      image_bindings=bindings, fonts=fonts, reference_sha256=reference["sha256"],
+                     no_generated_images_reason=spec.no_generated_images_reason,
                      base_sha256=base["sha256"], base_asset_id=base["id"])
         return {"kind": "clone", "status": "awaiting_direction", "preview_kind": "reconstruction",
                 "request": self._portable(record, direction), "analysis": self._portable(record, analysis),

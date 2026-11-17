@@ -76,6 +76,9 @@ def test_png_request_moves_through_real_render(tmp_path):
     write_video(base, "blue")
     add("ref", ref, "video/mp4")
     plate = add("footage", base, "video/mp4")
+    with pytest.raises(ValidationError, match="Register the needed PNGs"):
+        adapter.prepare(project_id, "clone", expected_revision=revision,
+                        reconstruction={"base_asset_id": plate["id"]})
     req = adapter.request_clone_images(project_id, [{
         "id": "shield", "scene_id": "scene-1", "frames": [0, 10], "reference_frame": 5,
         "placement": "planar_behind", "description": "Green shield with transparent margins.",

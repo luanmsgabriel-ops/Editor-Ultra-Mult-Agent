@@ -110,7 +110,9 @@ where camera movement reveals depth or a previously hidden surface.
 3. Call `editor_prepare(kind="clone", reconstruction=...)` with the plate ID
    and a mapping from each image request ID to its returned asset ID. The
    reference and plate must share the same constant frame clock and raster.
-   The renderer takes its base pixels and audio from the imported plate.
+   If scene assessment finds no need for a generated asset, supply
+   `no_generated_images_reason` in place of an image request. The renderer
+   takes its base pixels and audio from the imported plate.
    Put any intended audio mix on that plate before preparation.
 4. Bind every requested image to an effect in the plan across its declared
    interval. Use `native.overlay` in screen space, `native.behind_subject`

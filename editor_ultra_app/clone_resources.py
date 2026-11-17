@@ -62,6 +62,7 @@ class MeasuredProjection(StrictModel):
 class CloneResources(StrictModel):
     base_asset_id: AssetId
     images: dict[AssetId, AssetId] = Field(default_factory=dict, max_length=12)
+    no_generated_images_reason: str | None = Field(default=None, min_length=5, max_length=1200)
     motion_layers: dict[AssetId, AssetId] = Field(default_factory=dict, max_length=12)
     protection_asset_id: AssetId | None = None
     projection_asset_id: AssetId | None = None
