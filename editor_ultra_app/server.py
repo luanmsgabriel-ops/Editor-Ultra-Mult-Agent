@@ -146,6 +146,13 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 return engine.apply_direction(project_id, kind, job["direction"], expected_revision=job["expected_revision"])
             if job["operation"] == "render":
                 return engine.render(project_id, kind, expected_revision=job["expected_revision"])
+            if job["operation"] == "queue_bundled_motion":
+                return engine.queue_bundled_motion(project_id, job["recipe"],
+                                                    expected_revision=job["expected_revision"])
+            if job["operation"] == "execute_bundled_motion":
+                space_for(16 * 1024 * 1024)
+                return engine.execute_bundled_motion(project_id,
+                                                      expected_revision=job["expected_revision"])
             if job["operation"] == "compare_temporal":
                 space_for(4 * 1024 * 1024)
                 return engine.compare_temporal(project_id, center_s=job["center_s"],
@@ -483,6 +490,29 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, expected_revision)
             return result(engine.compare_clone(project_id, frames, expected_revision=expected_revision),
                           "Comparação por quadro registrada. Fidelidade estética e aprovação continuam pendentes.")
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_queue_bundled_motion(project_id: str, recipe: dict[str, Any],
+                                   expected_revision: int, request_id: str) -> CallToolResult:
+        """Enfileira receita 2D declarativa e limitada no produtor Motion Lab já registrado.
+
+        Não usa pixels da referência para montar a animação; a autoria e a
+        execução são separadas, sem alegação de clonagem fiel.
+        """
+        return enqueue(project_id, "queue_bundled_motion", "motion", expected_revision,
+                       request_id, recipe=recipe)
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_execute_bundled_motion(project_id: str, expected_revision: int,
+                                      request_id: str) -> CallToolResult:
+        """Executa a receita atualmente enfileirada no motor local e registra recibo.
+
+        Uma sequência renderizada pode ser revisada; não recebe aprovação automática.
+        """
+        return enqueue(project_id, "execute_bundled_motion", "motion", expected_revision,
+                       request_id)
 
     @server.tool(annotations=write)
     @offload
