@@ -467,10 +467,10 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
 
     @server.tool(annotations=write)
     @offload
-    def editor_compare_clone(project_id: str, frames: list[int], expected_revision: int) -> CallToolResult:
+    def editor_compare_clone(project_id: str, expected_revision: int, frames: list[int] | None = None) -> CallToolResult:
         """Compara os mesmos quadros da referência e da prévia, sem retime, ajuste ou aprovação.
 
-        Máximo de 16 quadros explícitos. Retorna comparação, erros localizados
+        Máximo de 16 quadros, selecionados pelo relógio real ou por índices explícitos. Retorna comparação, erros localizados
         e imagem original/clone/diferença, com IDs de evidência vinculados ao projeto.
         """
         queue.assert_idle(project_id)
