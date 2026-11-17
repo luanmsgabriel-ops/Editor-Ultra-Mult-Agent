@@ -44,6 +44,7 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
             widget_tools = {
                 "editor_open", "editor_list_templates", "editor_get_project", "editor_save_project",
                 "editor_import_file", "editor_begin_upload", "editor_prepare", "editor_record_review",
+                "editor_compare_clone", "editor_compare_temporal",
             }
             assert widget_tools | {"editor_render"} <= tools_by_name.keys()
             opening_tool = tools_by_name["editor_open"]
