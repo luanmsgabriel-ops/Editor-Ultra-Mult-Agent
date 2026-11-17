@@ -37,8 +37,8 @@ from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError, UploadTicketStore
 
 
-UI_URI = "ui://editor-ultra/studio-v4.html"
-UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3))
+UI_URI = "ui://editor-ultra/studio-v5.html"
+UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4))
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
 UPLOAD_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -56,6 +56,23 @@ class Attachment(BaseModel):
     file_id: str = Field(min_length=1, max_length=300)
     mime_type: str = Field(default="", max_length=150)
     file_name: str = Field(default="", max_length=240)
+
+
+class UIUploadRequest(BaseModel):
+    """Private command payload inside the established save tool's state object."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"]
+    file_name: str = Field(min_length=1, max_length=240)
+    mime_type: str = Field(min_length=3, max_length=150)
+    size_bytes: int = Field(ge=1, le=MAX_FILE_BYTES)
+    upload_id: str = Field(min_length=36, max_length=36)
+    shot_id: str | None = Field(default=None, min_length=1, max_length=96, pattern=ID)
+
+
+class UIUploadCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    ui_action: Literal["begin_upload"]
+    upload_request: UIUploadRequest
 
 
 def offload(function):
@@ -200,6 +217,28 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             tickets.complete(claim, value["asset_id"])
             return value
 
+    def begin_ticket(binding):
+        """Shared ticket path; neither entry point saves UI choices or revisions."""
+        with lock:
+            tickets.check_binding(binding)
+            received = upload_receipt(binding)
+            if received is not None:
+                tickets.recover(binding, received["asset_id"])
+                return result(received, "Arquivo já recebido. Estado atual recuperado sem repetir o envio.")
+            preflight_ticket(binding)
+            token, expires = tickets.issue(binding)
+        return CallToolResult(
+            content=[TextContent(type="text", text="Envio autorizado para o arquivo selecionado no painel.")],
+            structuredContent={"status": "authorized", "project_id": binding.project_id,
+                               "upload_id": binding.upload_id, "revision": binding.expected_revision,
+                               "expires_at": expires},
+            _meta={"editor": {"upload": {"upload_id": binding.upload_id,
+                                       "url": base + "/upload-tickets/" + binding.upload_id,
+                                       "method": "POST", "headers": {"Authorization": "Upload " + token,
+                                                                     "Content-Type": binding.mime_type},
+                                       "expires_at": expires, "max_bytes": binding.size_bytes}}},
+        )
+
     hostname = urlsplit(base).netloc
     server = FastMCP(
         "Editor Ultra", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")),
@@ -212,8 +251,9 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                       "o resultado é evidência por elemento, ainda sem aplicar motion ou aprovar render. "
                       "Não chame um pedido ou teste técnico de clonagem pronta, "
                       "nem registre aprovação do usuário sem confirmação explícita do arquivo atual. "
-                      "Anexos do chat usam file params; arquivos selecionados no painel usam editor_begin_upload "
-                      "e envio direto autorizado. Caminhos locais ou blob: não são anexos."),
+                      "Anexos do chat usam file params; o painel autoriza envio direto por editor_save_project "
+                      "com state.ui_action='begin_upload' e upload_request, sem salvar escolhas nesse comando. "
+                      "Caminhos locais ou blob: não são anexos."),
         auth_server_provider=owner, auth=owner.auth_settings(),
         stateless_http=True, json_response=True,
         transport_security=TransportSecuritySettings(
@@ -291,7 +331,17 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     @offload
     def editor_save_project(state: dict[str, Any], project_id: str | None = None,
                             expected_revision: int | None = None) -> CallToolResult:
-        """Salva escolhas do painel. Aprovações e recibos enviados no JSON nunca criam aprovação no servidor."""
+        """Salva escolhas do painel; aprovações e recibos no JSON não criam aprovação.
+
+        O comando state.ui_action='begin_upload', com upload_request estrito,
+        apenas autoriza o envio direto e não salva escolhas ou revisões.
+        """
+        if "ui_action" in state or "upload_request" in state:
+            command = UIUploadCommand.model_validate(state)
+            if not project_id or expected_revision is None:
+                raise ValueError("O projeto existente e sua revisão são obrigatórios para autorizar o envio.")
+            return begin_ticket(UploadBinding(project_id=project_id, expected_revision=expected_revision,
+                                              **command.upload_request.model_dump()))
         if project_id:
             queue.assert_idle(project_id)
         with lock:
@@ -336,23 +386,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """
         binding = UploadBinding(upload_id, project_id, role, expected_revision,
                                 file_name, mime_type, size_bytes, shot_id)
-        with lock:
-            tickets.check_binding(binding)
-            received = upload_receipt(binding)
-            if received is not None:
-                tickets.recover(binding, received["asset_id"])
-                return result(received, "Arquivo já recebido. Estado atual recuperado sem repetir o envio.")
-            preflight_ticket(binding)
-            token, expires = tickets.issue(binding)
-        return CallToolResult(
-            content=[TextContent(type="text", text="Envio autorizado para o arquivo selecionado no painel.")],
-            structuredContent={"status": "authorized", "project_id": project_id, "upload_id": upload_id,
-                               "revision": expected_revision, "expires_at": expires},
-            _meta={"editor": {"upload": {"upload_id": upload_id, "url": base + "/upload-tickets/" + upload_id,
-                                       "method": "POST", "headers": {"Authorization": "Upload " + token,
-                                                                     "Content-Type": mime_type},
-                                       "expires_at": expires, "max_bytes": size_bytes}}},
-        )
+        return begin_ticket(binding)
 
     def enqueue(project_id, operation, kind, expected_revision, request_id, **extra):
         arguments = {"kind": kind, "expected_revision": expected_revision, **extra}
