@@ -133,9 +133,19 @@ def begin(session, project, content, **changes):
     arguments = {"project_id": project["project_id"], "role": "ref", "expected_revision": project["revision"],
                  "file_name": "synthetic.mp4", "mime_type": "video/mp4", "size_bytes": len(content),
                  "upload_id": str(uuid.uuid4()), **changes}
-    response = session.call_tool("editor_begin_upload", arguments)
+    response = authorize_upload(session, arguments)
     structured(response)
     return arguments, response
+
+
+def compatibility_arguments(arguments):
+    return {"project_id": arguments["project_id"], "expected_revision": arguments["expected_revision"],
+            "state": {"ui_action": "begin_upload", "upload_request": {
+                key: value for key, value in arguments.items() if key not in {"project_id", "expected_revision"}}}}
+
+
+def authorize_upload(session, arguments):
+    return session.call_tool("editor_save_project", compatibility_arguments(arguments))
 
 
 def test_direct_upload_cors_private_ticket_and_current_receipt_recovery(connected):
@@ -150,7 +160,8 @@ def test_direct_upload_cors_private_ticket_and_current_receipt_recovery(connecte
     assert app.state.editor_engine.get_project(project["project_id"]) == project
 
     anonymous = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                                        "params": {"name": "editor_begin_upload", "arguments": arguments}},
+                                        "params": {"name": "editor_save_project",
+                                                   "arguments": compatibility_arguments(arguments)}},
                             headers={"Origin": ORIGIN, "Accept": "application/json, text/event-stream"})
     assert anonymous.status_code == 401
     options = client.options(grant["url"], headers={"Origin": ORIGIN, "Access-Control-Request-Method": "POST",
@@ -189,7 +200,7 @@ def test_direct_upload_cors_private_ticket_and_current_receipt_recovery(connecte
     assert repeated.status_code == 200
     assert repeated.json()["revision"] == changed["revision"]
     assert repeated.json()["state"] == changed["state"]
-    recovered = session.call_tool("editor_begin_upload", {**arguments, "expected_revision": changed["revision"]})
+    recovered = authorize_upload(session, {**arguments, "expected_revision": changed["revision"]})
     assert structured(recovered)["state"] == changed["state"]
     assert structured(recovered)["asset_id"] == current["asset_id"]
     assert recovered.get("_meta", {}).get("editor", {}).get("upload") is None
@@ -198,7 +209,10 @@ def test_direct_upload_cors_private_ticket_and_current_receipt_recovery(connecte
         db.execute("UPDATE tickets SET expires=0")
     assert client.post(grant["url"], content=content, headers=grant["headers"]).status_code == 401
     # Recovery remains an authenticated MCP read; it does not revive that ticket.
-    assert structured(session.call_tool("editor_begin_upload", arguments))["revision"] == changed["revision"]
+    assert structured(authorize_upload(session, arguments))["revision"] == changed["revision"]
+    # The dedicated tool remains compatible and reaches exactly the same helper.
+    dedicated = structured(session.call_tool("editor_begin_upload", arguments))
+    assert dedicated["state"] == changed["state"] and dedicated["asset_id"] == current["asset_id"]
     assert not app.state.editor_queue.list(project["project_id"])
 
 
@@ -213,15 +227,15 @@ def test_direct_upload_enforces_mime_body_destination_and_revision(connected):
     assert overflow.status_code == 413
     assert not list((app.state.editor_engine.data_dir / "incoming").glob("direct-*.upload"))
     assert not app.state.editor_engine.get_project(project["project_id"])["assets"]
-    response = session.call_tool("editor_begin_upload", arguments)
+    response = authorize_upload(session, arguments)
     grant = response["_meta"]["editor"]["upload"]
     incomplete = client.post(grant["url"], content=content[:-1],
                              headers={**grant["headers"], "Content-Length": str(len(content))})
     assert incomplete.status_code == 400
-    assert session.call_tool("editor_begin_upload", {**arguments, "role": "footage"}).get("isError")
-    assert session.call_tool("editor_begin_upload", {**arguments, "upload_id": str(uuid.uuid4()),
-                                                      "role": "shot", "shot_id": "missing-shot"}).get("isError")
-    response = session.call_tool("editor_begin_upload", arguments)
+    assert authorize_upload(session, {**arguments, "role": "footage"}).get("isError")
+    assert authorize_upload(session, {**arguments, "upload_id": str(uuid.uuid4()),
+                                     "role": "shot", "shot_id": "missing-shot"}).get("isError")
+    response = authorize_upload(session, arguments)
     grant = response["_meta"]["editor"]["upload"]
     changed = structured(session.call_tool("editor_save_project", {
         "project_id": project["project_id"], "expected_revision": project["revision"], "state": {"objective": "Revision advanced"},
@@ -230,7 +244,7 @@ def test_direct_upload_enforces_mime_body_destination_and_revision(connected):
     assert stale.status_code == 409
     assert not app.state.editor_engine.get_project(project["project_id"])["assets"]
     assert app.state.editor_engine.get_project(project["project_id"])["revision"] == changed["revision"]
-    assert session.call_tool("editor_begin_upload", arguments).get("isError")
+    assert authorize_upload(session, arguments).get("isError")
     # Browsers with an empty File.type may use octet-stream; bytes are still probed.
     _, response = begin(session, changed, content, mime_type="application/octet-stream")
     grant = response["_meta"]["editor"]["upload"]
@@ -254,9 +268,47 @@ def test_commit_receipt_recovers_after_ledger_finalization_failure(connected, mo
     assert len(committed["assets"]) == 1
     # A restarted ledger invalidates incomplete claims, but not the engine receipt.
     UploadTicketStore(app.state.editor_upload_tickets.path.parent)
-    recovered = session.call_tool("editor_begin_upload", {**arguments, "expected_revision": committed["revision"]})
+    recovered = authorize_upload(session, {**arguments, "expected_revision": committed["revision"]})
     value = structured(recovered)
     assert value["idempotent"] and value["asset_id"] == committed["assets"][0]["id"]
     assert value["state"] == committed["state"] and value["revision"] == committed["revision"]
     assert recovered.get("_meta", {}).get("editor", {}).get("upload") is None
     assert len(app.state.editor_engine.get_project(project["project_id"])["assets"]) == 1
+
+
+def test_upload_command_fails_closed_without_saving_or_creating_projects(connected):
+    app, client, session, project, content = connected
+    request = {"role": "ref", "file_name": "synthetic.mp4", "mime_type": "video/mp4",
+               "size_bytes": len(content), "upload_id": str(uuid.uuid4())}
+    valid = {"ui_action": "begin_upload", "upload_request": request}
+    invalid_states = [
+        {"ui_action": "begin_upload"},
+        {"upload_request": request},
+        {**valid, "ui_action": ""},
+        {**valid, "ui_action": None},
+        {**valid, "ui_action": "save"},
+        {**valid, "upload_request": []},
+        {**valid, "objective": "This must never be saved"},
+        {**valid, "upload_request": {**request, "project_id": str(uuid.uuid4())}},
+        {**valid, "upload_request": {**request, "expected_revision": 0}},
+        {**valid, "upload_request": {**request, "size_bytes": str(len(content))}},
+        {**valid, "upload_request": {**request, "size_bytes": True}},
+        {**valid, "upload_request": {**request, "file_name": "../synthetic.mp4"}},
+    ]
+    for state in invalid_states:
+        rejected = session.call_tool("editor_save_project", {
+            "state": state, "project_id": project["project_id"], "expected_revision": project["revision"],
+        })
+        assert rejected.get("isError"), state
+    for envelope in ({}, {"project_id": project["project_id"]}, {"expected_revision": project["revision"]}):
+        assert session.call_tool("editor_save_project", {"state": valid, **envelope}).get("isError")
+    assert app.state.editor_engine.get_project(project["project_id"]) == project
+    assert len(app.state.editor_engine.list_projects()) == 1
+    with sqlite3.connect(app.state.editor_upload_tickets.path) as db:
+        assert db.execute("SELECT COUNT(*) FROM tickets").fetchone()[0] == 0
+    saved = structured(session.call_tool("editor_save_project", {
+        "state": {"objective": "Normal save still works"}, "project_id": project["project_id"],
+        "expected_revision": project["revision"],
+    }))
+    assert saved["revision"] == project["revision"] + 1
+    assert saved["state"]["objective"] == "Normal save still works"
