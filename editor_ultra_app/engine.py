@@ -98,6 +98,9 @@ class EngineAdapter:
         require(path.is_file(), "project_missing", "Project not found")
         result = json.loads(path.read_text(encoding="utf-8"))
         require(result.get("project_id") == project_id, "project_identity", "Stored project identity differs")
+        if "review_draft_bindings" not in result:
+            # Establish legacy projects' prior context before applying a mutation.
+            self._sync_review_drafts(result)
         return result
 
     @contextmanager
@@ -120,6 +123,7 @@ class EngineAdapter:
                 "revision_conflict", "Reload the project before submitting this change")
 
     def _write(self, record, action):
+        self._sync_review_drafts(record)
         record["revision"] += 1
         record["updated_at"] = _now()
         record["history"].append({"at": record["updated_at"], "action": action,
@@ -188,6 +192,31 @@ class EngineAdapter:
     def _preview_binding(self, record, stage):
         return digest({"basis": self._clone_binding(record) if stage == "clone" else self._edit_binding(record),
                        "version": record.get("preview_versions", {}).get(stage, 0)})
+
+    def _sync_review_drafts(self, record):
+        """Bind draft review fields to the current preview without recording approval."""
+        bindings = record.setdefault("review_draft_bindings", {})
+        state = record["state"]
+        for stage, role in (("clone", "clone"), ("final", "result")):
+            selected = self._selected(record, role)
+            preview = selected[0] if selected else None
+            context = {"asset_id": preview["id"] if preview else None,
+                       "binding": self._preview_binding(record, stage)}
+            previous = bindings.get(stage)
+            changed = previous is not None and previous != context
+            stale = preview is not None and preview.get("basis_binding") != context["binding"]
+            if changed or stale:
+                state[stage + "Confirm"] = False
+                state[stage + "Checks"] = {}
+            if changed:
+                # Notes written before the first preview upload remain useful when
+                # that same direction receives its first real file. A confirmation
+                # still resets; later files never inherit a previous file's notes.
+                first_preview = (previous["asset_id"] is None and preview is not None
+                                 and previous["binding"] == context["binding"])
+                if not first_preview:
+                    state["comments"] = [item for item in state["comments"] if item["kind"] != stage]
+            bindings[stage] = context
 
     def _invalidate(self, record, before):
         clone_changed = before[0] != self._clone_binding(record)
@@ -320,6 +349,29 @@ class EngineAdapter:
                 require(all(str(k).isdigit() and v in {"", "ok", "na", "fix"} for k, v in incoming[key].items()),
                         "ui_checks", "Unsupported checklist value")
                 state[key] = clone(incoming[key])
+        for key in ("cloneConfirm", "finalConfirm"):
+            if key in incoming:
+                require(type(incoming[key]) is bool, "ui_review_draft", "Review draft confirmation must be a boolean")
+                state[key] = incoming[key]
+        if "comments" in incoming:
+            require(isinstance(incoming["comments"], list) and len(incoming["comments"]) <= 200,
+                    "ui_review_draft", "At most 200 review notes are allowed")
+            comments, identifiers = [], set()
+            for raw in incoming["comments"]:
+                require(isinstance(raw, dict) and raw.get("kind") in {"clone", "final"},
+                        "ui_review_draft", "Choose the review stage for each note")
+                identifier = _identifier(raw.get("id"))
+                require(identifier not in identifiers, "ui_review_draft", "Review note IDs must be unique")
+                identifiers.add(identifier)
+                time = _text(raw.get("time", ""), 20)
+                text = _text(raw.get("text", ""), 2000)
+                require(bool(re.fullmatch(r"\d{1,3}:[0-5]\d(?:[.,]\d+)?", time)) and bool(text.strip()),
+                        "ui_review_draft", "Use a mm:ss timecode and a nonempty review note")
+                resolved = raw.get("resolved", False)
+                require(type(resolved) is bool, "ui_review_draft", "Review note resolution must be a boolean")
+                comments.append({"id": identifier, "kind": raw["kind"], "time": time, "text": text,
+                                 "component": _text(raw.get("component", ""), 120), "resolved": resolved})
+            state["comments"] = comments
         # Approvals, file paths/hashes, revisions, and histories are never imported.
 
     def save_project(self, project_id: str | None, state: dict, expected_revision: int | None = None):
