@@ -16,6 +16,8 @@ import numpy as np
 from .cadence_models import beat_this, flow_estimator, transnet_v2
 from .geometric_replay import evaluate
 from .music_sync import analyze_audio, retime_binding_schedule
+from .motion_binding import bind_timeline_motion
+from .motion_profile import validate_profile
 
 SCHEMA = 'reference-cadence/1'
 
@@ -212,6 +214,18 @@ def analyze(path, *, soundtrack=None, audio_start=0, audio_speed=1, rotation=Non
         ),
         'model_files_sha256': model_files,
         'status': 'baseline' if baseline else 'model_inference',
+        'motion_semantics': {
+            'kind': 'regional_optical_flow_summary',
+            'element_identity_measured': False,
+            'render_curves_bound': False,
+            'transition_windows': [
+                {'frames': list(interval), 'classification': 'unclassified',
+                 'regional_flow': 'excluded_pending_transition_review',
+                 'next_action': 'classify_cut_or_measure_continuous_element_motion'}
+                for interval in intervals
+            ],
+            'continuous_transition_route': 'motion-profile measure with explicit element and interval',
+        },
     }
 
 
@@ -227,15 +241,50 @@ def project_time(position, target_music, beat_offset):
     return beats[index] + position['beat_fraction'] * (beats[index + 1] - beats[index])
 
 
+def _require_cadence_motion_clock(profile, reference_rate, reference_frames):
+    """Frame/FPS landmarks are valid only for a compatible measured CFR clock.
+
+    General motion-profile binding can retain VFR PTS via an explicit time_map;
+    this cadence adapter must not reinterpret that clock through a nominal FPS.
+    """
+    validate_profile(profile)
+    source=profile['source']
+    error='Motion PTS clock is incompatible with CFR cadence; use motion-profile bind with an explicit time_map for VFR or another source clock'
+    if source.get('clock_kind')=='vfr':
+        raise ValueError(error)
+    if reference_rate<=0:
+        raise ValueError('Reference FPS must be positive')
+    tick=Fraction(source['time_base']);first=source['first_pts']
+    for element in profile['elements']:
+        for channel in element['channels'].values():
+            for segment in channel['segments']:
+                for frame,pts in zip(segment['frames'],segment['pts']):
+                    elapsed=(pts-first)*tick
+                    if not 0<=frame<reference_frames or abs(elapsed-frame/reference_rate)>tick:
+                        raise ValueError(error)
+
+
 def apply_cadence(template, reference, anchors, *, target_music=None, beat_offset=0,
-                  reference_start_frame=0, mask_track=None):
+                  reference_start_frame=0, mask_track=None, motion_profile=None,
+                  motion_bindings=None):
     """Retarget selected cut/transition landmarks while preserving layer bindings."""
     if reference.get('schema') != SCHEMA:
         raise ValueError('Expected a reference cadence map')
     if not anchors:
         raise ValueError('Select at least one reference cut or marker')
+    if (motion_profile is None) != (motion_bindings is None):
+        raise ValueError('Measured motion requires both a profile and explicit element bindings')
+    if motion_profile is not None and motion_profile.get('source',{}).get('sha256') != reference['source_sha256']:
+        raise ValueError('Motion profile belongs to another reference video')
+    for row in template['frame_bindings']:
+        items=[row.get(k,{}) for k in ('base','insert','foreground')]
+        items.extend(layer.get('insert',{}) for layer in row.get('layers',[]))
+        if any('motion' in item for item in items):
+            raise ValueError('Apply cadence to an unbound template, then bind motion on the new output clock')
     rate = Fraction(str(template['fps']))
     reference_rate = Fraction(reference['fps'])
+    if motion_profile is not None:
+        _require_cadence_motion_clock(motion_profile,reference_rate,reference['frames'])
     if type(reference_start_frame) is not int or not 0 <= reference_start_frame < reference['frames']:
         raise ValueError('Reference start frame is outside the reference')
     if target_music is not None and (reference_start_frame or mask_track):
@@ -340,6 +389,22 @@ def apply_cadence(template, reference, anchors, *, target_music=None, beat_offse
         'providers': {'cuts': reference['cut_detector'], 'motion': reference['motion_backend'],
                       'music': reference['music']['backend']},
     }
+    if motion_profile is not None:
+        # Keep source time fractional. Raster frame indices are not the curve clock.
+        motion_time_map=[
+            {'output_time':0.0,'source_time':float(reference_start_frame/reference_rate)},
+            *({'output_time':float(e['output_frame']/rate),
+               'source_time':float(e['reference_frame']/reference_rate)} for e in evidence),
+            {'output_time':float(total/rate),
+             'source_time':float(reference_start_frame/reference_rate+total/rate)},
+        ]
+        output=bind_timeline_motion(output,motion_profile,motion_bindings,time_map=motion_time_map)
+        output['reference_cadence']['element_motion']={
+            'profile_sha256':output['element_motion']['bindings'][0]['profile_sha256'],
+            'bindings':len(output['element_motion']['bindings']),
+            'time_map':motion_time_map,
+            'regional_flow_used_as_element_trajectory':False,
+        }
     return output
 
 
@@ -372,6 +437,8 @@ def main():
     apply.add_argument('--beat-offset', type=int, default=0)
     apply.add_argument('--reference-start-frame', type=int, default=0)
     apply.add_argument('--mask-track', type=Path, help='JSON list of {frame, mask} reference samples')
+    apply.add_argument('--motion-profile', type=Path, help='Fitted element-motion-curves/1 profile')
+    apply.add_argument('--motion-bindings', type=Path, help='Explicit element targets and output frame intervals')
     apply.add_argument('--render', type=Path)
     args = parser.parse_args()
 
@@ -397,7 +464,8 @@ def main():
         result = apply_cadence(load(args.template), load(args.reference), load(args.anchors),
                                target_music=None if target is None else target['music'],
                                beat_offset=args.beat_offset, reference_start_frame=args.reference_start_frame,
-                               mask_track=load(args.mask_track))
+                               mask_track=load(args.mask_track),motion_profile=load(args.motion_profile),
+                               motion_bindings=load(args.motion_bindings))
         validate_edit(result, args.output.parent)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + '\n')

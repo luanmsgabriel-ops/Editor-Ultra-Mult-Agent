@@ -31,7 +31,7 @@ from starlette.routing import Route
 from . import __version__
 from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
-from .engine import EngineAdapter
+from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 
@@ -96,6 +96,10 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 return engine.apply_direction(project_id, kind, job["direction"], expected_revision=job["expected_revision"])
             if job["operation"] == "render":
                 return engine.render(project_id, kind, expected_revision=job["expected_revision"])
+            if job["operation"] == "measure_motion":
+                space_for(MOTION_LIMITS["max_artifact_bytes"])
+                return engine.measure_motion(project_id,job["asset_id"],job["specification"],
+                                             expected_revision=job["expected_revision"])
             raise ValueError("Operação indisponível.")
 
     queue = JobQueue(root, execute)
@@ -126,7 +130,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
 
     def space_for(size=0):
         limit = int(os.environ.get("EDITOR_ULTRA_MAX_STORAGE_MB", "850")) * 1024 * 1024
-        used = sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+        used = stored_bytes(root)
         if size < 0 or used + size > limit:
             raise ValueError("O armazenamento privado está cheio. Arquive arquivos antes de um novo envio.")
         if shutil.disk_usage(root).free < size + 64 * 1024 * 1024:
@@ -158,7 +162,10 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                       "de prompts; o usuário produz clipes fora e os devolve. prepare cria análise/pedido real; "
                       "a direção criativa deve ser autorada no host, depois importada com editor_apply_direction. "
                       "Execute editor_render somente após um plano atual válido. Consulte editor_get_project "
-                      "para trabalhos e pendências. Não chame um pedido ou teste técnico de clonagem pronta, "
+                      "para trabalhos e pendências. "
+                      "Use editor_measure_motion com asset_id e janelas/ROIs explícitas para medir movimento; "
+                      "o resultado é evidência por elemento, ainda sem aplicar motion ou aprovar render. "
+                      "Não chame um pedido ou teste técnico de clonagem pronta, "
                       "nem registre aprovação do usuário sem confirmação explícita do arquivo atual. "
                       "Arquivos devem ser enviados por file params; caminhos locais ou blob: não são anexos."),
         auth_server_provider=owner, auth=owner.auth_settings(),
@@ -272,6 +279,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             if existing:
                 return result(existing, "Este pedido já foi registrado. Resultado recuperado sem repetir a execução.")
             revision(project_id, expected_revision)
+            if operation=="measure_motion":
+                space_for(MOTION_LIMITS["max_artifact_bytes"])
             job = queue.enqueue(project_id, operation, arguments, request_id)
             return result(job, "Trabalho registrado. Consulte o projeto para acompanhar a execução e o resultado.")
 
@@ -295,6 +304,22 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                       expected_revision: int, request_id: str) -> CallToolResult:
         """Executa o plano atual no motor local e devolve um MP4 real. Não aprova o resultado nem chama geradores."""
         return enqueue(project_id, "render", kind, expected_revision, request_id)
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_measure_motion(project_id: str, asset_id: str,
+                              specification: MotionMeasurementSpecification,
+                              expected_revision: int, request_id: str) -> CallToolResult:
+        """Mede posição, escala e rotação em janelas/ROIs declaradas de um vídeo do projeto.
+
+        Até quatro elementos, 300 frames por janela e 600 element-frames por job,
+        sujeitos ao cache de 128 MiB; fonte até 120 s, 3600 frames e Full HD.
+        Máscara somente por mask_asset_id de imagem deste projeto. Devolve IDs
+        de observações, perfil, QA e CSV. Não aplica a curva nem aprova o vídeo.
+        """
+        return enqueue(project_id,"measure_motion","motion",expected_revision,request_id,
+                       asset_id=asset_id,
+                       specification=specification.model_dump(by_alias=True,exclude_none=True))
 
     @server.tool(annotations=write, meta=widget)
     @offload

@@ -104,6 +104,13 @@ O piloto exercita ingest de catálogo, ranking, três efeitos de áudio com prov
 
 ## Motion a partir de referência
 
+O [perfil de movimento por elemento](visual_fidelity/MOTION_PROFILE.md) conecta
+tracking com PTS reais, curvas de posição/escala/rotação, binding e render.
+`python -m visual_fidelity motion-profile` mede, ajusta, audita, aplica e compara
+essas curvas. Motion Kit 0.9 preserva as versões anteriores e registra a nova
+capacidade; o mesmo avaliador dirige os pixels e as métricas. A cobertura ausente
+continua explícita, sem preenchimento silencioso de cortes ou perda de tracking.
+
 Para transferir o estilo da Clara a um novo bruto, use a [direção contextual](docs/contextual-editing.md), com perfil de referência e evidências do vídeo atual. O [template por fala e rastreamento](visual_fidelity/ADAPTIVE_TEMPLATE.md) permanece disponível para reproduzir seu fluxo específico; suas regras de palavras e ícones não são o diretor semântico geral.
 
 O [piloto da cascata de três cards](pilots/motion_cards/README.md) mede movimentos, aplica o mesmo template sobre outro bruto e exporta uma comparação e uma composição HyperFrames.

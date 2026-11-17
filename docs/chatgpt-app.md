@@ -82,6 +82,61 @@ A instalação rejeita caminhos externos, links simbólicos, arquivos repetidos 
 
 `editor_list_templates` lista amostras do acervo; `editor_get_template` retorna requisitos, bindings e limitações. Instanciar um template não equivale a renderizá-lo. HTML, GSAP, HyperFrames, fontes, recursos externos, camadas RGBA, tracking, mattes ou operações 3D exigem seus adaptadores e materiais efetivos. A ponte não transforma um MP4 de demonstração em overlay transparente.
 
+## Medir movimento por elemento
+
+`editor_measure_motion(project_id, asset_id, specification, expected_revision, request_id)`
+adiciona à fila um trabalho `measure_motion` sobre um vídeo já importado no
+projeto. A especificação declara os elementos, as janelas de quadros, o quadro
+inicial de rastreamento e a região de cada elemento. O comando mede posição,
+escala uniforme e rotação 2D, ajusta as curvas e registra a cobertura. Texto e
+painel devem ter IDs próprios quando seus movimentos não são iguais.
+
+```json
+{
+  "schema": "element-motion-measurement/1",
+  "cuts": [],
+  "elements": [{
+    "id": "painel",
+    "range": [30, 60],
+    "seed_frame": 30,
+    "roi_px": [100, 180, 400, 700]
+  }]
+}
+```
+
+As coordenadas pertencem ao raster orientado da fonte; `[30, 60]` seleciona
+os quadros 30 a 59. Declare `rotation_ccw` quando a orientação do contêiner
+exigir essa decisão. Uma máscara opcional usa `mask_asset_id`, correspondente
+a uma imagem do mesmo projeto. A ferramenta não aceita caminhos locais ou
+URLs como substitutos de arquivos importados.
+
+O resultado fica em `motion_measurements` e contém quatro IDs de artefato:
+observações, perfil de curvas, auditoria JSON e tabela CSV. Use `editor_get_asset`
+para obtê-los. Revisão esperada e `request_id` protegem contra pedidos antigos
+ou repetidos. Alterações na revisão do projeto, na fonte, nas máscaras ou nos
+artefatos tornam a evidência histórica, com estado `stale`.
+
+Este trabalho tem escopo `evidence_not_applied` e estado de render
+`pending_not_applied`: medir não altera automaticamente o plano nativo nem
+aprova um vídeo. A aplicação implementada das curvas ocorre por bindings
+explícitos nos renderers `geometric_video` e `studio_edit`, conforme o
+[manual do perfil de movimento](../visual_fidelity/MOTION_PROFILE.md).
+O adaptador para aplicação automática no `native.render_bundle` permanece
+pendente; a interface também não recebeu um editor visual de regiões nesta versão.
+
+O servidor aceita até quatro elementos por pedido, 300 quadros por janela e
+600 quadros de elementos somados, sujeito a um cache de cinza de 128 MiB. A
+fonte precisa caber simultaneamente nos limites de 120 segundos, 3.600 quadros,
+120 fps nominais, 2.073.600 pixels por quadro, lado de até 4.096 pixels e quatro
+bilhões de pixels decodificados. Se um limite for excedido, o pedido é recusado
+com orientação para selecionar uma fonte ou janela menor; não há redução de
+resolução ou retiming silencioso. Esses limites pertencem ao servidor, não são
+limites matemáticos do perfil.
+
+Depois de implantar o servidor atualizado, renove os metadados do conector
+para disponibilizar a nova ferramenta. Testes locais não confirmam que uma
+instância hospedada já recebeu essa versão.
+
 ## Persistência e recuperação
 
 Cada trabalho tem chave de idempotência e estado `queued`, `running`, `completed`, `failed` ou `interrupted`. Depois de reiniciar, um trabalho que estava executando fica `interrupted`; ele não é repetido automaticamente. Confira o projeto e os artefatos antes de reenviar uma operação com resultado desconhecido.
@@ -93,7 +148,7 @@ Arquivos e estados privados ficam no volume. Backups/restauração e limpeza de 
 ## Validação
 
 ```bash
-python -m pytest tests/test_app_auth.py tests/test_app_infrastructure.py tests/test_app_engine.py tests/test_app_server.py -q
+python -m pytest tests/test_app_auth.py tests/test_app_infrastructure.py tests/test_app_engine.py tests/test_app_server.py tests/test_app_motion.py -q
 python scripts/check_app_connection.py https://SEU-SERVICO --key-stdin
 ```
 

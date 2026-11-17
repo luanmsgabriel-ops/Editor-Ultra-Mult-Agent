@@ -5,7 +5,8 @@ from pathlib import Path
 from PIL import Image
 from .light_sweep import Sweep, light_sweep
 
-VERSION='0.8.0'
+VERSION='0.9.0'
+STAGE_VERSION='0.8.0'
 LEGACY_VERSION='0.7.0'
 CAPABILITIES={
     'orbit-occlusion': {'module':'visual_fidelity.orbit_type','requires':['occluder','depth_order'],'kind':'projected-spatial'},
@@ -21,6 +22,14 @@ CAPABILITIES.update({
     'measured-device-projection': {'module':'visual_fidelity.device_camera','requires':['measured_corners','assumed_intrinsics','camera_provenance'],'kind':'planar-pose-calibration'},
     'curved-metal-blades': {'module':'visual_fidelity.blade_scene','requires':['true_geometry','foreground_depth','frame_schedule'],'kind':'mesh-3d'},
 })
+STAGE_CAPABILITIES=frozenset(CAPABILITIES)
+CAPABILITIES.update({
+    'measured-element-motion': {
+        'module':'visual_fidelity.motion_binding',
+        'requires':['presentation_clock','element_identity','curve_profile','render_binding','coverage_report'],
+        'kind':'measured-similarity-2d',
+    },
+})
 
 
 def validate_manifest(manifest):
@@ -30,7 +39,7 @@ def validate_manifest(manifest):
     Store media in project assets, not the public repository or this registry.
     """
     pinned=manifest.get('engine_version')
-    if pinned not in (VERSION,LEGACY_VERSION):raise ValueError('Pin the actual motion-kit version.')
+    if pinned not in (VERSION,STAGE_VERSION,LEGACY_VERSION):raise ValueError('Pin the actual motion-kit version.')
     required=manifest.get('required_features',[])
     if not required or len(required)!=len(set(required)):raise ValueError('Provide unique required_features.')
     used=manifest.get('features',{})
@@ -38,6 +47,8 @@ def validate_manifest(manifest):
         if name not in CAPABILITIES:raise ValueError(f'Unknown capability: {name}')
         if pinned==LEGACY_VERSION and name not in LEGACY_CAPABILITIES:
             raise ValueError(f'{name}: requires motion-kit {VERSION}; legacy manifests remain limited to their original capabilities.')
+        if pinned==STAGE_VERSION and name not in STAGE_CAPABILITIES:
+            raise ValueError(f'{name}: requires motion-kit {VERSION}; 0.8 manifests retain their original capabilities.')
         item=used.get(name,{})
         if item.get('module')!=CAPABILITIES[name]['module']:
             raise ValueError(f'{name}: project is not wired to the registered engine module.')

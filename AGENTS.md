@@ -131,6 +131,24 @@ A música comanda o tempo de start/apex/reveal/cut/resolve. Usar analyze_audio n
 
 ## Medição e reaplicação da cadência
 
+Para velocidade e trajetória por elemento, leia `visual_fidelity/MOTION_PROFILE.md`
+e use `python -m visual_fidelity motion-profile`. Motion Kit0.9 liga medição,
+curvas e render. Separe movimentos de painel, texto e objeto; não aplique a curva
+de uma parte a outra apenas porque estão na mesma ROI. Escolha tracking com
+seed/máscara ou quadriláteros medidos, preserve PTS e mantenha campos ausentes.
+Zoom com centro parado exige escala e probes de canto; luminância não é velocidade.
+
+Vincule os canais medidos ao renderer efetivamente usado: `studio_edit` recebe
+tempo absoluto de saída e `geometric_video`/`reference_cadence` transformam RGB e
+coverage juntos. Declare pivô no raster correto, escala base e mapa temporal.
+Gaps, cortes, perspectiva incompatível e conflitos com keys autoradas não devem
+virar interpolação ou fallback silenciosos. Registre perfis e frames realmente
+consumidos; compare também o MP4 codificado, sem DTW que esconda erro de timing.
+Resíduos de tracking/interpolação e testes não representam aprovação visual.
+As rotas 3D, wipe, fade e morph mantêm contratos próprios; a curva de similaridade
+2D não recupera movimento físico de câmera. Preserve destinos e sidecars usando
+nomes novos; não sobrescreva o manifesto com o relatório do render.
+
 Use `python -m visual_fidelity reference-cadence analyze` para medir batidas com Beat This!, cortes candidatos com TransNetV2 e movimento regional com RAFT. Confirme quais cortes são trocas de plano, trocas dentro das máscaras ou falsos positivos. Salve os marcos revisados, o mapa e os pesos identificados. Use `reference-cadence apply` para transferir tempos, fase musical ou máscaras medidas aos assets do novo bruto. Leia `visual_fidelity/REFERENCE_CADENCE.md`. Revise um trecho representativo com áudio antes de expandir para toda a montagem. A V2 da aplicação 330494 foi rejeitada por ritmo, velocidade dos cortes e aparência.
 
 ## Leitura e reaplicação de efeitos em camadas

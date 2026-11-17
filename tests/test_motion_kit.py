@@ -27,5 +27,10 @@ class MotionKitContractTests(unittest.TestCase):
     def test_new_geometry_cannot_claim_legacy_implementation(self):
         m=self.manifest();m['engine_version']='0.7.0';m['required_features']=['device-screen-stage']
         with self.assertRaisesRegex(ValueError,'requires motion-kit'):validate_manifest(m)
+    def test_stage_version_remains_supported_but_cannot_claim_measured_motion(self):
+        m=self.manifest();m['engine_version']='0.8.0';m['required_features']=['device-screen-stage']
+        self.assertTrue(validate_manifest(m)['contract_valid'])
+        m['required_features']=['measured-element-motion']
+        with self.assertRaisesRegex(ValueError,'requires motion-kit'):validate_manifest(m)
 
 if __name__=='__main__':unittest.main()

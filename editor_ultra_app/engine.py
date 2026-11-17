@@ -9,7 +9,9 @@ from a faithful reconstruction and from editing a new person's footage.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import csv
 from datetime import datetime, timezone
+from fractions import Fraction
 import fcntl
 import json
 import math
@@ -20,6 +22,9 @@ import re
 import shutil
 import subprocess
 import uuid
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError as ModelValidationError, model_validator
 
 from editorial_engine import project as engine
 from editorial_engine.contracts import ValidationError, clone, digest, file_sha256, require, verify_file
@@ -32,10 +37,104 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}\Z")
 _TEXT_FIELDS = {"name", "objective", "adapt", "sourceLink", "identityLabel", "narration",
                 "music", "editNotes", "audience"}
 _SOURCE_FIELDS = {"sourceType", "sourceLink", "objective", "adapt", "ratio", "preserve", "templateId"}
+MOTION_LIMITS = {"max_elements": 4, "max_interval_frames": 300, "max_element_frames": 600,
+                 "max_source_seconds": 120, "max_source_frames": 3600,
+                 "max_source_pixels": 1920 * 1080, "max_source_side": 4096,
+                 "max_source_fps": 120, "max_decoded_pixels": 4_000_000_000,
+                 "max_cached_gray_bytes": 128 * 1024 * 1024,
+                 "max_artifact_bytes": 16 * 1024 * 1024}
+MotionFrameIndex = Annotated[int, Field(strict=True, ge=0, le=3600)]
+MotionCutIndex = Annotated[int, Field(strict=True, ge=1, lt=3600)]
+
+
+class MotionTrackerSettings(BaseModel):
+    """Bounded CPU settings; no producer/model/command selection is accepted."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    max_corners: int = Field(default=240, ge=6, le=512)
+    min_points: int = Field(default=6, ge=3, le=64)
+    quality_level: float = Field(default=.01, ge=.0001, le=1, allow_inf_nan=False)
+    min_distance_px: float = Field(default=4, ge=.5, le=100, allow_inf_nan=False)
+    window_size: int = Field(default=31, ge=5, le=51)
+    pyramid_levels: int = Field(default=4, ge=0, le=4)
+    fb_max_px: float = Field(default=1.5, ge=.1, le=10, allow_inf_nan=False)
+    ransac_max_px: float = Field(default=2, ge=.1, le=10, allow_inf_nan=False)
+    min_inlier_ratio: float = Field(default=.6, ge=.1, le=1, allow_inf_nan=False)
+    min_spatial_coverage: float = Field(default=.12, ge=.01, le=1, allow_inf_nan=False)
+    max_step_scale_ratio: float = Field(default=2.5, ge=1, le=4, allow_inf_nan=False)
+    max_step_angle_deg: float = Field(default=120, gt=0, le=180, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def valid_tracker(self):
+        if self.window_size % 2 != 1 or self.min_points > self.max_corners:
+            raise ValueError("Use an odd LK window and max_corners >= min_points")
+        return self
+
+
+class MotionElementSpecification(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+    frame_range: list[MotionFrameIndex] = Field(alias="range", min_length=2, max_length=2,
+                                   description="Source frame [start,end), at most 300 frames per element")
+    seed_frame: int = Field(ge=0, lt=3600)
+    roi_px: list[float] = Field(min_length=4, max_length=4,
+                               description="Seed feature box [x,y,width,height] in explicitly oriented source pixels")
+    reference_box_px: list[float] | None = Field(default=None, min_length=4, max_length=4)
+    segment: str | None = Field(default=None, min_length=1, max_length=96,
+                                pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+    mask_asset_id: str | None = Field(default=None, min_length=1, max_length=96,
+                                      pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$",
+                                      description="Optional image asset ID belonging to this project; paths and URLs are forbidden")
+
+    @model_validator(mode="after")
+    def valid_element(self):
+        start,end=self.frame_range
+        if not 0<=start<=self.seed_frame<end<=MOTION_LIMITS["max_source_frames"]:
+            raise ValueError("Range and seed must be ordered inside the bounded source clock")
+        if end-start>MOTION_LIMITS["max_interval_frames"]:
+            raise ValueError("Select a transition window of at most 300 frames per element")
+        for box in (self.roi_px,self.reference_box_px):
+            if box is not None and (not all(math.isfinite(v) and abs(v)<=16384 for v in box) or box[2]<=0 or box[3]<=0):
+                raise ValueError("Boxes need finite bounded pixel coordinates and positive size")
+        if self.roi_px[0]<0 or self.roi_px[1]<0:
+            raise ValueError("Seed ROI must start inside the source raster")
+        return self
+
+
+class MotionMeasurementSpecification(BaseModel):
+    """One bounded evidence request; fitting is PCHIP without bridging missing frames."""
+    model_config = ConfigDict(extra="forbid", strict=True, json_schema_extra={"x-resource-limits": MOTION_LIMITS})
+    schema_name: Literal["element-motion-measurement/1"] = Field(default="element-motion-measurement/1", alias="schema")
+    rotation_ccw: Literal[0,90,180,270] | None = None
+    cuts: list[MotionCutIndex] = Field(default_factory=list, max_length=128,
+                            description="Sorted unique first-frame indices of explicitly declared cuts")
+    elements: list[MotionElementSpecification] = Field(min_length=1, max_length=4)
+    tracker: MotionTrackerSettings = Field(default_factory=MotionTrackerSettings)
+
+    @model_validator(mode="after")
+    def valid_request(self):
+        if self.cuts!=sorted(set(self.cuts)) or any(not 0<c<MOTION_LIMITS["max_source_frames"] for c in self.cuts):
+            raise ValueError("Cuts must be sorted unique positive frame indices below 3600")
+        if len({e.id for e in self.elements})!=len(self.elements):
+            raise ValueError("Element IDs must be unique")
+        if sum(e.frame_range[1]-e.frame_range[0] for e in self.elements)>MOTION_LIMITS["max_element_frames"]:
+            raise ValueError("Request exceeds the 600 element-frame CPU budget")
+        return self
 
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def stored_bytes(directory):
+    """Account for durable bytes while SQLite may remove transient WAL files."""
+    total=0
+    for path in Path(directory).rglob("*"):
+        try:
+            if path.is_file() and not path.is_symlink():total+=path.stat().st_size
+        except FileNotFoundError:
+            # Job polling can checkpoint/remove a WAL between discovery and stat.
+            continue
+    return total
 
 
 def _text(value, limit=20000):
@@ -256,6 +355,8 @@ class EngineAdapter:
                                      "preview_kind": "reference_study" if stage == "clone" else stage}
         return {"project_id": record["project_id"], "revision": record["revision"], "state": state,
                 "engine": public_engines, "approval": approvals,
+                "motion_measurements": [self._motion_public(record, item)
+                                        for item in record.get("motion_measurements", [])[-20:]],
                 # Internal host envelope. The MCP layer signs these paths and removes them
                 # before exposing a response. state.assets never contains a local path.
                 "assets": [{**self._public_file(item), "path": item["path"]}
@@ -516,6 +617,157 @@ class EngineAdapter:
                 "asset_path", "File escaped the private project")
         verify_file(str(path), item["sha256"], "asset")
         return path
+
+    def _motion_public(self, record, measurement):
+        """Evidence stays historical when its project revision or bytes change."""
+        result=clone(measurement)
+        reason=None
+        if measurement["project_revision"]!=record["revision"]:
+            reason="project_revision_changed"
+        else:
+            dependencies=[measurement["source"],*measurement.get("masks",[]),
+                          *measurement["artifacts"].values()]
+            for dependency in dependencies:
+                item=record["files"].get(dependency["asset_id"])
+                if not item or item["sha256"]!=dependency["sha256"]:
+                    reason="source_mask_or_artifact_changed";break
+                try:
+                    path=Path(item["path"])
+                    require(path.resolve().is_relative_to(self._directory(record["project_id"]))
+                            and not path.is_symlink(),"asset_path","Motion evidence escaped the project")
+                    verify_file(str(path),dependency["sha256"],"motion evidence")
+                except (ValidationError,OSError):
+                    reason="source_mask_or_artifact_changed";break
+        result.update(current=reason is None,status="measured" if reason is None else "stale",
+                      stale_reason=reason)
+        return result
+
+    def _motion_storage(self, required):
+        limit=int(os.environ.get("EDITOR_ULTRA_MAX_STORAGE_MB","850"))*1024*1024
+        used=stored_bytes(self.data_dir)
+        require(0<=required<=MOTION_LIMITS["max_artifact_bytes"] and used+required<=limit,
+                "motion_storage","Insufficient project storage for the motion evidence")
+        require(shutil.disk_usage(self.data_dir).free>=required+64*1024*1024,
+                "motion_storage","Insufficient free disk space for the motion evidence")
+
+    def measure_motion(self, project_id, asset_id, specification, *, expected_revision=None):
+        """Measure selected elements; store evidence without applying or approving it.
+
+        Input paths are resolved solely from this project's verified asset IDs.
+        The request cannot register code, invoke generators, retime footage or
+        select arbitrary files. The existing durable MCP job owns idempotency.
+        """
+        from visual_fidelity import motion_observation, motion_profile, motion_compare
+        require(isinstance(specification,dict),"motion_specification","Expected a bounded measurement object")
+        try:
+            model=MotionMeasurementSpecification.model_validate(specification)
+        except ModelValidationError as exc:
+            details="; ".join(".".join(map(str,error["loc"]))+": "+error["msg"]
+                              for error in exc.errors(include_input=False,include_url=False)[:3])
+            raise ValidationError("motion_specification","Invalid bounded motion specification: "+details) from None
+        public_spec=model.model_dump(by_alias=True,exclude_none=True)
+        with self._lock(project_id):
+            record=self._load(project_id);self._expect(record,expected_revision)
+            source_path=self.resolve_asset(project_id,asset_id)
+            source=record["files"][asset_id]
+            require(source["type"].startswith("video/"),"motion_source","Motion measurement requires a video asset")
+            self._motion_storage(MOTION_LIMITS["max_artifact_bytes"])
+            metadata=self._measure(source_path,source["type"])
+            width,height=metadata["width"],metadata["height"];pixels=width*height
+            require(0<metadata["duration"]<=MOTION_LIMITS["max_source_seconds"]
+                    and 16<=width<=MOTION_LIMITS["max_source_side"]
+                    and 16<=height<=MOTION_LIMITS["max_source_side"]
+                    and pixels<=MOTION_LIMITS["max_source_pixels"],
+                    "motion_budget","Motion sources must be at most 120 seconds and Full HD; select or prepare an explicit smaller source")
+            try:
+                rate=Fraction(str(metadata.get("fps")))
+            except (ValueError,ZeroDivisionError):
+                raise ValidationError("motion_budget","Motion source needs a usable bounded nominal FPS") from None
+            require(0<rate<=MOTION_LIMITS["max_source_fps"]
+                    and math.ceil(metadata["duration"]*float(rate))<=MOTION_LIMITS["max_source_frames"]+2,
+                    "motion_budget","Motion source exceeds the 3600-frame CPU clock budget")
+            clock=motion_observation.probe_clock(source_path)
+            require(clock["frames"]<=MOTION_LIMITS["max_source_frames"]
+                    and clock["frames"]*pixels<=MOTION_LIMITS["max_decoded_pixels"],
+                    "motion_budget","Motion source exceeds the decoded-frame CPU budget")
+            selected={frame for element in model.elements for frame in range(*element.frame_range)}
+            require(len(selected)*pixels<=MOTION_LIMITS["max_cached_gray_bytes"],
+                    "motion_budget","Selected windows exceed the 128 MiB grayscale cache; split the measurement into shorter windows")
+            require(selected and max(selected)<clock["frames"],
+                    "motion_range","Measurement interval exceeds the actual source frame count")
+            execution_spec=clone(public_spec);mask_inputs=[];mask_by_element={}
+            for element in execution_spec["elements"]:
+                mask_id=element.pop("mask_asset_id",None)
+                if mask_id is not None:
+                    mask_path=self.resolve_asset(project_id,mask_id)
+                    mask=record["files"][mask_id]
+                    require(mask["type"].startswith("image/"),"motion_mask","A seed mask must be an image asset in this project")
+                    element["mask_path"]=str(mask_path)
+                    binding={"asset_id":mask_id,"sha256":mask["sha256"]}
+                    mask_by_element[element["id"]]=binding
+                    if binding not in mask_inputs:mask_inputs.append(binding)
+            input_revision=record["revision"];identifier=uuid.uuid4().hex
+            application_binding={"schema":"editor-ultra-motion-evidence-binding/1",
+                                 "project_id":project_id,"measurement_id":identifier,
+                                 "input_revision":input_revision,"project_revision":input_revision+1,
+                                 "source":{"asset_id":asset_id,"sha256":source["sha256"]},
+                                 "masks":mask_inputs,"specification_sha256":digest(public_spec),
+                                 "scope":"evidence_not_applied"}
+            observations=motion_observation.measure_video(source_path,execution_spec)
+            require(observations["source"]["sha256"]==source["sha256"],
+                    "motion_source_changed","The source changed while motion was being measured")
+            self.resolve_asset(project_id,asset_id)
+            for element in observations["elements"]:
+                if element["id"] in mask_by_element:
+                    expected=mask_by_element[element["id"]];receipt=element["selection"]["mask"]
+                    self.resolve_asset(project_id,expected["asset_id"])
+                    require(receipt and receipt["sha256"]==expected["sha256"],
+                            "motion_mask_changed","The seed mask changed while motion was being measured")
+                    receipt.pop("path",None);receipt["asset_id"]=expected["asset_id"]
+            observations["application_binding"]=clone(application_binding)
+            observations["measurement"]["application_specification"]=public_spec
+            profile=motion_profile.fit_profile(observations,method="pchip",max_gap_frames=1)
+            profile["application_binding"]=clone(application_binding)
+            audit,rows=motion_compare.audit_profile(profile,subsamples=4)
+            audit["application_binding"]=clone(application_binding)
+            documents={"observations":observations,"profile":profile,"qa":audit}
+            encoded={key:json.dumps(value,ensure_ascii=False,allow_nan=False,indent=2)+"\n"
+                     for key,value in documents.items()}
+            import io
+            csv_text=io.StringIO(newline="")
+            if rows:
+                writer=csv.DictWriter(csv_text,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
+            else:csv_text.write("element_id,time_s\n")
+            encoded["csv"]=csv_text.getvalue()
+            actual_bytes=sum(len(value.encode("utf-8")) for value in encoded.values())
+            self._motion_storage(actual_bytes)
+            directory=self._directory(project_id)/"motion-evidence"/identifier
+            directory.mkdir(parents=True,exist_ok=False,mode=0o700)
+            artifacts={}
+            try:
+                for kind,value in encoded.items():
+                    path=directory/(kind+(".csv" if kind=="csv" else ".json"))
+                    with path.open("x",encoding="utf-8",newline="") as handle:handle.write(value)
+                    artifacts[kind]=self._public_file(self._register_internal(record,path,role="evidence"))
+                measurement={**application_binding,"schema":"editor-ultra-motion-measurement/1",
+                             "id":identifier,"created_at":_now(),"artifacts":artifacts,
+                             "profile_sha256":motion_profile.profile_digest(profile),
+                             "render_status":"pending_not_applied","visual_approval":"pending",
+                             "user_approved":False,"perceptual_playback":False,
+                             "summary":{"method":observations["measurement"]["method"],
+                                        "clock_kind":observations["source"]["clock_kind"],
+                                        "requested_element_frames":sum(e.frame_range[1]-e.frame_range[0] for e in model.elements),
+                                        "cached_gray_bytes":len(selected)*pixels,"csv_rows":len(rows),
+                                        "elements":audit["elements"]},
+                             "limits":clone(MOTION_LIMITS),
+                             "next_action":"Inspect evidence and author explicit bindings; this operation has not applied motion to a render"}
+                record.setdefault("motion_measurements",[]).append(measurement)
+                self._write(record,"Movimento medido; evidência pendente de aplicação")
+            except BaseException:
+                shutil.rmtree(directory,ignore_errors=True)
+                raise
+            return {**self._snapshot(record),"status":"motion_measured",
+                    "motion_measurement":self._motion_public(record,measurement)}
 
     def _stage_binding(self, record, stage):
         return self._clone_binding(record) if stage == "clone" else self._generation_basis(record) if stage == "generation" else self._edit_binding(record)

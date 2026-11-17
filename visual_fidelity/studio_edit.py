@@ -13,6 +13,8 @@ from .type_layout import text_mask,render_arc
 from .optical_lens import magnify
 from .light_sweep import light_sweep,Sweep
 from .motion_layers import Transform,transform_layer
+from .motion_binding import (transform_at, validate_authored_channels,
+                             record_motion_use, motion_use_report)
 from .orbit_type import OrbitSpec,render_orbit_type,composite_orbit
 
 VERSION='0.8.0'
@@ -44,8 +46,14 @@ def validate_manifest(d):
         for layer in shot.get('layers',[]):
             if layer.get('kind') not in ('text','arc','image','sequence','panel','lens'):raise ValueError('Unknown layer kind')
             if 'z' in layer:_finite(layer['z'],'Layer z')
+            if layer.get('motion'):
+                if layer['kind']=='lens':raise ValueError('Measured lens motion is not implemented')
+                if not isinstance(layer.get('id'),str) or not layer['id']:raise ValueError('Measured layers need an explicit id')
+        if shot.get('background',{}).get('motion'):raise ValueError('Measured background motion requires a separate RGBA layer')
         for spec in [shot.get('person')]+shot.get('layers',[]):
             if spec is None:continue
+            validate_authored_channels(spec)
+            if spec.get('motion') and spec['motion']['stage']!='local_rgba':raise ValueError('Studio motion requires stage local_rgba')
             for name in ('x','y','scale','angle','opacity'):
                 if name in spec:_finite(spec[name],name)
             if spec.get('scale',1)<=0 or not 0<=spec.get('opacity',1)<=1:raise ValueError('Invalid scale or opacity')
@@ -83,8 +91,14 @@ def animated(spec,u):
             return {k:a.get(k,base[k])+(b.get(k,base[k])-a.get(k,base[k]))*t for k in base}
     return base
 
-def move(img,spec,u,size=SIZE):
-    return transform_layer(img,Transform(**animated(spec,u),pivot=tuple(spec.get('pivot',(0,0)))),size)
+def move(img,spec,u,size=SIZE,*,output_time=None):
+    if spec.get('motion') is not None:
+        validate_authored_channels(spec)
+        if spec['motion']['stage']!='local_rgba':raise ValueError('Studio motion requires stage local_rgba')
+        if output_time is None:raise ValueError('Measured motion requires the real output time, not shot u')
+        transform=transform_at(spec['motion'],output_time,img.size,size,animated(spec,u))
+    else:transform=Transform(**animated(spec,u),pivot=tuple(spec.get('pivot',(0,0))))
+    return transform_layer(img,transform,size)
 
 @lru_cache(maxsize=24)
 def load(path):
@@ -125,6 +139,15 @@ class Editor:
         self.cap=cv2.VideoCapture(str(self.p(self.d['source'])));self.count=int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT));self.cache={};self.source_next=-1
         if not self.cap.isOpened():raise ValueError('Cannot open source video')
     def p(self,path):return (self.root/path).resolve()
+    def _move(self,img,spec,u,target):
+        n=getattr(self,'_output_frame',None)
+        output_time=None if n is None else n/self.d['fps']
+        result=move(img,spec,u,output_time=output_time)
+        if spec.get('motion'):
+            if not hasattr(self,'_motion_usage'):self._motion_usage={}
+            record_motion_use(self._motion_usage,spec['motion'],n,output_time,
+                              str(getattr(self,'_output_shot',''))+':'+target)
+        return result
     def subject(self,shot,local,u):
         index=source_frame(shot,local,self.count)
         if index!=self.source_next:self.cap.set(cv2.CAP_PROP_POS_FRAMES,index)
@@ -134,7 +157,7 @@ class Editor:
         mask=Image.open(self.p(self.d['mattes'])/f'{index:04d}.png').convert('L')
         if rgba.size!=SIZE or mask.size!=SIZE:raise ValueError('Source/matte must match output raster')
         rgba.putalpha(mask)
-        return move(rgba,shot['person'],u),index
+        return self._move(rgba,shot['person'],u,'person'),index
     def layer(self,l,u,local):
         kind=l['kind'];key=json.dumps(l,sort_keys=True)
         if kind in ('text','arc','panel') and key in self.cache:im=self.cache[key].copy()
@@ -161,8 +184,8 @@ class Editor:
             arr[:,:,:3]/=np.maximum(arr[:,:,3:4],1e-6);im=Image.fromarray(np.uint8(np.clip(arr,0,1)*255))
             # Quad places the asset in canvas space; declared transforms still
             # animate that placed layer, including opacity.
-            im=move(im,l,u)
-        else:im=move(im,l,u)
+            im=self._move(im,l,u,'layer:'+str(l.get('id',kind)))
+        else:im=self._move(im,l,u,'layer:'+str(l.get('id',kind)))
         enter=l.get('enter',0)
         if enter and local<enter:
             t=ease(local/enter);im=move(im,{'y':(1-t)*l.get('enter_y',50),'opacity':t},u)
@@ -170,6 +193,7 @@ class Editor:
     def frame(self,n):
         if not isinstance(n,int) or not 0<=n<self.d['frames']:raise ValueError('Frame outside timeline')
         s=next(s for s in self.d['shots'] if s['start']<=n<s['end']);local=n-s['start'];u=local/max(1,s['end']-s['start']-1)
+        self._output_frame=n;self._output_shot=s['id']
         bg=s.get('background',{});colors=tuple(tuple(c) for c in bg.get('colors',[[249,250,234],[218,222,210]]))
         out=studio(colors).copy()
         if bg.get('pattern'):
@@ -182,13 +206,14 @@ class Editor:
         if s.get('person') is not None:
             subject,index=self.subject(s,local,u)
             # Authored contact shadow, same transform as source subject. Not recovered physical light.
-            shadow=Image.new('RGBA',SIZE);dr=ImageDraw.Draw(shadow);dr.ellipse([155,1104,570,1188],fill=(20,15,9,85));shadow=shadow.filter(ImageFilter.GaussianBlur(20));out.alpha_composite(move(shadow,s['person'],u))
+            shadow=Image.new('RGBA',SIZE);dr=ImageDraw.Draw(shadow);dr.ellipse([155,1104,570,1188],fill=(20,15,9,85));shadow=shadow.filter(ImageFilter.GaussianBlur(20));out.alpha_composite(self._move(shadow,s['person'],u,'person_shadow'))
             if s.get('orbit'):
                 o=s['orbit'];params={k:v for k,v in o.items() if k not in ['text','font','phase_start','phase_end']};params['size']=SIZE;params['phase']=o.get('phase_start',0)+u*(o.get('phase_end',2)-o.get('phase_start',0));params['highlight_phase']=u
                 rear,fore=render_orbit_type(o['text'],str(self.p(o['font'])),OrbitSpec(**params));out=composite_orbit(out,subject,rear,fore)
             else:out.alpha_composite(subject)
         for l in sorted(front,key=lambda l:l.get('z',1)):
             if l['kind']=='lens':
+                if l.get('motion'):raise ValueError('Measured lens motion is not implemented')
                 t=animated(l,u);out.alpha_composite(magnify(out,(t['x'],t['y']),l.get('radius',120),l.get('zoom',1.4),t['angle']))
             else:out.alpha_composite(self.layer(l,u,local))
         if s.get('transition') and local<s.get('transition_frames',5):
@@ -200,6 +225,7 @@ class Editor:
         end=self.d['frames'] if end is None else min(end,self.d['frames'])
         if not isinstance(start,int) or not isinstance(end,int) or not 0<=start<end:raise ValueError('Render range must contain frames inside the timeline')
         out=Path(output).resolve();out.parent.mkdir(parents=True,exist_ok=True)
+        self._motion_usage={}
         cmd=['ffmpeg','-v','error','-y','-f','rawvideo','-pix_fmt','rgb24','-s','720x1280','-r',str(self.d['fps']),'-i','-']
         if self.d.get('audio'):cmd+=['-ss',str(start/self.d['fps']),'-i',str(self.p(self.d['audio']))]
         cmd+=['-map','0:v:0']
@@ -219,6 +245,10 @@ class Editor:
         if p.wait():raise RuntimeError('FFmpeg export failed')
         hashes={name:hashlib.sha256(Path(__file__).with_name(name+'.py').read_bytes()).hexdigest() for name in ['studio_edit','studio_matte','orbit_type','type_layout','motion_layers','light_sweep','optical_lens']}
         report={'engine_version':VERSION,'manifest_sha256':hashlib.sha256(self.path.read_bytes()).hexdigest(),'engine_files':hashes,'rendered_frames':[start,end],'fps':self.d['fps'],'seconds':(end-start)/self.d['fps'],'elapsed_seconds':time.time()-t,'actual_engine_executed':True,'subject':'Original RGB + supervised temporal alpha; 2D card','background':'3D rendered passes where declared; otherwise 2D','source_reuse':[{'shot':s['id'],'source':s.get('source')} for s in self.d['shots']],'user_approved':False,'perceptual_playback':False}
+        if self._motion_usage:
+            report['element_motion']=motion_use_report(self._motion_usage)
+            for name in ('motion_binding','motion_profile'):
+                hashes[name]=hashlib.sha256(Path(__file__).with_name(name+'.py').read_bytes()).hexdigest()
         out.with_suffix('.render.json').write_text(json.dumps(report,indent=2));return report
 
 def main():
