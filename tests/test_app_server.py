@@ -30,6 +30,12 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
     video(source)
     with TestClient(app, base_url=BASE) as client:
         assert client.get("/healthz").json()["ffmpeg"]
+        brand = client.get("/brand/e-mark-v1.png")
+        assert brand.status_code == 200
+        assert brand.headers["content-type"] == "image/png"
+        assert "immutable" in brand.headers["cache-control"]
+        assert brand.content == (Path(__file__).parents[1] / "editor_ultra_app/brand/e-mark-v1.png").read_bytes()
+        assert client.get("/brand/ui.html").status_code == 404
         assert client.post("/uploads/no-project/ref", content=source.read_bytes()).status_code == 401
         assert client.post("/catalog/install", content=b"unauthorized").status_code == 401
         with authorize_owner(BASE, KEY, client=client) as session:
@@ -44,7 +50,7 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
             assert opening_tool["title"] == "Editor Ultra"
             assert opening_tool["annotations"]["readOnlyHint"] is True
             assert not opening_tool["inputSchema"].get("required")  # Entrypoints invoke the tool with {}.
-            assert opening_tool["_meta"]["ui"]["resourceUri"] == UI_URI == "ui://editor-ultra/studio-v7.html"
+            assert opening_tool["_meta"]["ui"]["resourceUri"] == UI_URI == "ui://editor-ultra/studio-v8.html"
             assert opening_tool["_meta"]["openai/outputTemplate"] == UI_URI
             assert opening_tool["_meta"]["openai/ui"]["entrypoints"] == [{"type": "global"}, {"type": "thread"}]
             for name in widget_tools:
@@ -79,9 +85,12 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
             assert resource["text"].strip()
             assert "__CATALOG_DATA__" not in resource["text"]
             assert "EDITOR_ULTRA_OWNER_KEY" not in resource["text"]
+            assert "__EDITOR_ULTRA_LOGO_URL__" not in resource["text"]
+            assert BASE + "/brand/e-mark-v1.png" in resource["text"]
             for legacy_uri in ("ui://editor-ultra/studio-v1.html", "ui://editor-ultra/studio-v2.html",
                                "ui://editor-ultra/studio-v3.html", "ui://editor-ultra/studio-v4.html",
-                               "ui://editor-ultra/studio-v5.html", "ui://editor-ultra/studio-v6.html"):
+                               "ui://editor-ultra/studio-v5.html", "ui://editor-ultra/studio-v6.html",
+                               "ui://editor-ultra/studio-v7.html"):
                 legacy_resource = session.rpc("resources/read", {"uri": legacy_uri})["contents"][0]
                 assert legacy_resource["uri"] == legacy_uri
                 assert legacy_resource["text"] == resource["text"]
@@ -144,3 +153,4 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
             assert snapshot["state"]["finalApproval"] is None
             conflict = session.call_tool("editor_save_project", {"project_id": project_id, "expected_revision": rev, "state": {"objective": "stale"}})
             assert conflict.get("isError")
+

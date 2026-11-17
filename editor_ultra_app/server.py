@@ -10,6 +10,7 @@ import asyncio
 import base64
 from contextlib import asynccontextmanager
 from functools import wraps
+from html import escape
 import json
 import logging
 import mimetypes
@@ -40,8 +41,9 @@ from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError, UploadTicketStore
 
 
-UI_URI = "ui://editor-ultra/studio-v7.html"
-UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4, 5, 6))
+UI_URI = "ui://editor-ultra/studio-v8.html"
+UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4, 5, 6, 7))
+BRAND_MARK_PATH = "/brand/e-mark-v1.png"
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
 UPLOAD_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -295,7 +297,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
 
     @server.resource(UI_URI, name="Editor Ultra", mime_type="text/html;profile=mcp-app", meta=studio_metadata)
     def studio() -> str:
-        return Path(__file__).with_name("ui.html").read_text(encoding="utf-8")
+        html = Path(__file__).with_name("ui.html").read_text(encoding="utf-8")
+        return html.replace("__EDITOR_ULTRA_LOGO_URL__", escape(base + BRAND_MARK_PATH, quote=True))
 
     for legacy_uri in UI_ALIASES:
         server.resource(legacy_uri, name="Editor Ultra (compatibilidade)",
@@ -662,6 +665,12 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer",
             "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox"})
 
+    async def brand_mark(request):
+        # Only this packaged brand asset is public; project media keeps signed URLs.
+        return FileResponse(Path(__file__).with_name("brand") / "e-mark-v1.png", media_type="image/png",
+                            headers={"Cache-Control": "public, max-age=31536000, immutable",
+                                     "X-Content-Type-Options": "nosniff"})
+
     async def health(request):
         return JSONResponse({"service": "editor-ultra", "version": __version__, "status": "ok",
                              "video_generation": "prompt_export_only", "ffmpeg": bool(shutil.which("ffmpeg"))})
@@ -675,7 +684,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
 
     app = server.streamable_http_app()
     app.routes.extend(owner.routes())
-    app.routes.extend([Route("/healthz", health), Route("/", home), Route("/media/{path:path}", preview),
+    app.routes.extend([Route("/healthz", health), Route("/", home), Route(BRAND_MARK_PATH, brand_mark),
+                       Route("/media/{path:path}", preview),
                        Route("/catalog/install", catalog_install, methods=["POST"]),
                        Route("/upload-tickets/{upload_id}", ticket_upload, methods=["POST", "OPTIONS"]),
                        Route("/uploads/{project_id}/{role}", direct_upload, methods=["POST"])])
@@ -710,3 +720,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
