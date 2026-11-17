@@ -162,6 +162,70 @@ def test_owner_key_explicit_consent_and_csrf_are_required(app_client):
     assert client.get(location).status_code == 410
 
 
+def test_native_consent_form_preserves_origin_without_leaking_callback_referrer(app_client):
+    _, client = app_client
+    client_id = register(client)
+    location = pending(client, client_id)
+    page = client.get(location)
+    # Native form POSTs send Origin:null under no-referrer (Fetch Standard).
+    # TestClient does not implement browser referrer policy, so check the
+    # served policy as well as the HTTP exchange instead of only forcing Origin.
+    assert page.headers["referrer-policy"] == "same-origin"
+    assert "form-action 'self' https://chatgpt.com;" in page.headers["content-security-policy"]
+    assert '<form method="post" action="/owner/authorize">' in page.text
+    csrf = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
+    nonce = parse_qs(urlsplit(location).query)["request"][0]
+    response = client.post("/owner/authorize", data={
+        "request": nonce, "csrf": csrf, "owner_key": KEY, "confirm": "yes",
+    }, headers={"origin": BASE, "sec-fetch-site": "same-origin"}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert urlsplit(response.headers["location"]).netloc == "chatgpt.com"
+    auth_code = parse_qs(urlsplit(response.headers["location"]).query)["code"][0]
+    assert exchange(client, client_id, auth_code).status_code == 200
+
+
+@pytest.mark.parametrize("redirect", [
+    REDIRECT, "https://chat.openai.com/connector_platform_oauth_redirect",
+])
+def test_consent_form_csp_allows_only_its_registered_callback_origin(app_client, redirect):
+    _, client = app_client
+    client_id = register(client, redirect=redirect)
+    location = pending(client, client_id, redirect_uri=redirect)
+    # Extra GET parameters must not alter the persisted callback or CSP.
+    page = client.get(location + "&redirect_uri=https://evil.example/callback")
+    directives = {parts[0]: parts[1:] for item in page.headers["content-security-policy"].split(";")
+                  if (parts := item.strip().split())}
+    callback = urlsplit(redirect)
+    assert directives["form-action"] == ["'self'", f"{callback.scheme}://{callback.netloc}"]
+    assert directives["default-src"] == ["'none'"]
+    assert directives["base-uri"] == ["'none'"]
+    assert directives["frame-ancestors"] == ["'none'"]
+    assert '<form method="post" action="/owner/authorize">' in page.text
+
+
+@pytest.mark.parametrize("headers", [
+    {"origin": "null", "sec-fetch-site": "same-origin"},
+    {"origin": "https://evil.example", "sec-fetch-site": "same-origin"},
+    {"origin": BASE, "sec-fetch-site": "cross-site"},
+])
+def test_native_consent_still_rejects_untrusted_origins_with_valid_csrf(app_client, headers):
+    _, client = app_client
+    client_id = register(client)
+    location = pending(client, client_id)
+    page = client.get(location)
+    fields = {
+        "request": parse_qs(urlsplit(location).query)["request"][0],
+        "csrf": re.search(r'name="csrf" value="([^"]+)"', page.text).group(1),
+        "owner_key": KEY, "confirm": "yes",
+    }
+    response = client.post("/owner/authorize", data=fields, headers=headers, follow_redirects=False)
+    assert response.status_code == 403
+    assert "Origem do pedido não autorizada." in response.text
+    assert "location" not in response.headers
+    assert response.headers["referrer-policy"] == "no-referrer"
+
+
 def test_expired_consent_and_authorization_code_fail(app_client):
     provider, client = app_client
     client_id = register(client)

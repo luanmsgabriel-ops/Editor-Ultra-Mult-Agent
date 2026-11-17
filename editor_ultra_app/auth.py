@@ -327,6 +327,20 @@ class OwnerOAuthProvider:
                 db.execute("UPDATE pending SET csrf_digest=? WHERE digest=?", (_hash(csrf), _hash(nonce)))
                 client = db.execute("SELECT payload FROM clients WHERE id=?", (row["client_id"],)).fetchone()
             client_name = json.loads(client[0]).get("client_name") or "ChatGPT" if client else "ChatGPT"
+            params = AuthorizationParams.model_validate_json(row["payload"])
+            callback = urlsplit(str(params.redirect_uri))
+            callback_origin = f"{callback.scheme}://{callback.netloc}"
+            # Native form POSTs lose Origin under no-referrer. Preserve their
+            # same-origin identity while hiding referrers from external sites.
+            # Chromium also checks form-action on the following 303: allow
+            # only the callback origin already validated and stored by OAuth.
+            form_headers = {
+                **_HEADERS,
+                "Referrer-Policy": "same-origin",
+                "Content-Security-Policy": _HEADERS["Content-Security-Policy"].replace(
+                    "form-action 'self';", f"form-action 'self' {callback_origin};",
+                ),
+            }
             response = HTMLResponse(
                 "<!doctype html><html lang=pt-BR><meta charset=utf-8>"
                 '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -350,7 +364,7 @@ class OwnerOAuthProvider:
                 '<span>Autorizo esta conexão ao meu Editor Ultra.</span></label>'
                 '<button type="submit">Autorizar conexão</button></form>'
                 '<p class=small>A chave é usada somente nesta página de autorização. Ela não é enviada ao ChatGPT.</p>'
-                "</main></html>", headers=_HEADERS,
+                "</main></html>", headers=form_headers,
             )
             response.set_cookie(
                 self._cookie_name, csrf, max_age=CONSENT_TTL, path="/owner/authorize",
