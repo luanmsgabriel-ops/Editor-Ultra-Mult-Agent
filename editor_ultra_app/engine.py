@@ -358,6 +358,7 @@ class EngineAdapter:
                 "motion_measurements": [self._motion_public(record, item)
                                         for item in record.get("motion_measurements", [])[-20:]],
                 "quality_evidence": clone(record.get("quality_evidence", [])),
+                "temporal_evidence": clone(record.get("temporal_evidence", [])),
                 "reference_scene_inventory": clone(record.get("reference_scene_inventory")),
                 # Internal host envelope. The MCP layer signs these paths and removes them
                 # before exposing a response. state.assets never contains a local path.
@@ -1118,6 +1119,45 @@ class EngineAdapter:
             return {**self._snapshot(record), "status": "quality_evidence_recorded",
                     "comparison": report, "report_asset": self._public_file(report_item),
                     "image_asset": self._public_file(image_item)}
+
+    def compare_temporal(self, project_id, *, center_s=0.0, expected_revision=None):
+        """Inspect a bounded three-second source-clock window at the selected time.
+
+        The motion diagnostics remain evidence. They do not replace authored
+        element trajectories, a scene reconstruction, or a user's rejection.
+        """
+        from visual_fidelity.reference_fidelity import _clock
+        from visual_fidelity.reference_temporal_qa import (
+            measure_reference_cadence_gap, window_around_seconds)
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            refs = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            copies = [a for a in self._selected(record, "clone") if a["type"].startswith("video/")]
+            require(len(refs) == 1 and len(copies) == 1, "cadence_inputs",
+                    "A reference video and clone video must be selected")
+            source, candidate = refs[0], copies[0]
+            ref_path = self.resolve_asset(project_id, source["id"])
+            candidate_path = self.resolve_asset(project_id, candidate["id"])
+            windows = window_around_seconds(_clock(ref_path), center_s)
+            folder = self._directory(project_id) / "cadence" / uuid.uuid4().hex
+            try:
+                report = measure_reference_cadence_gap(ref_path, candidate_path, folder, ranges=windows)
+                report_asset = self._register_internal(record, folder / "temporal_report.json", role="evidence")
+                csv_asset = self._register_internal(record, folder / "temporal_frames.csv", role="evidence")
+            except Exception:
+                shutil.rmtree(folder, ignore_errors=True)
+                raise
+            evidence = {"source_asset_id": source["id"], "candidate_asset_id": candidate["id"],
+                        "source_sha256": source["sha256"], "candidate_sha256": candidate["sha256"],
+                        "report_asset_id": report_asset["id"], "csv_asset_id": csv_asset["id"],
+                        "windows": windows, "status": "diagnostic_not_approved"}
+            record.setdefault("temporal_evidence", []).append(evidence)
+            record["temporal_evidence"] = record["temporal_evidence"][-30:]
+            self._write(record, "Cadência comparada em janela real; sem aprovação")
+            return {**self._snapshot(record), "status": "temporal_evidence_recorded",
+                    "temporal_comparison": report, "report_asset": self._public_file(report_asset),
+                    "csv_asset": self._public_file(csv_asset)}
 
     def register_reference_scenes(self, project_id, manifest, *, expected_revision=None):
         """Store an authored, complete-clock event manifest bound to source bytes."""
