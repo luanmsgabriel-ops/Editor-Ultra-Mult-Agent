@@ -59,3 +59,24 @@ def test_queue_authored_local_motion_without_claiming_render(tmp_path):
     oversized = dict(scene, frame_count=200)
     with pytest.raises(Exception):
         engine.queue_bundled_motion(project_id, oversized, expected_revision=queued["revision"])
+
+
+def test_bundled_motion_pipeline_exports_real_unapproved_alpha_sequence(tmp_path):
+    """Requires pinned Motion Lab Node runtime installed by CI, not a mocked adapter."""
+    from editorial_engine.motion_assets import load_layer
+    engine, project_id, _, _, rev = project_with_video(tmp_path)
+    recipe = {"schema_version": "motionlab-scene/1", "id": "proof-live",
+              "mode": "2d", "width": 160, "height": 90, "fps": "10/1",
+              "frame_count": 10, "background": None,
+              "nodes": [{"id": "tile", "type": "rect", "width": 20, "height": 20,
+                         "x": 10, "y": 40, "fill": "#AA55DD"}],
+              "tracks": [{"target": "tile", "property": "x",
+                          "keys": [{"t": 0, "value": 10}, {"t": .9, "value": 80}]}]}
+    queued = engine.queue_bundled_motion(project_id, recipe, expected_revision=rev)
+    produced = engine.execute_bundled_motion(project_id, expected_revision=queued["revision"])
+    assert produced["status"] == "motion_produced_unreviewed"
+    asset = produced["result_asset"]
+    assert asset is not None and asset["available"] is True
+    manifest = load_layer(engine.resolve_asset(project_id, asset["id"]), verify_files=True)
+    assert manifest["frame_count"] == 10 and manifest["fps"] == "10/1"
+    assert produced["approval"]["clone"] is None
