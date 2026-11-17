@@ -23,6 +23,7 @@ import time
 import uuid
 
 from .media import MAX_FILE_BYTES
+from .clone_resources import MAX_RESOURCE_BYTES, RESOURCE_TYPES
 
 
 TICKET_TTL_SECONDS = 300
@@ -31,7 +32,7 @@ MAX_RECORDS = 4096
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}\Z")
 _MIME = re.compile(r"[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*\Z")
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{43}\Z")
-_ROLES = {"ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"}
+_ROLES = {"ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"}
 
 
 class UploadTicketError(ValueError):
@@ -85,7 +86,12 @@ class UploadBinding:
             _fail("upload_size", "O arquivo deve ter conteúdo e até 512 MiB.", 413)
         allowed = {"narration": ("audio/",), "logo": ("image/",), "footage": ("video/",),
                    "result": ("video/",), "shot": ("video/",)}.get(self.role, ("video/", "image/"))
-        if not self.engine_mime.startswith(allowed):
+        if self.role == "clone_resource":
+            if self.engine_mime not in RESOURCE_TYPES:
+                _fail("upload_mime", "Use PNG, JSON, ZIP de máscaras, TTF ou OTF.", 415)
+            if self.size_bytes > MAX_RESOURCE_BYTES:
+                _fail("upload_size", "O recurso de clonagem deve ter até 40 MiB.", 413)
+        elif not self.engine_mime.startswith(allowed):
             _fail("upload_mime", "O formato do arquivo não corresponde ao papel escolhido.", 415)
 
     @property

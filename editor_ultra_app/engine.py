@@ -27,10 +27,14 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as ModelValidationError, model_validator
 
 from editorial_engine import project as engine
+from .clone_resources import (
+    CloneResources, IMAGE_POLICY, ImageNeed, RESOURCE_TYPES, extract_mattes,
+    inspect_resource, measured_quads, requested_image_coverage,
+)
 from editorial_engine.contracts import ValidationError, clone, digest, file_sha256, require, verify_file
 
 
-ROLES = {"ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"}
+ROLES = {"ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"}
 MAX_FILE_BYTES = 512 * 1024 * 1024
 MAX_INPUTS = 128
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}\Z")
@@ -348,15 +352,45 @@ class EngineAdapter:
                 value.update(valid=valid, serverRecorded=True)
             approvals[stage] = value
             state[stage + "Approval"] = value if valid else None
+        # Preserve old evidence for audit, but never describe it as current
+        # after a source or preview replacement.
+        selected_ref = self._selected(record, "ref")
+        selected_clone = self._selected(record, "clone")
+        ref_hashes = {item["sha256"] for item in selected_ref}
+        clone_hashes = {item["sha256"] for item in selected_clone}
+        def mark_current(rows, *, source_field, candidate_field):
+            return [{**clone(row),
+                     "current": row.get(source_field) in ref_hashes
+                                and row.get(candidate_field) in clone_hashes}
+                    for row in rows]
+        inventory = clone(record.get("reference_scene_inventory"))
+        if inventory:
+            inventory["current"] = inventory.get("source_sha256") in ref_hashes
+            if not inventory["current"]:
+                inventory["status"] = "stale_reference_changed"
         public_engines = {}
         for stage, item in record["engines"].items():
             current = item["binding"] == self._stage_binding(record, stage)
+            if item.get("preview_kind") == "reconstruction":
+                current = current and item["image_request_digest"] == digest(self._current_clone_images(record))
             public_engines[stage] = {"current": current, "status": item.get("status", "prepared") if current else "stale",
-                                     "preview_kind": "reference_study" if stage == "clone" else stage}
+                                     "preview_kind": item.get("preview_kind", "reference_study" if stage == "clone" else stage)}
+        image_request = clone(self._current_clone_images(record))
+        clone_stage = record["engines"].get("clone", {})
+        if image_request and clone_stage.get("image_request_digest") == digest(self._current_clone_images(record)):
+            image_request["status"] = ("rendered_unreviewed" if clone_stage.get("status") == "rendered_unreviewed"
+                                       else "images_bound")
+            image_request["bindings"] = clone(clone_stage["image_bindings"])
         return {"project_id": record["project_id"], "revision": record["revision"], "state": state,
                 "engine": public_engines, "approval": approvals,
                 "motion_measurements": [self._motion_public(record, item)
                                         for item in record.get("motion_measurements", [])[-20:]],
+                "quality_evidence": mark_current(record.get("quality_evidence", []),
+                                                 source_field="source_sha256", candidate_field="clone_sha256"),
+                "temporal_evidence": mark_current(record.get("temporal_evidence", []),
+                                                  source_field="source_sha256", candidate_field="candidate_sha256"),
+                "reference_scene_inventory": inventory,
+                "clone_image_request": image_request,
                 # Internal host envelope. The MCP layer signs these paths and removes them
                 # before exposing a response. state.assets never contains a local path.
                 "assets": [{**self._public_file(item), "path": item["path"]}
@@ -540,7 +574,8 @@ class EngineAdapter:
             require(bool(_text(host_file_id, 300).strip()), "host_file_id", "Use a nonempty host file identifier")
         allowed = {"narration": ("audio/",), "logo": ("image/",), "footage": ("video/",),
                    "result": ("video/",), "shot": ("video/",)}.get(role, ("video/", "image/"))
-        require(mime_type.startswith(allowed), "asset_type", "Media type does not match the selected role")
+        require(mime_type in RESOURCE_TYPES if role == "clone_resource" else mime_type.startswith(allowed),
+                "asset_type", "Media type does not match the selected role")
         with self._lock(project_id):
             record = self._load(project_id)
             self._expect(record, expected_revision)
@@ -556,7 +591,7 @@ class EngineAdapter:
             if previous is not None:
                 # An acknowledged host upload can be retried after a lost response.
                 # The identifier never substitutes for inspecting and hashing bytes.
-                info = self._measure(source, mime_type)
+                info = inspect_resource(source, mime_type) if role == "clone_resource" else self._measure(source, mime_type)
                 require(file_sha256(source) == previous["sha256"] and info["type"] == previous["type"],
                         "host_file_conflict", "This host file identifier already belongs to different media")
                 self.resolve_asset(project_id, previous["id"])
@@ -572,7 +607,7 @@ class EngineAdapter:
             try:
                 with source.open("rb") as incoming, destination.open("xb") as output:
                     shutil.copyfileobj(incoming, output)
-                info = self._measure(destination, mime_type)
+                info = inspect_resource(destination, mime_type) if role == "clone_resource" else self._measure(destination, mime_type)
             except Exception:
                 destination.unlink(missing_ok=True)
                 raise
@@ -599,7 +634,7 @@ class EngineAdapter:
             elif role in {"clone", "result", "narration", "logo"}:
                 record["state"]["assets"][role] = [public]
             else:
-                record["state"]["assets"][role].append(public)
+                record["state"]["assets"].setdefault(role, []).append(public)
             if role == "clone":
                 record["approvals"]["clone"] = None
             if role == "result":
@@ -770,23 +805,28 @@ class EngineAdapter:
                     "motion_measurement":self._motion_public(record,measurement)}
 
     def _stage_binding(self, record, stage):
-        return self._clone_binding(record) if stage == "clone" else self._generation_basis(record) if stage == "generation" else self._edit_binding(record)
+        if stage in {"clone", "motion"}:
+            return self._clone_binding(record)
+        return self._generation_basis(record) if stage == "generation" else self._edit_binding(record)
 
-    def _brief(self, record, stage):
+    def _brief(self, record, stage, *, independent=False):
         s = record["state"]
         lines = [s["objective"] or "Preparar este projeto audiovisual a partir das escolhas e dos arquivos fornecidos.",
                  "Preservar: " + "; ".join(s["preserve"]), "Adaptação solicitada: " + s["adapt"],
                  "Formato solicitado: " + s["ratio"], "Direção adicional: " + s["editNotes"]]
-        if stage == "clone":
+        if independent:
+            lines.extend(["Reconstrução sobre base independente sincronizada à referência.",
+                          "Posicione e anime os PNGs aprovados para uso como recursos de composição."])
+        elif stage == "clone":
             lines.append("ESTUDO TÉCNICO DA REFERÊNCIA: o render usa a referência como base de estudo. Não representa nova pessoa, recuperação de camadas ocultas ou fidelidade certificada. A direção deve ser autorada a partir de inspeção real; preservar sem intervenção não constitui clonagem.")
         else:
             lines.append("Usar exclusivamente a nova filmagem como fonte da edição. Referência e prévia orientam estilo; refazer tracking e máscaras. Não inferir observações, fontes, recursos ou efeitos indisponíveis.")
-        return "\n".join(lines)
+        return "\n".join([*lines, IMAGE_POLICY] if stage == "clone" else lines)
 
-    def _new_engine(self, record, stage, inputs, intent):
+    def _new_engine(self, record, stage, inputs, intent, *, fresh=False, independent=False):
         old = record["engines"].get(stage)
         binding = self._stage_binding(record, stage)
-        if old and old["binding"] == binding:
+        if not fresh and old and old["binding"] == binding and old.get("directory"):
             return Path(old["directory"])
         directory = self._directory(record["project_id"]) / "engines" / (stage + "-" + uuid.uuid4().hex)
         s = record["state"]
@@ -804,7 +844,7 @@ class EngineAdapter:
         if s["audience"]:
             answers["audience"] = s["audience"]
         spec = {"schema": engine.SPEC_SCHEMA, "id": stage + "-" + record["project_id"], "intent": intent,
-                "brief": self._brief(record, stage), "inputs": inputs,
+                "brief": self._brief(record, stage, independent=independent), "inputs": inputs,
                 "generation_answers": answers if stage == "generation" else {}, "preferences": {},
                 "requirements": [], "settings": {"max_review_retries": 2}}
         engine.create_project(directory, spec)
@@ -868,6 +908,206 @@ class EngineAdapter:
                 "direction_path", "Network and filesystem addresses are not executable direction inputs")
         return value
 
+    def _current_clone_images(self, record):
+        request = record.get("clone_images")
+        if request and request["binding"] == self._clone_binding(record):
+            return request
+        return None
+
+    def request_clone_images(self, project_id, needs, *, expected_revision=None):
+        """Register scene-bound image requests for the host's image generator."""
+        from visual_fidelity.reference_fidelity import _clock, _read_frames
+        needs = [ImageNeed.model_validate(item).model_dump() for item in needs]
+        require(1 <= len(needs) <= 12 and len({x["id"] for x in needs}) == len(needs),
+                "clone_image_requests", "Declare one to twelve unique image needs")
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            refs = self._selected(record, "ref")
+            require(len(refs) == 1 and refs[0]["type"].startswith("video/"),
+                    "clone_reference", "Select one scoped video reference")
+            reference = refs[0]
+            reference_path = self.resolve_asset(project_id, reference["id"])
+            clock = _clock(reference_path)
+            require(all(n["frames"][1] <= clock["frame_count"] for n in needs),
+                    "clone_image_interval", "The image interval exceeds the reference clock")
+            for need in needs:
+                need["prompt"] = (
+                    f"{need['description'].strip()}\n"
+                    f"Match the silhouette, palette, light and camera angle from source frame "
+                    f"{need['reference_frame']}. One isolated object, genuine transparent PNG alpha, "
+                    "clean silhouette and empty margins. No environment, backdrop or text unless specified."
+                )
+            request = {
+                "schema": "editor-ultra-clone-images/1",
+                "binding": self._clone_binding(record), "reference_asset_id": reference["id"],
+                "reference_sha256": reference["sha256"], "clock": clock, "needs": needs,
+                "provider": "host_image_generation", "status": "awaiting_image_generation",
+            }
+            existing = self._current_clone_images(record)
+            if not existing or {k: v for k, v in existing.items() if k != "stills"} != request:
+                import cv2
+                from PIL import Image
+                indices = sorted({need["reference_frame"] for need in needs})
+                frames = _read_frames(reference_path, indices)
+                destination = self._directory(project_id) / "image-requests" / uuid.uuid4().hex
+                destination.mkdir(parents=True)
+                try:
+                    stills = {}
+                    for index, pixels in zip(indices, frames):
+                        image = Image.fromarray(cv2.cvtColor(pixels, cv2.COLOR_BGR2RGB))
+                        image.thumbnail((960, 960), Image.Resampling.LANCZOS)
+                        path = destination / (f"reference-{index:06d}.jpg")
+                        image.save(path, quality=88)
+                        stills[str(index)] = self._public_file(self._register_internal(record, path, role="evidence"))
+                    record["clone_images"] = {**request, "stills": stills}
+                    self._write(record, "Pedido de PNGs transparentes registrado")
+                except Exception:
+                    shutil.rmtree(destination, ignore_errors=True)
+                    raise
+            snapshot = self._snapshot(record)
+            return {**snapshot, "status": snapshot["clone_image_request"]["status"],
+                    "image_request": snapshot["clone_image_request"], "followup_prompt": IMAGE_POLICY}
+
+    def _prepare_reconstruction(self, record, spec):
+        from visual_fidelity.reference_fidelity import _clock
+        from visual_fidelity.reference_cadence import video_clock
+        from editorial_engine.motion_assets import load_layer
+
+        refs = self._selected(record, "ref")
+        require(len(refs) == 1 and refs[0]["type"].startswith("video/"),
+                "clone_reference", "Select one scoped video reference")
+        reference = refs[0]
+        project_id = record["project_id"]
+        source_path = self.resolve_asset(project_id, reference["id"])
+        base_path = self.resolve_asset(project_id, spec.base_asset_id)
+        base = record["files"][spec.base_asset_id]
+        require(base["role"] == "footage" and base["type"].startswith("video/")
+                and base["sha256"] != reference["sha256"], "clone_base",
+                "Import an independently produced base as footage, distinct from the reference")
+        clock = _clock(source_path)
+        rate = Fraction(clock["fps"])
+        require(_clock(base_path) == clock and video_clock(source_path) == video_clock(base_path)
+                == (rate, clock["frame_count"]), "clone_clock",
+                "The base must match the reference raster, frame count and constant frame clock")
+        request = self._current_clone_images(record)
+        needs = request["needs"] if request else []
+        require(bool(request) != bool(spec.no_generated_images_reason and spec.no_generated_images_reason.strip()),
+                "clone_image_assessment", "Register the needed PNGs or explain why no generated images improve this reconstruction")
+        by_id = {item["id"]: item for item in needs}
+        require(set(spec.images) == set(by_id), "clone_images_pending",
+                "Provide a verified PNG for each current image request")
+        require(not set(spec.images) & set(spec.motion_layers), "clone_resource_ids",
+                "Image requests and motion layers must use distinct names")
+
+        def resource(identifier, mime_types):
+            path = self.resolve_asset(project_id, identifier)
+            item = record["files"][identifier]
+            require(item["role"] == "clone_resource" and item["type"] in mime_types,
+                    "clone_resource_type", "Select a prepared resource of the expected type in this project")
+            return path, item
+
+        resources, bindings = {}, {}
+        inventory = []
+        for name, identifier in spec.images.items():
+            path, item = resource(identifier, ("image/png",))
+            inspect_resource(path, item["type"])
+            need = by_id[name]
+            provenance = {"method": "host_generated_png",
+                          "reference_sha256": reference["sha256"], "prompt": need["prompt"],
+                          "reference_frame": need["reference_frame"], "asset_sha256": item["sha256"]}
+            inventory.append({"id": name, "kind": "image", "path": str(path),
+                              "description": need["description"], "provenance": provenance})
+            bindings[name] = {"asset_id": identifier, "sha256": item["sha256"],
+                              "source": "host_generated_png"}
+        for name, identifier in spec.motion_layers.items():
+            path = self.resolve_asset(project_id, identifier)
+            item = record["files"][identifier]
+            require(item.get("internal") and item["type"] == "application/json", "clone_motion_resource",
+                    "Select a project-owned motion manifest produced by the engine")
+            layer = load_layer(path, verify_files=False)
+            root = self._directory(project_id).resolve()
+            for frame in layer["frames"]:
+                for key in ("path", "glyph_ids_path"):
+                    require(key not in frame or Path(frame[key]).resolve().is_relative_to(root),
+                            "clone_motion_path", "Motion files must belong to this project")
+            inventory.append({"id": name, "kind": "motion", "path": str(path)})
+        if inventory:
+            resources["assets"] = {"assets": inventory}
+        for name in ("protection", "projection", "pose"):
+            identifier = getattr(spec, name + "_asset_id")
+            if identifier:
+                resources[name] = str(resource(identifier, ("application/json",))[0])
+        if spec.projection_assets:
+            resources["projection"] = {name: str(resource(identifier, ("application/json",))[0])
+                                       for name, identifier in spec.projection_assets.items()}
+        fonts = {}
+        for name in ("font", "script_font"):
+            identifier = getattr(spec, name + "_asset_id")
+            if identifier:
+                resource(identifier, ("font/ttf", "font/otf"))
+                fonts[name] = identifier
+        matte_path = (resource(spec.matte_asset_id, ("application/zip",))[0]
+                      if spec.matte_asset_id else None)
+        directory = self._new_engine(record, "clone", [self._input(base, "footage")], "edit",
+                                     fresh=True, independent=True)
+        try:
+            if matte_path:
+                resources["mattes"] = extract_mattes(matte_path, directory / "project-mattes",
+                                                      clock["frame_count"])
+            if spec.measured_projection:
+                from editorial_engine.perception import write_json
+                chosen = spec.measured_projection
+                measurement = next((m for m in record.get("motion_measurements", [])
+                                    if m["id"] == chosen.measurement_id), None)
+                require(measurement is not None and measurement["source"]["sha256"]
+                        in {reference["sha256"], base["sha256"]}, "clone_motion_source",
+                        "Use a motion measurement from the current reference or base")
+                for dep in [measurement["source"], *measurement.get("masks", [])]:
+                    verified = self.resolve_asset(project_id, dep["asset_id"])
+                    verify_file(str(verified), dep["sha256"], "motion input")
+                source_asset = record["files"][measurement["source"]["asset_id"]]
+                profile_asset = measurement["artifacts"]["profile"]
+                profile_path = self.resolve_asset(project_id, profile_asset["id"])
+                verify_file(str(profile_path), profile_asset["sha256"], "motion profile")
+                profile = json.loads(profile_path.read_text(encoding="utf-8"))
+                require(profile["source"]["sha256"] == source_asset["sha256"],
+                        "clone_motion_source", "Profile and measured video differ")
+                projection = directory / "measured-projection.json"
+                write_json(projection, {
+                    "clock": "source", "source_sha256": base["sha256"],
+                    "fps": clock["fps"], "frame_count": clock["frame_count"],
+                    "quads": measured_quads(profile, chosen.element_id, chosen.frames, clock),
+                    "provenance": {"kind": "tool", "actor": "editor_ultra.motion_profile",
+                                   "method": "Explicit source-clock mapping of measured 2D pose to planar corners",
+                                   "measurement_id": chosen.measurement_id,
+                                   "profile_sha256": profile_asset["sha256"],
+                                   "measured_source_sha256": source_asset["sha256"]},
+                })
+                resources["projection"] = str(projection)
+            engine.prepare_input(directory, base["id"], resources=resources)
+            engine.request_direction(directory, kind="edit", input_id=base["id"],
+                                     **self._direction_template_options(record))
+            direction = engine.artifact(directory, "edit_request")
+            analysis = engine.artifact(directory, "analysis:" + base["id"])
+        except Exception:
+            shutil.rmtree(directory, ignore_errors=True)
+            raise
+        stage = record["engines"]["clone"]
+        stage.update(status="awaiting_direction", preview_kind="reconstruction",
+                     image_request_digest=digest(request), image_needs=needs, clock=clock,
+                     image_bindings=bindings, fonts=fonts, reference_sha256=reference["sha256"],
+                     no_generated_images_reason=spec.no_generated_images_reason,
+                     base_sha256=base["sha256"], base_asset_id=base["id"])
+        return {"kind": "clone", "status": "awaiting_direction", "preview_kind": "reconstruction",
+                "request": self._portable(record, direction), "analysis": self._portable(record, analysis),
+                "image_bindings": bindings}
+
+    def _direction_template_options(self, record):
+        template_id = record["state"].get("templateId")
+        return ({"template_input_id": "selected-template-library", "template_ids": [template_id]}
+                if template_id and self.template_library else {})
+
     def _prepare(self, record, stage):
         require(stage in {"clone", "edit", "generation", "assembly"}, "engine_kind", "Unsupported stage")
         refs = self._selected(record, "ref")
@@ -888,13 +1128,14 @@ class EngineAdapter:
                             "references": [self._public_file(a) for a in refs],
                             "template_context": context,
                             "required": "Inspect the supplied inputs, author the production direction and produce a real preview; import that file as role clone for explicit review.",
-                            "priorities": record["state"]["preserve"]}),
+                            "priorities": record["state"]["preserve"], "image_asset_policy": IMAGE_POLICY}),
                         "limitations": ["Image/template/brief input has no universal automatic cloning renderer.",
                                         "A source URL is a user note; no download or external generation was executed.",
                                         "Template context describes verified catalog options and does not assert their execution."]}
             source = videos[0]
             # Only this explicitly labelled study may use reference bytes as its source.
-            directory = self._new_engine(record, stage, [self._input(source, "footage")], "edit")
+            directory = self._new_engine(record, stage, [self._input(source, "footage")], "edit",
+                                         fresh=record["engines"].get(stage, {}).get("preview_kind") == "reconstruction")
             engine.advance_project(directory)
             if record["state"].get("templateId") and self.template_library:
                 engine.request_direction(directory, kind="edit", input_id=source["id"],
@@ -952,12 +1193,14 @@ class EngineAdapter:
         if stage in {"clone", "edit"}:
             analysis = engine.artifact(directory, "analysis:" + source["id"] if stage == "clone" else "analysis:" + sources[0]["id"])
             result["analysis"] = self._portable(record, analysis)
+        if stage == "clone":
+            result["image_asset_policy"] = IMAGE_POLICY
         result["limitations"] = ["No semantic observations, faithful-clone claim or user approval are inferred.",
                                 "Reference study uses reference pixels; new footage editing does not.",
                                 "Video generation exports prompts only."]
         return result
 
-    def prepare(self, project_id, kind, *, expected_revision=None):
+    def prepare(self, project_id, kind, *, expected_revision=None, reconstruction=None):
         kind = "generation" if kind == "prompts" else kind
         with self._lock(project_id):
             record = self._load(project_id)
@@ -969,7 +1212,10 @@ class EngineAdapter:
                            else self._shot_files(record))
                 if len(sources) > 1:
                     kind = "assembly"
-            result = self._prepare(record, kind)
+            require(reconstruction is None or kind == "clone", "clone_resource_route",
+                    "Reconstruction resources belong to the clone route")
+            result = (self._prepare_reconstruction(record, CloneResources.model_validate(reconstruction))
+                      if reconstruction is not None else self._prepare(record, kind))
             self._write(record, "Preparação real: " + kind)
             return {**self._snapshot(record), **result}
 
@@ -1021,7 +1267,18 @@ class EngineAdapter:
                         "assembly_source", "Assembly sources must be the selected new footage")
                 engine.plan_assembly(directory, plan)
             else:
-                engine.accept_direction(directory, plan, kind="generation" if kind == "generation" else "edit")
+                check_plan = None
+                if stage.get("preview_kind") == "reconstruction":
+                    require(stage["image_request_digest"] == digest(self._current_clone_images(record)),
+                            "clone_images_changed", "Prepare again with the current image requirements")
+                    def check_plan(compiled):
+                        requested_image_coverage(compiled, stage["image_needs"], stage["clock"])
+                        require("font" in stage["fonts"] or
+                                not any(d["effect_id"] in {"native.kinetic_type", "native.body_orbit"}
+                                        for d in compiled["decisions"]),
+                                "font_missing", "Bind the chosen TTF or OTF before preparing typography")
+                engine.accept_direction(directory, plan, kind="generation" if kind == "generation" else "edit",
+                                        validate_edit_plan=check_plan)
             before = self._clone_binding(record), self._edit_binding(record)
             stage["direction_hash"] = digest({"plan": plan, "ui_shot_mapping": mapping}) if kind == "generation" else digest(plan)
             if kind == "generation":
@@ -1052,13 +1309,28 @@ class EngineAdapter:
             stage = record["engines"].get(kind)
             require(stage and stage["binding"] == self._stage_binding(record, kind), "stale_direction", "Prepare and author current direction before rendering")
             require(stage.get("directory"), "host_production_required", "No renderer has been prepared for this route; import a real produced preview")
+            require(stage.get("status") in {"ready_render", "rendered_unreviewed"},
+                    "stale_direction", "Apply the current direction before calling render")
             require(kind == "clone" or self._approval_valid(record, "clone"), "clone_approval_required", "Current preview approval is required")
             directory = Path(stage["directory"])
-            engine.render_project(directory, kind="assembly" if kind == "assembly" else "edit")
+            reconstruction = stage.get("preview_kind") == "reconstruction"
+            require(kind != "clone" or reconstruction or not self._current_clone_images(record),
+                    "clone_images_pending", "Prepare the independent clone with the requested images before rendering")
+            font_paths = {}
+            if reconstruction:
+                require(stage["image_request_digest"] == digest(self._current_clone_images(record)),
+                        "clone_images_changed", "Prepare and apply direction for the current image requirements")
+                self.resolve_asset(project_id, stage["base_asset_id"])
+                font_paths = {key: self.resolve_asset(project_id, identifier)
+                              for key, identifier in stage["fonts"].items()}
+                for item in stage["image_bindings"].values():
+                    self.resolve_asset(project_id, item["asset_id"])
+            engine.render_project(directory, kind="assembly" if kind == "assembly" else "edit", **font_paths)
             rendered = engine.artifact(directory, "render")
             role = "clone" if kind == "clone" else "result"
             item = self._register_internal(record, rendered["path"], role=role,
-                                           name="Estudo-da-referencia.mp4" if kind == "clone" else "Edicao-renderizada.mp4")
+                                           name=("Reconstrucao-renderizada.mp4" if reconstruction else
+                                                 "Estudo-da-referencia.mp4" if kind == "clone" else "Edicao-renderizada.mp4"))
             item.update(duration=rendered["duration_s"], fps=rendered["fps"])
             item["basis_binding"] = self._preview_binding(record, "clone" if kind == "clone" else "final")
             public = self._public_file(item)
@@ -1068,11 +1340,198 @@ class EngineAdapter:
             self._invalidate(record, before)
             stage["status"] = "rendered_unreviewed"
             stage["render_asset_id"] = item["id"]
+            if reconstruction:
+                rendered.update(preview_kind="reconstruction", reference_sha256=stage["reference_sha256"],
+                                base_sha256=stage["base_sha256"], image_bindings=stage["image_bindings"])
             receipt = self._portable(record, rendered)
-            self._write(record, "Render real concluído: " + ("estudo da referência" if kind == "clone" else kind))
+            preview_kind = "reconstruction" if reconstruction else "reference_study" if kind == "clone" else kind
+            self._write(record, "Render real concluído: " + preview_kind)
             return {**self._snapshot(record), "status": "rendered_unreviewed", "asset_id": item["id"],
                     "asset": public, "result": receipt,
-                    "preview_kind": "reference_study" if kind == "clone" else kind}
+                    "preview_kind": preview_kind}
+
+    def compare_clone(self, project_id, frames=None, *, expected_revision=None):
+        """Compare selected reference/clone at exact frames and persist evidence.
+
+        Never creates or approves a new clone. Runs only on verified, project-owned
+        asset IDs; neither the caller nor a project document can supply a path.
+        """
+        from visual_fidelity.reference_fidelity import audit_pair, _clock, sample_frame_indices
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            references = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            candidates = [a for a in self._selected(record, "clone") if a["type"].startswith("video/")]
+            require(len(references) == 1 and len(candidates) == 1,
+                    "fidelity_inputs", "Exactly one reference video and one clone video are required")
+            reference, candidate = references[0], candidates[0]
+            ref_path = self.resolve_asset(project_id, reference["id"])
+            clone_path = self.resolve_asset(project_id, candidate["id"])
+            # Legacy imports may lack nb_frames metadata. Always resolve the
+            # sample window against the source bytes now, not container duration.
+            actual_frame_count = _clock(ref_path)["frame_count"]
+            if frames is None:
+                frames = sample_frame_indices(actual_frame_count)
+            directory = self._directory(project_id) / "fidelity" / uuid.uuid4().hex
+            try:
+                report = audit_pair(ref_path, clone_path, directory, frames)
+                report_item = self._register_internal(record, directory / "comparison_report.json",
+                                                       role="evidence")
+                image_item = self._register_internal(record, directory / "aligned_contact_sheet.jpg",
+                                                      role="evidence")
+            except Exception:
+                shutil.rmtree(directory, ignore_errors=True)
+                raise
+            entry = {"reference_asset_id": reference["id"], "clone_asset_id": candidate["id"],
+                     "source_sha256": reference["sha256"], "clone_sha256": candidate["sha256"],
+                     "report_asset_id": report_item["id"], "image_asset_id": image_item["id"],
+                     "frames": list(frames), "status": "diagnostic_not_approved"}
+            record.setdefault("quality_evidence", []).append(entry)
+            record["quality_evidence"] = record["quality_evidence"][-30:]
+            self._write(record, "Comparação exata de referência e clone; sem aprovação")
+            return {**self._snapshot(record), "status": "quality_evidence_recorded",
+                    "comparison": report, "report_asset": self._public_file(report_item),
+                    "image_asset": self._public_file(image_item)}
+
+    def queue_bundled_motion(self, project_id, recipe, *, expected_revision=None):
+        """Queue one bounded, authored, source-associated local motion recipe.
+
+        This is not a video clone. The only exposed executable producer is the
+        already packaged, declarative Motion Lab backend. Fonts, URLs, scripts,
+        external model calls and arbitrary asset paths are not accepted here.
+        """
+        from fractions import Fraction
+        from editorial_engine.production import production_request
+        from editorial_engine.motionlab import validate_scene
+        require(isinstance(recipe, dict) and len(json.dumps(recipe, allow_nan=False)) <= 128 * 1024,
+                "motion_recipe_size", "Motion recipe must be a bounded JSON document")
+        checked = validate_scene(recipe)
+        require(checked.get("mode") == "2d"
+                and checked["width"] * checked["height"] <= 1280 * 720
+                and checked["frame_count"] <= 120
+                and Fraction(checked["fps"]) <= 60,
+                "motion_proof_budget", "The first local proof supports 2D, 120 frames and up to 1280x720 at 60fps")
+        require(not checked.get("fonts"), "motion_proof_fonts",
+                "Font-dependent motion must use the future verified font resource route")
+        require(checked.get("background") is None, "motion_proof_alpha",
+                "This proof requires transparent motion; opaque media use another explicit output contract")
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            refs = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            require(len(refs) == 1, "motion_source", "Select exactly one verified reference video")
+            directory = self._new_engine(record, "motion", [self._input(refs[0], "reference")],
+                                         "reference_generate")
+            request_id = "motion-proof-" + uuid.uuid4().hex
+            request = production_request(request_id, "motion_recipe",
+                prompt="Render a small, authored, independent 2D motion proof. Not a faithful reference reconstruction.",
+                output_kind="motion_layer", adapter_id="bundled.motion",
+                parameters={"backend": "motionlab", "recipe": checked,
+                            "asset_id": "motion-proof", "description": "Local authored motion proof"},
+                context={"project_id": project_id, "reference_sha256": refs[0]["sha256"],
+                         "source_pixels_reused": False, "visual_review": "pending"})
+            engine.queue_production(directory, request)
+            stage = record["engines"]["motion"]
+            stage["request_id"] = request_id
+            stage["request_sha256"] = request["request_sha256"]
+            stage["status"] = "queued_local_motion_unreviewed"
+            self._write(record, "Motion Lab declarativo enfileirado; sem produção ou aprovação")
+            return {**self._snapshot(record), "status": "queued_local_motion_unreviewed",
+                    "request_id": request_id, "request_sha256": request["request_sha256"]}
+
+    def execute_bundled_motion(self, project_id, *, expected_revision=None):
+        """Execute the currently queued local producer under the project ledger."""
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            stage = record["engines"].get("motion")
+            require(stage and stage.get("binding") == self._stage_binding(record, "motion"),
+                    "motion_stale", "Prepare a current source-bound proof")
+            require(stage.get("status") == "queued_local_motion_unreviewed",
+                    "motion_stage", "Only a queued local motion proof can run")
+            request_id = stage["request_id"]
+            engine.produce(stage["directory"], request_id)
+            receipt = engine.artifact(stage["directory"], "execution:" + request_id)
+            stage["status"] = receipt.get("status", "unverified")
+            result_asset = None
+            if stage["status"] == "succeeded":
+                result = engine.artifact(stage["directory"], "result:" + request_id)
+                manifest = result.get("artifact", {})
+                require(manifest.get("path"), "motion_result", "Producer did not return a verified motion layer")
+                result_asset = self._register_internal(record, manifest["path"], role="evidence",
+                                                       name="motion-proof-layer.json")
+                stage["status"] = "motion_produced_unreviewed"
+                stage["result_asset_id"] = result_asset["id"]
+            self._write(record, "Produção local executada; prévia independente sem aprovação")
+            return {**self._snapshot(record), "status": stage["status"],
+                    "execution": self._portable(record, receipt),
+                    "result_asset": self._public_file(result_asset) if result_asset else None}
+
+    def compare_temporal(self, project_id, *, center_s=0.0, expected_revision=None):
+        """Inspect a bounded three-second source-clock window at the selected time.
+
+        The motion diagnostics remain evidence. They do not replace authored
+        element trajectories, a scene reconstruction, or a user's rejection.
+        """
+        from visual_fidelity.reference_fidelity import _clock
+        from visual_fidelity.reference_temporal_qa import (
+            measure_reference_cadence_gap, window_around_seconds)
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            refs = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            copies = [a for a in self._selected(record, "clone") if a["type"].startswith("video/")]
+            require(len(refs) == 1 and len(copies) == 1, "cadence_inputs",
+                    "A reference video and clone video must be selected")
+            source, candidate = refs[0], copies[0]
+            ref_path = self.resolve_asset(project_id, source["id"])
+            candidate_path = self.resolve_asset(project_id, candidate["id"])
+            windows = window_around_seconds(_clock(ref_path), center_s)
+            folder = self._directory(project_id) / "cadence" / uuid.uuid4().hex
+            try:
+                report = measure_reference_cadence_gap(ref_path, candidate_path, folder, ranges=windows)
+                report_asset = self._register_internal(record, folder / "temporal_report.json", role="evidence")
+                csv_asset = self._register_internal(record, folder / "temporal_frames.csv", role="evidence")
+            except Exception:
+                shutil.rmtree(folder, ignore_errors=True)
+                raise
+            evidence = {"source_asset_id": source["id"], "candidate_asset_id": candidate["id"],
+                        "source_sha256": source["sha256"], "candidate_sha256": candidate["sha256"],
+                        "report_asset_id": report_asset["id"], "csv_asset_id": csv_asset["id"],
+                        "windows": windows, "status": "diagnostic_not_approved"}
+            record.setdefault("temporal_evidence", []).append(evidence)
+            record["temporal_evidence"] = record["temporal_evidence"][-30:]
+            self._write(record, "Cadência comparada em janela real; sem aprovação")
+            return {**self._snapshot(record), "status": "temporal_evidence_recorded",
+                    "temporal_comparison": report, "report_asset": self._public_file(report_asset),
+                    "csv_asset": self._public_file(csv_asset)}
+
+    def register_reference_scenes(self, project_id, manifest, *, expected_revision=None):
+        """Store an authored, complete-clock event manifest bound to source bytes."""
+        from visual_fidelity.reference_fidelity import _clock
+        from visual_fidelity.reference_scene import validate_reference_scenes
+        require(isinstance(manifest, dict) and len(json.dumps(manifest, ensure_ascii=False)) <= 1024 * 1024,
+                "scene_manifest_size", "Scene manifest must be a bounded JSON object")
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            references = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            require(len(references) == 1, "scene_source", "Select exactly one video reference")
+            reference = references[0]
+            clock = _clock(self.resolve_asset(project_id, reference["id"]))
+            coverage = validate_reference_scenes(manifest, source_sha256=reference["sha256"],
+                                                 fps=clock["fps"], frame_count=clock["frame_count"])
+            directory = self._directory(project_id) / "scene_inventories"
+            directory.mkdir(parents=True, exist_ok=True)
+            destination = directory / (uuid.uuid4().hex + ".json")
+            destination.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+                                   encoding="utf-8")
+            item = self._register_internal(record, destination, role="evidence")
+            record["reference_scene_inventory"] = {"asset_id": item["id"], "source_sha256": reference["sha256"],
+                                                   "coverage": coverage, "status": "authored_unreviewed"}
+            self._write(record, "Inventário de cenas registrado; observações não aprovadas")
+            return {**self._snapshot(record), "status": "scene_inventory_registered",
+                    "scene_inventory": coverage, "asset": self._public_file(item)}
 
     def record_review(self, project_id, stage, decision, confirmation, asset_id, notes="", *,
                       checks=None, expected_revision=None, actor="authenticated-user"):
@@ -1140,4 +1599,4 @@ class EngineAdapter:
                 "result_missing", "The previous render does not represent the current direction")
         self.resolve_asset(project_id, item["id"])
         return {**self._snapshot(record), "asset_id": item["id"], "asset": self._public_file(item),
-                "preview_kind": "reference_study" if stage == "clone" else stage}
+                "preview_kind": entry.get("preview_kind", "reference_study" if stage == "clone" else stage)}

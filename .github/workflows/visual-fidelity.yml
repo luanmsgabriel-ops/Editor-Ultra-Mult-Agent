@@ -1,0 +1,102 @@
+name: Visual fidelity contract gate
+
+on:
+  pull_request:
+    paths:
+      - "visual_fidelity/reference_fidelity.py"
+      - "visual_fidelity/reference_scene.py"
+      - "visual_fidelity/blender_temporal.py"
+      - "visual_fidelity/reference_temporal_qa.py"
+      - "editor_ultra_app/engine.py"
+      - "editor_ultra_app/server.py"
+      - "editor_ultra_app/clone_resources.py"
+      - "editor_ultra_app/upload_tickets.py"
+      - "editorial_engine/native.py"
+      - "editorial_engine/perception.py"
+      - "editorial_engine/project.py"
+      - "visual_fidelity/anchor_graphics.py"
+      - "visual_fidelity/video_anchor.py"
+      - "tests/test_clone_resources.py"
+      - "tests/test_app_server.py"
+      - "editor_ultra_app/ui.html"
+      - "tests/test_reference_fidelity.py"
+      - "tests/test_blender_temporal.py"
+      - "tests/test_reference_temporal_qa.py"
+      - "tests/test_app_fidelity_bridge.py"
+      - "Dockerfile"
+      - ".github/workflows/visual-fidelity.yml"
+  push:
+    branches: [main]
+    paths:
+      - "visual_fidelity/reference_fidelity.py"
+      - "visual_fidelity/reference_scene.py"
+      - "tests/test_reference_fidelity.py"
+
+permissions:
+  contents: read
+
+jobs:
+  reference-fidelity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install "pydantic>=2,<3"
+      - name: Install FFmpeg for media-real regression tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Verify codec dependency
+        run: ffmpeg -version
+      - name: Install pinned Motion Lab renderer dependencies
+        run: npm ci --ignore-scripts --prefix editorial_engine/backends/motionlab
+      - name: Run visual fidelity contract tests
+        run: python -m pytest -q tests/test_reference_fidelity.py tests/test_blender_temporal.py tests/test_reference_temporal_qa.py tests/test_app_fidelity_bridge.py tests/test_clone_resources.py
+      - name: Verify studio JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("editor_ultra_app/ui.html").read_text(encoding="utf-8")
+          first = text.index("<script>") + len("<script>")
+          last = text.index("</script>", first)
+          Path("/tmp/editor-ultra-studio-ui.js").write_text(text[first:last], encoding="utf-8")
+          PY
+          node --check /tmp/editor-ultra-studio-ui.js
+
+  app-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-app.txt
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install application runtime and pytest
+        run: |
+          python -m pip install -r requirements-app.txt
+          python -m pip install "pytest>=8,<10"
+      - name: Run existing app server/authorization regression
+        run: python -m pytest -q tests/test_app_server.py
+
+  image-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the deployable image and check native Node bindings
+        run: docker build --tag editor-ultra-homologation .

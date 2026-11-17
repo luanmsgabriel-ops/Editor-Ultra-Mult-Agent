@@ -619,7 +619,7 @@ def request_direction(directory, *, kind, input_id=None, reference_id=None,
     return _commit(state, "request_direction", {"kind": kind})
 
 
-def accept_direction(directory, direction, *, kind, input_id=None):
+def accept_direction(directory, direction, *, kind, input_id=None, validate_edit_plan=None):
     """Validate an actual authored direction/plan and connect it to this project."""
     state = _checked_state(directory)
     require(kind in {"edit", "generation"}, "direction_kind", "Use edit or generation")
@@ -630,6 +630,8 @@ def accept_direction(directory, direction, *, kind, input_id=None):
         require(source_id == request["project_source_id"], "direction_source", "Direction must use its requested source")
         analysis, catalog = _artifact(state, "analysis:" + source_id), _artifact(state, "catalog:" + source_id)
         result = plan_direction(analysis, catalog, direction, plan_id=state["spec"]["id"] + "-edit")
+        if validate_edit_plan is not None:
+            validate_edit_plan(result["plan"])
         result["project_source_id"] = source_id
         _record(state, "edit_bundle", result, _dependencies(state, "artifact:edit_request",
                 "artifact:analysis:" + source_id, "artifact:catalog:" + source_id))

@@ -35,6 +35,7 @@ from editorial_engine.contracts import ValidationError
 from . import __version__
 from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
+from .clone_resources import CloneResources, ImageNeed, MAX_RESOURCE_BYTES
 from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
@@ -85,7 +86,7 @@ class Attachment(BaseModel):
 class UIUploadRequest(BaseModel):
     """Private command payload inside the established save tool's state object."""
     model_config = ConfigDict(extra="forbid", strict=True)
-    role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"]
+    role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"]
     file_name: str = Field(min_length=1, max_length=240)
     mime_type: str = Field(min_length=3, max_length=150)
     size_bytes: int = Field(ge=1, le=MAX_FILE_BYTES)
@@ -141,11 +142,25 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, job["expected_revision"])
             kind = job["kind"]
             if job["operation"] == "prepare":
-                return engine.prepare(project_id, kind, expected_revision=job["expected_revision"])
+                if job.get("reconstruction"):
+                    space_for(160 * 1024 * 1024)
+                return engine.prepare(project_id, kind, expected_revision=job["expected_revision"],
+                                      reconstruction=job.get("reconstruction"))
             if job["operation"] == "direction":
                 return engine.apply_direction(project_id, kind, job["direction"], expected_revision=job["expected_revision"])
             if job["operation"] == "render":
                 return engine.render(project_id, kind, expected_revision=job["expected_revision"])
+            if job["operation"] == "queue_bundled_motion":
+                return engine.queue_bundled_motion(project_id, job["recipe"],
+                                                    expected_revision=job["expected_revision"])
+            if job["operation"] == "execute_bundled_motion":
+                space_for(16 * 1024 * 1024)
+                return engine.execute_bundled_motion(project_id,
+                                                      expected_revision=job["expected_revision"])
+            if job["operation"] == "compare_temporal":
+                space_for(4 * 1024 * 1024)
+                return engine.compare_temporal(project_id, center_s=job["center_s"],
+                                               expected_revision=job["expected_revision"])
             if job["operation"] == "measure_motion":
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
                 return engine.measure_motion(project_id,job["asset_id"],job["specification"],
@@ -269,10 +284,16 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         instructions=("Editor Ultra: use editor_open para abrir o painel. A geração de vídeo é apenas exportação "
                       "de prompts; o usuário produz clipes fora e os devolve. prepare cria análise/pedido real; "
                       "a direção criativa deve ser autorada no host, depois importada com editor_apply_direction. "
+                      "Na clonagem, escolha por cena entre render procedural, geometria real e PNG de imagem. "
+                      "Quando um PNG ganhar fidelidade, use editor_request_clone_images, abra o quadro "
+                      "associado via editor_get_asset, gere a imagem com transparência no host, importe "
+                      "como clone_resource e retome editor_prepare com reconstruction. Se a análise indicar que "
+                      "nenhuma cena requer imagem gerada, documente a escolha em no_generated_images_reason. "
                       "Execute editor_render somente após um plano atual válido. Consulte editor_get_project "
                       "para trabalhos e pendências. "
                       "Use editor_measure_motion com asset_id e janelas/ROIs explícitas para medir movimento; "
-                      "o resultado é evidência por elemento, ainda sem aplicar motion ou aprovar render. "
+                      "Para aplicar a trajetória 2D aprovada para uso, vincule measured_projection na "
+                      "preparação da reconstrução. Uma medição sozinha não aplica motion nem aprova o render. "
                       "Não chame um pedido ou teste técnico de clonagem pronta, "
                       "nem registre aprovação do usuário sem confirmação explícita do arquivo atual. "
                       "Anexos do chat usam file params; o painel autoriza envio direto por editor_save_project "
@@ -383,6 +404,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                                  expected_revision: int, shot_id: str | None = None) -> CallToolResult:
         """Transfere anexo real do ChatGPT, verifica mídia e registra referência/bruto/identidade/prévia; não gera vídeo."""
         available = await asyncio.to_thread(upload_preflight, project_id, expected_revision)
+        if role == "clone_resource":
+            available = min(available, MAX_RESOURCE_BYTES)
         downloaded = await download_attachment(file.download_url, root / "incoming", max_bytes=available)
         try:
             value = await asyncio.to_thread(import_received, project_id, role, downloaded,
@@ -396,7 +419,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     @offload
     def editor_begin_upload(
         project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
-        role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"],
+        role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"],
         expected_revision: Annotated[int, Field(strict=True, ge=0)],
         file_name: Annotated[str, Field(min_length=1, max_length=240)],
         mime_type: Annotated[str, Field(min_length=3, max_length=150)],
@@ -431,9 +454,25 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     @server.tool(annotations=write, meta=widget)
     @offload
     def editor_prepare(project_id: str, kind: Literal["clone", "edit", "prompts", "assembly"],
-                       expected_revision: int, request_id: str) -> CallToolResult:
-        """Executa preparação real de evidências e pedido de direção. Não inventa plano, clonagem, render ou aprovação."""
-        return enqueue(project_id, "prepare", kind, expected_revision, request_id)
+                       expected_revision: int, request_id: str,
+                       reconstruction: CloneResources | None = None) -> CallToolResult:
+        """Prepara evidência e direção. Em clone, avalie o pedido de imagens e use reconstruction para compor sobre footage independente."""
+        params = {"reconstruction": reconstruction.model_dump(exclude_none=True)} if reconstruction else {}
+        return enqueue(project_id, "prepare", kind, expected_revision, request_id, **params)
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_request_clone_images(project_id: str, needs: Annotated[list[ImageNeed], Field(min_length=1, max_length=12)],
+                                    expected_revision: int) -> CallToolResult:
+        """Registra o que precisa de imagem. Gere no host com alpha, importe como clone_resource e associe ao ID via editor_prepare."""
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            space_for(4 * 1024 * 1024)
+            return result(engine.request_clone_images(project_id, [n.model_dump() for n in needs],
+                                                     expected_revision=expected_revision),
+                          "Gere os PNGs transparentes solicitados no host e importe os arquivos reais antes da direção.")
 
     @server.tool(annotations=write)
     @offload
@@ -464,6 +503,72 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         return enqueue(project_id,"measure_motion","motion",expected_revision,request_id,
                        asset_id=asset_id,
                        specification=specification.model_dump(by_alias=True,exclude_none=True))
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_compare_clone(project_id: str, expected_revision: int, frames: list[int] | None = None) -> CallToolResult:
+        """Compara os mesmos quadros da referência e da prévia, sem retime, ajuste ou aprovação.
+
+        Máximo de 16 quadros, selecionados pelo relógio real ou por índices explícitos. Retorna comparação, erros localizados
+        e imagem original/clone/diferença, com IDs de evidência vinculados ao projeto.
+        """
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            return result(engine.compare_clone(project_id, frames, expected_revision=expected_revision),
+                          "Comparação por quadro registrada. Fidelidade estética e aprovação continuam pendentes.")
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_queue_bundled_motion(project_id: str, recipe: dict[str, Any],
+                                   expected_revision: int, request_id: str) -> CallToolResult:
+        """Enfileira receita 2D declarativa e limitada no produtor Motion Lab já registrado.
+
+        Não usa pixels da referência para montar a animação; a autoria e a
+        execução são separadas, sem alegação de clonagem fiel.
+        """
+        return enqueue(project_id, "queue_bundled_motion", "motion", expected_revision,
+                       request_id, recipe=recipe)
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_execute_bundled_motion(project_id: str, expected_revision: int,
+                                      request_id: str) -> CallToolResult:
+        """Executa a receita atualmente enfileirada no motor local e registra recibo.
+
+        Uma sequência renderizada pode ser revisada; não recebe aprovação automática.
+        """
+        return enqueue(project_id, "execute_bundled_motion", "motion", expected_revision,
+                       request_id)
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_compare_temporal(project_id: str, center_s: float,
+                                expected_revision: int, request_id: str) -> CallToolResult:
+        """Agenda comparação de mudanças visuais e fluxo óptico em 3s da referência.
+
+        O relógio é extraído do MP4 no servidor. As medições são 2D,
+        sem inferir velocidade 3D, aprovar vídeo ou editar a referência.
+        """
+        return enqueue(project_id, "compare_temporal", "cadence", expected_revision,
+                       request_id, center_s=center_s)
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_register_reference_scenes(project_id: str, manifest: dict[str, Any],
+                                         expected_revision: int) -> CallToolResult:
+        """Registra eventos observados e incertezas com cobertura total do relógio da referência.
+
+        Não descobre conteúdo automaticamente, não reconstrói frames e não aprova a prévia.
+        """
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            return result(engine.register_reference_scenes(project_id, manifest,
+                                                           expected_revision=expected_revision),
+                          "Inventário de eventos registrado como evidência autorada.")
 
     @server.tool(annotations=write, meta=widget)
     @offload
@@ -529,6 +634,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             expected = int(request.headers.get("x-editor-revision", "-1"))
             size = int(request.headers.get("content-length", "0"))
             available = await asyncio.to_thread(upload_preflight, project_id, expected, size * 2)
+            if role == "clone_resource":
+                available = min(available, MAX_RESOURCE_BYTES)
         except (ValueError, OSError) as exc:
             return JSONResponse({"error": str(exc)[:300]}, status_code=409)
         incoming = root / "incoming"
