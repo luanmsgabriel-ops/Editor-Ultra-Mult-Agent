@@ -9,6 +9,7 @@ on:
       - "visual_fidelity/reference_temporal_qa.py"
       - "editor_ultra_app/engine.py"
       - "editor_ultra_app/server.py"
+      - "editor_ultra_app/ui.html"
       - "tests/test_reference_fidelity.py"
       - "tests/test_blender_temporal.py"
       - "tests/test_reference_temporal_qa.py"
