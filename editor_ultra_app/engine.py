@@ -135,7 +135,7 @@ class EngineAdapter:
         os.replace(temp, root / "record.json")
 
     def _public_file(self, item):
-        keys = ("id", "name", "type", "size", "sha256", "duration", "width", "height", "fps", "role", "shot_id")
+        keys = ("id", "name", "type", "size", "sha256", "duration", "width", "height", "fps", "role", "shot_id", "hostFileId")
         return {**{key: item[key] for key in keys if key in item}, "asset_id": item["id"],
                 "available": True, "server": True}
 
@@ -432,23 +432,37 @@ class EngineAdapter:
         return info
 
     def import_local_file(self, project_id, role, source: Path, filename: str, mime_type: str,
-                          shot_id=None, *, expected_revision=None):
+                          shot_id=None, *, expected_revision=None, host_file_id=None):
         require(role in ROLES, "asset_role", "Unsupported media role")
         require(isinstance(mime_type, str), "asset_type", "Declare a MIME type")
+        if host_file_id is not None:
+            require(bool(_text(host_file_id, 300).strip()), "host_file_id", "Use a nonempty host file identifier")
         allowed = {"narration": ("audio/",), "logo": ("image/",), "footage": ("video/",),
                    "result": ("video/",), "shot": ("video/",)}.get(role, ("video/", "image/"))
         require(mime_type.startswith(allowed), "asset_type", "Media type does not match the selected role")
         with self._lock(project_id):
             record = self._load(project_id)
             self._expect(record, expected_revision)
-            require(sum(not x.get("internal") for x in record["files"].values()) < MAX_INPUTS,
-                    "asset_limit", "Project input limit reached")
             shot = next((s for s in record["state"]["shots"] if s["id"] == shot_id), None)
             require(role != "shot" or shot is not None, "shot_missing", "Select an existing shot")
             before = self._clone_binding(record), self._edit_binding(record)
             source = Path(source)
             require(source.is_file() and not source.is_symlink() and 0 < source.stat().st_size <= MAX_FILE_BYTES,
                     "asset_file", "Supply a regular uploaded file under 512 MiB")
+            previous = next((item for item in record["files"].values()
+                             if host_file_id is not None and item.get("hostFileId") == host_file_id
+                             and item["role"] == role and item.get("shot_id") == shot_id), None)
+            if previous is not None:
+                # An acknowledged host upload can be retried after a lost response.
+                # The identifier never substitutes for inspecting and hashing bytes.
+                info = self._measure(source, mime_type)
+                require(file_sha256(source) == previous["sha256"] and info["type"] == previous["type"],
+                        "host_file_conflict", "This host file identifier already belongs to different media")
+                self.resolve_asset(project_id, previous["id"])
+                return {**self._snapshot(record), "asset_id": previous["id"],
+                        "asset": self._public_file(previous), "idempotent": True}
+            require(sum(not x.get("internal") for x in record["files"].values()) < MAX_INPUTS,
+                    "asset_limit", "Project input limit reached")
             identifier = uuid.uuid4().hex
             suffix = mimetypes.guess_extension(mime_type) or ".bin"
             directory = self._directory(project_id) / "media"
@@ -464,6 +478,8 @@ class EngineAdapter:
             item = {"id": identifier, "name": Path(_text(filename, 500)).name or identifier + suffix,
                     "path": str(destination), "size": destination.stat().st_size, "sha256": file_sha256(destination),
                     "role": role, "shot_id": shot_id, **info}
+            if host_file_id is not None:
+                item["hostFileId"] = host_file_id
             if role in {"clone", "result"}:
                 item["basis_binding"] = self._preview_binding(record, "clone" if role == "clone" else "final")
             record["files"][identifier] = item
