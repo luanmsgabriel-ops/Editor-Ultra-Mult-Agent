@@ -465,6 +465,37 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                        asset_id=asset_id,
                        specification=specification.model_dump(by_alias=True,exclude_none=True))
 
+    @server.tool(annotations=write)
+    @offload
+    def editor_compare_clone(project_id: str, frames: list[int], expected_revision: int) -> CallToolResult:
+        """Compara os mesmos quadros da referência e da prévia, sem retime, ajuste ou aprovação.
+
+        Máximo de 16 quadros explícitos. Retorna comparação, erros localizados
+        e imagem original/clone/diferença, com IDs de evidência vinculados ao projeto.
+        """
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            return result(engine.compare_clone(project_id, frames, expected_revision=expected_revision),
+                          "Comparação por quadro registrada. Fidelidade estética e aprovação continuam pendentes.")
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_register_reference_scenes(project_id: str, manifest: dict[str, Any],
+                                         expected_revision: int) -> CallToolResult:
+        """Registra eventos observados e incertezas com cobertura total do relógio da referência.
+
+        Não descobre conteúdo automaticamente, não reconstrói frames e não aprova a prévia.
+        """
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            return result(engine.register_reference_scenes(project_id, manifest,
+                                                           expected_revision=expected_revision),
+                          "Inventário de eventos registrado como evidência autorada.")
+
     @server.tool(annotations=write, meta=widget)
     @offload
     def editor_record_review(project_id: str, kind: Literal["clone", "final"],
