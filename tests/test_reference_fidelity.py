@@ -74,7 +74,7 @@ def test_manifest_tracks_unknowns_and_refuses_gaps():
 
 def test_manifest_requires_known_elements_and_current_source():
     manifest = _manifest()
-    with pytest.raises(ValueError, match="source"):
+    with pytest.raises(ValueError, match="reference"):
         validate_reference_scenes(manifest, source_sha256="a"*64, fps="30", frame_count=30)
     manifest["scenes"][1]["events"][0]["element_id"] = "unbound"
     with pytest.raises(ValueError, match="known"):
