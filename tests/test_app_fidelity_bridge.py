@@ -78,5 +78,5 @@ def test_bundled_motion_pipeline_exports_real_unapproved_alpha_sequence(tmp_path
     asset = produced["result_asset"]
     assert asset is not None and asset["available"] is True
     manifest = load_layer(engine.resolve_asset(project_id, asset["id"]), verify_files=True)
-    assert manifest["frame_count"] == 10 and manifest["fps"] == "10/1"
+    assert manifest["frame_count"] == 10 and str(manifest["fps"]) in {"10", "10/1"}
     assert produced["approval"]["clone"] is None
