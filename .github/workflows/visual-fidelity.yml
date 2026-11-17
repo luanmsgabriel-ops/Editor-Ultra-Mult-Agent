@@ -40,3 +40,13 @@ jobs:
         run: ffmpeg -version
       - name: Run visual fidelity contract tests
         run: python -m pytest -q tests/test_reference_fidelity.py tests/test_blender_temporal.py
+      - name: Verify studio JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("editor_ultra_app/ui.html").read_text(encoding="utf-8")
+          first = text.index("<script>") + len("<script>")
+          last = text.index("</script>", first)
+          Path("/tmp/editor-ultra-studio-ui.js").write_text(text[first:last], encoding="utf-8")
+          PY
+          node --check /tmp/editor-ultra-studio-ui.js
