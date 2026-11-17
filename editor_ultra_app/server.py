@@ -476,7 +476,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                        asset_id=asset_id,
                        specification=specification.model_dump(by_alias=True,exclude_none=True))
 
-    @server.tool(annotations=write)
+    @server.tool(annotations=write, meta=widget)
     @offload
     def editor_compare_clone(project_id: str, expected_revision: int, frames: list[int] | None = None) -> CallToolResult:
         """Compara os mesmos quadros da referência e da prévia, sem retime, ajuste ou aprovação.
@@ -514,7 +514,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         return enqueue(project_id, "execute_bundled_motion", "motion", expected_revision,
                        request_id)
 
-    @server.tool(annotations=write)
+    @server.tool(annotations=write, meta=widget)
     @offload
     def editor_compare_temporal(project_id: str, center_s: float,
                                 expected_revision: int, request_id: str) -> CallToolResult:
