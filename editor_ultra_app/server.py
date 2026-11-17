@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 import shutil
 import threading
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 import uuid
 
@@ -24,8 +24,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, ImageContent, ResourceLink, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.requests import Request
-from starlette.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.requests import ClientDisconnect, Request
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from . import __version__
@@ -34,12 +34,20 @@ from .catalog import Catalog
 from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
+from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError, UploadTicketStore
 
 
-UI_URI = "ui://editor-ultra/studio-v3.html"
-PREVIOUS_UI_URI = "ui://editor-ultra/studio-v2.html"
-LEGACY_UI_URI = "ui://editor-ultra/studio-v1.html"
+UI_URI = "ui://editor-ultra/studio-v4.html"
+UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3))
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
+UPLOAD_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+}
 
 
 class Attachment(BaseModel):
@@ -66,6 +74,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(root, 0o700)
     owner = OwnerOAuthProvider(root, base, key, allow_loopback=allow_loopback)
+    tickets = UploadTicketStore(root)
     signer = PreviewSigner(root, base, key)
     catalog = Catalog(root, signer)
     engine = EngineAdapter(root)
@@ -155,6 +164,42 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                                             shot_id=shot_id, expected_revision=expected,
                                             host_file_id=host_file_id)
 
+    def upload_receipt(binding, asset_id=None):
+        """Recover identity from the engine and return today's state, never a cached snapshot."""
+        value = snapshot(binding.project_id)
+        asset = next((item for item in value["assets"]
+                      if item.get("hostFileId") == binding.host_file_id and item["role"] == binding.role
+                      and item.get("shot_id") == binding.shot_id), None)
+        if asset is None:
+            return None
+        if (asset["size"] != binding.size_bytes or asset["name"] != binding.file_name
+                or (asset_id is not None and asset["id"] != asset_id)):
+            raise UploadTicketError("upload_id_conflict", "Este identificador pertence a outro arquivo recebido.", 409)
+        engine.resolve_asset(binding.project_id, asset["id"])
+        return {**value, "asset_id": asset["id"], "asset": {k: v for k, v in asset.items() if k != "path"},
+                "idempotent": True}
+
+    def preflight_ticket(binding):
+        available = upload_preflight(binding.project_id, binding.expected_revision, binding.size_bytes * 2)
+        if binding.size_bytes > available:
+            raise UploadTicketError("upload_storage_limit", "Espaço privado insuficiente para este arquivo.", 413)
+        if binding.role == "shot":
+            state = engine.get_project(binding.project_id)["state"]
+            if not any(shot["id"] == binding.shot_id for shot in state["shots"]):
+                raise UploadTicketError("upload_shot_missing", "Selecione uma tomada existente no projeto.", 409)
+
+    def commit_ticket(claim, path):
+        with lock:
+            tickets.assert_claim(claim)
+            binding = claim.binding
+            value = upload_receipt(binding)
+            if value is None:
+                value = import_received(binding.project_id, binding.role, path, binding.file_name,
+                                        binding.engine_mime, binding.shot_id, binding.expected_revision,
+                                        host_file_id=binding.host_file_id)
+            tickets.complete(claim, value["asset_id"])
+            return value
+
     hostname = urlsplit(base).netloc
     server = FastMCP(
         "Editor Ultra", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")),
@@ -167,7 +212,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                       "o resultado é evidência por elemento, ainda sem aplicar motion ou aprovar render. "
                       "Não chame um pedido ou teste técnico de clonagem pronta, "
                       "nem registre aprovação do usuário sem confirmação explícita do arquivo atual. "
-                      "Arquivos devem ser enviados por file params; caminhos locais ou blob: não são anexos."),
+                      "Anexos do chat usam file params; arquivos selecionados no painel usam editor_begin_upload "
+                      "e envio direto autorizado. Caminhos locais ou blob: não são anexos."),
         auth_server_provider=owner, auth=owner.auth_settings(),
         stateless_http=True, json_response=True,
         transport_security=TransportSecuritySettings(
@@ -180,18 +226,18 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     widget = {"openai/widgetAccessible": True}
 
     studio_metadata = {
-        "ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": [base]}},
+        "ui": {"prefersBorder": True, "csp": {"connectDomains": [base], "resourceDomains": [base]}},
         "openai/ui": {"availableDisplayModes": ["inline", "fullscreen"], "preferredDisplayMode": "fullscreen"},
         "openai/widgetDescription": "Painel privado de clonagem de edição, aprovação, prompts e renderização do Editor Ultra.",
     }
 
     @server.resource(UI_URI, name="Editor Ultra", mime_type="text/html;profile=mcp-app", meta=studio_metadata)
-    @server.resource(PREVIOUS_UI_URI, name="Editor Ultra (compatibilidade)",
-                     mime_type="text/html;profile=mcp-app", meta=studio_metadata)
-    @server.resource(LEGACY_UI_URI, name="Editor Ultra (compatibilidade)",
-                     mime_type="text/html;profile=mcp-app", meta=studio_metadata)
     def studio() -> str:
         return Path(__file__).with_name("ui.html").read_text(encoding="utf-8")
+
+    for legacy_uri in UI_ALIASES:
+        server.resource(legacy_uri, name="Editor Ultra (compatibilidade)",
+                        mime_type="text/html;profile=mcp-app", meta=studio_metadata)(studio)
 
     @server.tool(name="editor_open", title="Editor Ultra", annotations=read,
                  meta={**widget, "ui": {"resourceUri": UI_URI}, "openai/outputTemplate": UI_URI,
@@ -200,7 +246,9 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     def editor_open(project_id: str | None = None) -> CallToolResult:
         """Abre o painel nativo e projetos privados, sem iniciar render nem aprovar arquivos."""
         return result({"project": snapshot(project_id) if project_id else None,
-                       "projects": engine.list_projects(), "catalog_status": catalog.status()}, "Editor Ultra aberto.")
+                       "projects": engine.list_projects(), "catalog_status": catalog.status(),
+                       "upload_capabilities": {"direct": True, "origin": base, "max_bytes": MAX_FILE_BYTES,
+                                               "ticket_ttl_seconds": TICKET_TTL_SECONDS}}, "Editor Ultra aberto.")
 
     @server.tool(annotations=read, meta=widget)
     @offload
@@ -268,6 +316,43 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             return result(value, "Arquivo recebido e verificado no motor.")
         finally:
             downloaded.unlink(missing_ok=True)
+
+    @server.tool(annotations=write, meta={**widget, "ui": {"visibility": ["app"]}})
+    @offload
+    def editor_begin_upload(
+        project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
+        role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"],
+        expected_revision: Annotated[int, Field(strict=True, ge=0)],
+        file_name: Annotated[str, Field(min_length=1, max_length=240)],
+        mime_type: Annotated[str, Field(min_length=3, max_length=150)],
+        size_bytes: Annotated[int, Field(strict=True, ge=1, le=MAX_FILE_BYTES)],
+        upload_id: Annotated[str, Field(min_length=36, max_length=36)],
+        shot_id: str | None = None,
+    ) -> CallToolResult:
+        """Autoriza um único arquivo selecionado no painel; o segredo fica apenas na metadata da interface.
+
+        Não altera escolhas nem aprovações. Em resultado incerto, consulte o projeto
+        por hostFileId direct:upload_id antes de pedir uma nova autorização.
+        """
+        binding = UploadBinding(upload_id, project_id, role, expected_revision,
+                                file_name, mime_type, size_bytes, shot_id)
+        with lock:
+            tickets.check_binding(binding)
+            received = upload_receipt(binding)
+            if received is not None:
+                tickets.recover(binding, received["asset_id"])
+                return result(received, "Arquivo já recebido. Estado atual recuperado sem repetir o envio.")
+            preflight_ticket(binding)
+            token, expires = tickets.issue(binding)
+        return CallToolResult(
+            content=[TextContent(type="text", text="Envio autorizado para o arquivo selecionado no painel.")],
+            structuredContent={"status": "authorized", "project_id": project_id, "upload_id": upload_id,
+                               "revision": expected_revision, "expires_at": expires},
+            _meta={"editor": {"upload": {"upload_id": upload_id, "url": base + "/upload-tickets/" + upload_id,
+                                       "method": "POST", "headers": {"Authorization": "Upload " + token,
+                                                                     "Content-Type": mime_type},
+                                       "expires_at": expires, "max_bytes": size_bytes}}},
+        )
 
     def enqueue(project_id, operation, kind, expected_revision, request_id, **extra):
         arguments = {"kind": kind, "expected_revision": expected_revision, **extra}
@@ -409,6 +494,70 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         finally:
             temporary.unlink(missing_ok=True)
 
+    async def ticket_upload(request: Request):
+        """CORS is scoped to this capability route; no cookies or OAuth grant are used."""
+        if request.method == "OPTIONS":
+            return Response(status_code=204, headers=UPLOAD_HEADERS)
+        claim, temporary, acquired = None, None, False
+        try:
+            header = request.headers.get("authorization", "")
+            if not header.startswith("Upload "):
+                raise UploadTicketError("upload_ticket_required", "Autorize este envio pelo painel conectado.", 401)
+            if request.query_params or request.headers.get("content-encoding", "identity") != "identity":
+                raise UploadTicketError("upload_request", "Envie apenas os bytes originais do arquivo autorizado.")
+            claim = await asyncio.to_thread(tickets.claim, request.path_params["upload_id"], header[7:],
+                                           request.headers.get("content-type", ""),
+                                           request.headers.get("content-length"))
+            if claim.completed:
+                value = await asyncio.to_thread(upload_receipt, claim.binding, claim.asset_id)
+                if value is None:
+                    raise UploadTicketError("upload_receipt_missing", "Confira o arquivo no projeto antes de repetir.", 409)
+                return JSONResponse(public(value), headers=UPLOAD_HEADERS)
+            # Bound both the wait for the one transfer slot and the incoming
+            # stream. Claiming precedes this wait so duplicate POSTs fail at once.
+            async with asyncio.timeout(300):
+                await upload_lock.acquire()
+                acquired = True
+                await asyncio.to_thread(preflight_ticket, claim.binding)
+                incoming = root / "incoming"
+                incoming.mkdir(exist_ok=True, mode=0o700)
+                temporary = incoming / ("direct-" + uuid.uuid4().hex + ".upload")
+                count = 0
+                with temporary.open("xb") as target:
+                    temporary.chmod(0o600)
+                    async for block in request.stream():
+                        count += len(block)
+                        if count > claim.binding.size_bytes:
+                            raise UploadTicketError("upload_content_length", "O arquivo excede o tamanho autorizado.", 413)
+                        await asyncio.to_thread(target.write, block)
+                if count != claim.binding.size_bytes:
+                    raise UploadTicketError("upload_incomplete", "O arquivo chegou incompleto. Confira e tente novamente.")
+            # Do not unlink a file or release its claim while a cancelled HTTP
+            # waiter leaves an engine commit running in its worker thread.
+            commit = asyncio.create_task(asyncio.to_thread(commit_ticket, claim, temporary))
+            try:
+                value = await asyncio.shield(commit)
+            except asyncio.CancelledError:
+                await commit
+                raise
+            return JSONResponse(public(value), headers=UPLOAD_HEADERS)
+        except UploadTicketError as exc:
+            return JSONResponse({"error": str(exc), "code": exc.code}, status_code=exc.status, headers=UPLOAD_HEADERS)
+        except (ValueError, OSError, TimeoutError, ClientDisconnect) as exc:
+            # Internal filesystem paths and credential material are not returned.
+            message = str(exc)[:300] if isinstance(exc, ValueError) else "O envio foi interrompido. Confira o projeto antes de repetir."
+            return JSONResponse({"error": message, "code": "upload_failed"}, status_code=409, headers=UPLOAD_HEADERS)
+        except Exception:
+            return JSONResponse({"error": "Confira o recebimento no projeto antes de repetir.", "code": "upload_uncertain"},
+                                status_code=500, headers=UPLOAD_HEADERS)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+            if acquired:
+                upload_lock.release()
+            if claim is not None and not claim.completed:
+                await asyncio.to_thread(tickets.fail, claim)
+
     async def preview(request: Request):
         try:
             path = signer.resolve(request.path_params["path"], request.query_params.get("expires", ""),
@@ -434,6 +583,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     app.routes.extend(owner.routes())
     app.routes.extend([Route("/healthz", health), Route("/", home), Route("/media/{path:path}", preview),
                        Route("/catalog/install", catalog_install, methods=["POST"]),
+                       Route("/upload-tickets/{upload_id}", ticket_upload, methods=["POST", "OPTIONS"]),
                        Route("/uploads/{project_id}/{role}", direct_upload, methods=["POST"])])
     app.add_middleware(OwnerAuthGuard, provider=owner)
     original_lifespan = app.router.lifespan_context
@@ -453,6 +603,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     app.state.editor_queue = queue
     app.state.editor_mcp = server
     app.state.editor_owner = owner
+    app.state.editor_upload_tickets = tickets
     return app
 
 
