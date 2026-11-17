@@ -36,7 +36,8 @@ from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 
 
-UI_URI = "ui://editor-ultra/studio-v1.html"
+UI_URI = "ui://editor-ultra/studio-v2.html"
+LEGACY_UI_URI = "ui://editor-ultra/studio-v1.html"
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
 
 
@@ -167,24 +168,30 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     read = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
     write = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False)
     admitted = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True)
+    widget = {"openai/widgetAccessible": True}
 
-    @server.resource(UI_URI, name="Editor Ultra", mime_type="text/html;profile=mcp-app", meta={
+    studio_metadata = {
         "ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": [base]}},
-        "openai/ui": {"availableDisplayModes": ["inline", "fullscreen"]},
+        "openai/ui": {"availableDisplayModes": ["inline", "fullscreen"], "preferredDisplayMode": "fullscreen"},
         "openai/widgetDescription": "Painel privado de clonagem de edição, aprovação, prompts e renderização do Editor Ultra.",
-    })
+    }
+
+    @server.resource(UI_URI, name="Editor Ultra", mime_type="text/html;profile=mcp-app", meta=studio_metadata)
+    @server.resource(LEGACY_UI_URI, name="Editor Ultra (compatibilidade)",
+                     mime_type="text/html;profile=mcp-app", meta=studio_metadata)
     def studio() -> str:
         return Path(__file__).with_name("ui.html").read_text(encoding="utf-8")
 
-    @server.tool(name="editor_open", title="Abrir Editor Ultra", annotations=read,
-                 meta={"ui": {"resourceUri": UI_URI}, "openai/outputTemplate": UI_URI})
+    @server.tool(name="editor_open", title="Editor Ultra", annotations=read,
+                 meta={**widget, "ui": {"resourceUri": UI_URI}, "openai/outputTemplate": UI_URI,
+                       "openai/ui": {"entrypoints": [{"type": "global"}, {"type": "thread"}]}})
     @offload
     def editor_open(project_id: str | None = None) -> CallToolResult:
         """Abre o painel nativo e projetos privados, sem iniciar render nem aprovar arquivos."""
         return result({"project": snapshot(project_id) if project_id else None,
                        "projects": engine.list_projects(), "catalog_status": catalog.status()}, "Editor Ultra aberto.")
 
-    @server.tool(annotations=read)
+    @server.tool(annotations=read, meta=widget)
     @offload
     def editor_list_templates() -> CallToolResult:
         """Lista templates do acervo privado com amostras reais e limitações; a demonstração não comprova execução."""
@@ -196,7 +203,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """Lê requisitos e contratos verificados de um template antes de dirigir sua aplicação."""
         return result(catalog.detail(template_id))
 
-    @server.tool(annotations=read)
+    @server.tool(annotations=read, meta=widget)
     @offload
     def editor_get_project(project_id: str) -> CallToolResult:
         """Retoma escolhas, prévias atuais, revisões, pendências e resultado dos trabalhos reais."""
@@ -221,7 +228,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """Obtém artefatos reais da etapa atual; mantém revisão técnica e confirmação do usuário separadas."""
         return result(engine.get_result(project_id, stage))
 
-    @server.tool(annotations=write)
+    @server.tool(annotations=write, meta=widget)
     @offload
     def editor_save_project(state: dict[str, Any], project_id: str | None = None,
                             expected_revision: int | None = None) -> CallToolResult:
@@ -236,7 +243,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 revision(project_id, expected_revision)
             return result(engine.save_project(project_id, state, expected_revision))
 
-    @server.tool(annotations=admitted, meta={"openai/fileParams": ["file"]})
+    @server.tool(annotations=admitted, meta={**widget, "openai/fileParams": ["file"]})
     @serial_upload
     async def editor_import_file(project_id: str, role: str, file: Attachment,
                                  expected_revision: int, shot_id: str | None = None) -> CallToolResult:
@@ -264,7 +271,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             job = queue.enqueue(project_id, operation, arguments, request_id)
             return result(job, "Trabalho registrado. Consulte o projeto para acompanhar a execução e o resultado.")
 
-    @server.tool(annotations=write)
+    @server.tool(annotations=write, meta=widget)
     @offload
     def editor_prepare(project_id: str, kind: Literal["clone", "edit", "prompts", "assembly"],
                        expected_revision: int, request_id: str) -> CallToolResult:
@@ -285,7 +292,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """Executa o plano atual no motor local e devolve um MP4 real. Não aprova o resultado nem chama geradores."""
         return enqueue(project_id, "render", kind, expected_revision, request_id)
 
-    @server.tool(annotations=write)
+    @server.tool(annotations=write, meta=widget)
     @offload
     def editor_record_review(project_id: str, kind: Literal["clone", "final"],
                              decision: Literal["approved", "rejected"], confirmation: bool,

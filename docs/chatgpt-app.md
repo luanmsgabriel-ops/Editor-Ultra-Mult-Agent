@@ -46,6 +46,26 @@ No diretório de Plugins do ChatGPT, adicione um **MCP personalizado** com a URL
 
 O código não instala silenciosamente um plugin na conta do usuário. A conexão só está instalada quando a interface do ChatGPT confirmar essa etapa. Se mudar ferramentas, schemas ou recursos, atualize os metadados do conector.
 
+## Abrir o estúdio e atualizar o plugin
+
+A tela inicial do estúdio é o recurso `ui://editor-ultra/studio-v2.html`, associado à ferramenta `editor_open`. Abrir essa ferramenta com `{}` carrega a interface e consulta os projetos e a situação do catálogo, sem criar projeto, iniciar render ou registrar aprovação.
+
+O item **Editor Ultra** declara dois acessos nativos: `global`, na navegação principal do host, e `thread`, como aba de conteúdo da conversa. A interface prefere `fullscreen` e também anuncia suporte a `inline`. O host decide o modo efetivo e quais acessos apresenta. A tela de conexão/configuração do plugin pertence ao ChatGPT; o estúdio é a interface aberta pela ferramenta ou por esses acessos.
+
+Se o host não mostrar o acesso direto, selecione o plugin na conversa e peça **“Abrir Editor Ultra”**. Esse caminho chama a mesma ferramenta e usa o mesmo motor e os mesmos projetos. A disponibilidade dos entrypoints depende da versão e da superfície do ChatGPT; a especificação de extensões define seu suporte web para o navegador Work, sem incluir o ChatGPT clássico.
+
+Depois de publicar a atualização do servidor:
+
+1. Atualize os metadados do plugin/conector nas configurações do ChatGPT para obter os entrypoints e a nova URI do recurso.
+2. Feche a instância anterior do painel e abra o Editor Ultra novamente. Uma interface já montada pode continuar executando a versão anterior.
+3. Confira a abertura da tela inicial e a navegação no host usado. Uma chamada MCP bem-sucedida não comprova, sozinha, que o host montou a interface.
+
+A URI do recurso funciona como chave de cache. Em mudanças incompatíveis de HTML, JavaScript ou CSS, publique outra URI e atualize tanto o recurso quanto as referências `ui.resourceUri` e `openai/outputTemplate` da ferramenta. A versão v2 é a URI primária desta atualização. A URI `ui://editor-ultra/studio-v1.html` permanece como alias do mesmo HTML e da mesma metadata, para atender instalações que ainda referenciem a v1 durante a atualização. O alias preserva a leitura do recurso antigo; obter os novos entrypoints e substituir uma interface já montada ainda exige atualizar os metadados e reabrir o painel.
+
+O bridge usa `tools/call` do MCP Apps. As ferramentas chamadas pelo painel também declaram `openai/widgetAccessible: true` para o fallback `window.openai.callTool`; `editor_import_file` conserva `openai/fileParams: ["file"]`. Essa metadata não altera as verificações de autenticação, revisão ou confirmação do servidor. Só `editor_open` referencia o template, para que chamadas de dados não remontem a interface.
+
+Referências: [UI e versionamento de recursos](https://developers.openai.com/plugins/build/chatgpt-ui), [extensões de plugins](https://developers.openai.com/plugins/build/extensions), [especificação de entrypoints e modos de exibição](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md) e [referência de metadata e bridge](https://developers.openai.com/plugins/reference).
+
 ## Catálogo privado
 
 O arquivo de instalação é um ZIP privado que contém `gallery.json` e o pacote original `Clone-Templates-1.0.0/`, com `library.json` e seus caminhos preservados. O catálogo não pertence ao repositório. Envie o pacote ao endpoint autenticado `POST /catalog/install` com um token OAuth de escrita.
@@ -65,10 +85,12 @@ Arquivos e estados privados ficam no volume. Backups/restauração e limpeza de 
 ## Validação
 
 ```bash
-python -m pytest tests/test_app_auth.py tests/test_app_infrastructure.py tests/test_app_engine.py -q
+python -m pytest tests/test_app_auth.py tests/test_app_infrastructure.py tests/test_app_engine.py tests/test_app_server.py -q
 python scripts/check_app_connection.py https://SEU-SERVICO --key-stdin
 ```
 
 O helper cria um grant temporário, verifica descoberta e transporte MCP e o revoga ao terminar. Não imprime tokens nem afirma instalar o plugin. A chave pode ser fornecida por stdin ou por `EDITOR_ULTRA_OWNER_KEY`; não a inclua em comandos salvos ou no histórico.
 
 O teste de engine usa mídia sintética identificada para conferir importação, direção, execução FFmpeg, revisões e invalidação. Isso comprova conexão técnica e produção de arquivo; não representa revisão perceptiva ou aprovação de um vídeo do usuário.
+
+O teste de servidor confere por MCP os metadados de abertura, entrypoints, permissão do fallback, preservação de file params e o recurso v2 com preferência por fullscreen. Confere também que o alias v1 retorna o mesmo HTML e a mesma metadata, enquanto a ferramenta anuncia a v2. Ele abre `editor_open` com `{}` e verifica que essa abertura não cria projeto. A renderização e a navegação oferecidas pelo ChatGPT exigem conferência visual no host.

@@ -271,3 +271,88 @@ def test_generation_exports_actual_prompts_and_receives_versioned_clips_only(ada
     plan["clips"][0]["shots"][0]["action"] = "Hold another explicitly authored synthetic color."
     revised = adapter.apply_direction(current["project_id"], "generation", plan, expected_revision=received["revision"])
     assert not revised["state"]["shots"][0]["returned_current"]
+
+
+def review_note(stage="clone"):
+    return {"id": "note-" + stage, "kind": stage, "time": "00:00.2", "component": "Tipografia",
+            "text": "Conferir o espaçamento deste título.", "resolved": False}
+
+
+def test_review_draft_survives_autosave_and_supplies_notes_without_approval(adapter, videos):
+    current = create(adapter, sourceType="brief")
+    pid = current["project_id"]
+    note = review_note()
+    current = adapter.save_project(pid, {"comments": [{**note, "asset_id": "forged", "binding": "forged"}],
+                                         "cloneConfirm": True, "cloneApproval": {"valid": True, "serverRecorded": True}},
+                                   current["revision"])
+    assert current["state"]["comments"] == [note]
+    assert current["state"]["cloneConfirm"] is True
+    assert current["state"]["cloneApproval"] is None
+    # The panel can annotate a local preview before its first server upload.
+    current = upload(adapter, current, "clone", videos["blue"])
+    assert current["state"]["comments"] == [note]
+    assert current["state"]["cloneConfirm"] is False
+    current = adapter.save_project(pid, {"cloneConfirm": True, "cloneChecks": {"0": "fix"}}, current["revision"])
+    current = adapter.save_project(pid, {"name": "QA revisão após autosave"}, current["revision"])
+    restored = EngineAdapter(adapter.data_dir).get_project(pid)
+    assert restored["state"]["cloneConfirm"] is True
+    assert restored["state"]["comments"] == [note]
+    assert restored["state"]["cloneApproval"] is None
+    notes = "\n".join(f"{item['time']} · {item['component']}: {item['text']}" for item in restored["state"]["comments"])
+    reviewed = adapter.record_review(pid, "clone", "rejected", True, current["state"]["assets"]["clone"][0]["id"],
+                                     notes=notes, checks={"0": "fix"}, expected_revision=current["revision"])
+    assert reviewed["approval"]["clone"]["notes"] == notes
+    assert reviewed["approval"]["clone"]["decision"] == "rejected"
+    assert reviewed["state"]["cloneApproval"] is None
+
+
+@pytest.mark.parametrize("changed_role,cleared", [("ref", {"clone", "final"}), ("clone", {"clone", "final"}),
+                                                ("result", {"final"})])
+def test_review_drafts_do_not_transfer_to_another_reference_or_preview(adapter, videos, changed_role, cleared):
+    current = upload(adapter, create(adapter), "ref", videos["blue"])
+    current = upload(adapter, current, "clone", videos["red"])
+    current = approve(adapter, current)
+    current = upload(adapter, current, "result", videos["lime"])
+    current = adapter.save_project(current["project_id"], {"cloneConfirm": True, "finalConfirm": True,
+                                   "cloneChecks": {"0": "ok"}, "finalChecks": {"0": "ok"},
+                                   "comments": [review_note("clone"), review_note("final")]}, current["revision"])
+    assert current["state"]["cloneConfirm"] and current["state"]["finalConfirm"]
+    changed = upload(adapter, current, changed_role, videos["lime" if changed_role == "ref" else "blue"])
+    for stage in ("clone", "final"):
+        assert changed["state"][stage + "Confirm"] is (stage not in cleared)
+        assert bool(changed["state"][stage + "Checks"]) is (stage not in cleared)
+        assert any(item["kind"] == stage for item in changed["state"]["comments"]) is (stage not in cleared)
+        if stage in cleared:
+            assert changed["state"][stage + "Approval"] is None
+    # Even submitting stale checked boxes together with a changed reference cannot
+    # carry a prior confirmation or notes into the new reference's review.
+    stale = deepcopy(changed["state"])
+    stale.update(objective="Uma referência com outra direção", cloneConfirm=True, finalConfirm=True,
+                 comments=[review_note("clone"), review_note("final")],
+                 cloneApproval={"valid": True, "serverRecorded": True}, finalApproval={"valid": True, "serverRecorded": True})
+    saved = adapter.save_project(changed["project_id"], stale, changed["revision"])
+    assert not saved["state"]["cloneConfirm"] and not saved["state"]["finalConfirm"]
+    assert saved["state"]["comments"] == []
+    assert saved["state"]["cloneApproval"] is None and saved["state"]["finalApproval"] is None
+
+
+def test_review_draft_rejects_malformed_values(adapter):
+    current = create(adapter)
+    for payload in ({"cloneConfirm": "true"}, {"comments": [{**review_note(), "time": "not-a-time"}]},
+                    {"comments": [review_note(), review_note()]}, {"comments": [{**review_note(), "resolved": "yes"}]}):
+        with pytest.raises(ValidationError, match="ui_review_draft"):
+            adapter.save_project(current["project_id"], payload, current["revision"])
+    assert adapter.get_project(current["project_id"])["revision"] == current["revision"]
+
+
+def test_legacy_project_binds_existing_preview_before_accepting_draft_changes(adapter, videos):
+    current = upload(adapter, create(adapter), "clone", videos["blue"])
+    path = adapter.data_dir / current["project_id"] / "record.json"
+    legacy = json.loads(path.read_text())
+    legacy.pop("review_draft_bindings")  # Adapter fixture from before draft bindings existed.
+    path.write_text(json.dumps(legacy))
+    changed = adapter.save_project(current["project_id"], {"objective": "Changed source direction",
+                                   "cloneConfirm": True, "comments": [review_note()]}, current["revision"])
+    assert changed["state"]["cloneConfirm"] is False
+    assert changed["state"]["comments"] == []
+    assert changed["state"]["cloneApproval"] is None
