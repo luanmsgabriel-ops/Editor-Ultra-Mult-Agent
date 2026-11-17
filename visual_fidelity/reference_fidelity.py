@@ -43,6 +43,24 @@ def _clock(path: Path) -> dict:
     return {"width": width, "height": height, "fps": str(fps), "frame_count": count}
 
 
+def sample_frame_indices(frame_count: int, *, max_samples: int = MAX_FRAMES) -> list[int]:
+    """Choose unique exact source frame indices, including the final decodable frame.
+
+    Use the actual probed frame count, never round container duration * FPS.
+    """
+    if type(frame_count) is not int or not 1 <= frame_count <= MAX_SOURCE_FRAMES:
+        raise ValueError("Frame count must come from a bounded probed source")
+    if type(max_samples) is not int or not 1 <= max_samples <= MAX_FRAMES:
+        raise ValueError("max_samples must be between 1 and 16")
+    sample_count = min(frame_count, max_samples)
+    if sample_count == 1:
+        return [0]
+    indices = [(i * (frame_count - 1)) // (sample_count - 1) for i in range(sample_count)]
+    if len(set(indices)) != len(indices):
+        raise ValueError("Sample indices must remain unique")
+    return indices
+
+
 def _read_frames(path: Path, indices: list[int]) -> list[np.ndarray]:
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
