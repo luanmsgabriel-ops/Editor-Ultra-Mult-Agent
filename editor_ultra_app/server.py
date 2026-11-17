@@ -146,6 +146,10 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 return engine.apply_direction(project_id, kind, job["direction"], expected_revision=job["expected_revision"])
             if job["operation"] == "render":
                 return engine.render(project_id, kind, expected_revision=job["expected_revision"])
+            if job["operation"] == "compare_temporal":
+                space_for(4 * 1024 * 1024)
+                return engine.compare_temporal(project_id, center_s=job["center_s"],
+                                               expected_revision=job["expected_revision"])
             if job["operation"] == "measure_motion":
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
                 return engine.measure_motion(project_id,job["asset_id"],job["specification"],
@@ -479,6 +483,18 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, expected_revision)
             return result(engine.compare_clone(project_id, frames, expected_revision=expected_revision),
                           "Comparação por quadro registrada. Fidelidade estética e aprovação continuam pendentes.")
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_compare_temporal(project_id: str, center_s: float,
+                                expected_revision: int, request_id: str) -> CallToolResult:
+        """Agenda comparação de mudanças visuais e fluxo óptico em 3s da referência.
+
+        O relógio é extraído do MP4 no servidor. As medições são 2D,
+        sem inferir velocidade 3D, aprovar vídeo ou editar a referência.
+        """
+        return enqueue(project_id, "compare_temporal", "cadence", expected_revision,
+                       request_id, center_s=center_s)
 
     @server.tool(annotations=write)
     @offload
