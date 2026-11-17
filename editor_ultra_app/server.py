@@ -11,6 +11,7 @@ import base64
 from contextlib import asynccontextmanager
 from functools import wraps
 import json
+import logging
 import mimetypes
 import os
 from pathlib import Path
@@ -28,6 +29,8 @@ from starlette.requests import ClientDisconnect, Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
+from editorial_engine.contracts import ValidationError
+
 from . import __version__
 from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
@@ -37,8 +40,8 @@ from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError, UploadTicketStore
 
 
-UI_URI = "ui://editor-ultra/studio-v5.html"
-UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4))
+UI_URI = "ui://editor-ultra/studio-v7.html"
+UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4, 5, 6))
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
 UPLOAD_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -47,6 +50,25 @@ UPLOAD_HEADERS = {
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
+}
+UPLOAD_LOG = logging.getLogger("editor_ultra.upload")
+UPLOAD_VALIDATION_ERRORS = {
+    "revision_conflict": (409, "O projeto foi atualizado. Confira o recebimento antes de retomar o envio."),
+    "invalid_media": (422, "O motor não conseguiu verificar o conteúdo deste arquivo. Reanexe o vídeo original ou exporte uma nova cópia."),
+    "media_duration": (422, "O arquivo precisa ter duração maior que zero e de até 10 minutos."),
+    "video_stream": (422, "Este arquivo contém mais de uma faixa de vídeo. Exporte uma cópia com uma única faixa de vídeo."),
+    "image_size": (422, "A imagem ultrapassa o limite de 40 milhões de pixels. Reduza suas dimensões antes de enviar."),
+    "asset_type": (422, "O formato do arquivo não corresponde ao tipo de material selecionado."),
+    "asset_file": (422, "O motor não conseguiu validar o arquivo recebido. Reanexe o original."),
+}
+UPLOAD_UNCERTAIN_TICKET_CODES = {
+    "upload_in_progress", "upload_already_received", "upload_claim_lost", "upload_receipt_missing",
+}
+UPLOAD_REJECTED_TICKET_CODES = {
+    "revision_conflict", "upload_identifier", "upload_destination", "upload_revision", "upload_filename",
+    "upload_mime", "upload_size", "upload_rate_limit", "upload_id_conflict", "upload_ledger_full",
+    "upload_pending_limit", "upload_ticket_invalid_or_expired", "upload_content_type", "upload_content_length",
+    "upload_ticket_required", "upload_request", "upload_storage_limit", "upload_shot_missing", "upload_incomplete",
 }
 
 
@@ -109,7 +131,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     def revision(project_id, expected):
         actual = engine.get_project(project_id)["revision"]
         if actual != expected:
-            raise ValueError("O projeto mudou. Atualize o painel antes de repetir a ação.")
+            raise UploadTicketError("revision_conflict", "O projeto mudou. Atualize o painel antes de repetir a ação.", 409)
 
     def execute(job):
         with lock:
@@ -533,16 +555,34 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         if request.method == "OPTIONS":
             return Response(status_code=204, headers=UPLOAD_HEADERS)
         claim, temporary, acquired = None, None, False
+        phase = "authorization"
+
+        def rejected(code, message, status, *, uncertain):
+            # Do not log headers, file names, bodies, paths, or exception text.
+            # Untrusted route values must be canonical UUIDs before logging.
+            upload_id = request.path_params.get("upload_id", "")
+            try:
+                if str(uuid.UUID(upload_id)) != upload_id:
+                    upload_id = "unavailable"
+            except (ValueError, AttributeError, TypeError):
+                upload_id = "unavailable"
+            UPLOAD_LOG.warning("upload_rejected code=%s status=%s phase=%s upload_id=%s",
+                               code, status, phase, upload_id)
+            return JSONResponse({"error": message, "code": code, "uncertain": uncertain},
+                                status_code=status, headers=UPLOAD_HEADERS)
+
         try:
             header = request.headers.get("authorization", "")
             if not header.startswith("Upload "):
                 raise UploadTicketError("upload_ticket_required", "Autorize este envio pelo painel conectado.", 401)
             if request.query_params or request.headers.get("content-encoding", "identity") != "identity":
                 raise UploadTicketError("upload_request", "Envie apenas os bytes originais do arquivo autorizado.")
+            phase = "claim"
             claim = await asyncio.to_thread(tickets.claim, request.path_params["upload_id"], header[7:],
                                            request.headers.get("content-type", ""),
                                            request.headers.get("content-length"))
             if claim.completed:
+                phase = "receipt"
                 value = await asyncio.to_thread(upload_receipt, claim.binding, claim.asset_id)
                 if value is None:
                     raise UploadTicketError("upload_receipt_missing", "Confira o arquivo no projeto antes de repetir.", 409)
@@ -550,13 +590,16 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             # Bound both the wait for the one transfer slot and the incoming
             # stream. Claiming precedes this wait so duplicate POSTs fail at once.
             async with asyncio.timeout(300):
+                phase = "waiting"
                 await upload_lock.acquire()
                 acquired = True
+                phase = "preflight"
                 await asyncio.to_thread(preflight_ticket, claim.binding)
                 incoming = root / "incoming"
                 incoming.mkdir(exist_ok=True, mode=0o700)
                 temporary = incoming / ("direct-" + uuid.uuid4().hex + ".upload")
                 count = 0
+                phase = "receive"
                 with temporary.open("xb") as target:
                     temporary.chmod(0o600)
                     async for block in request.stream():
@@ -568,22 +611,39 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                     raise UploadTicketError("upload_incomplete", "O arquivo chegou incompleto. Confira e tente novamente.")
             # Do not unlink a file or release its claim while a cancelled HTTP
             # waiter leaves an engine commit running in its worker thread.
+            phase = "commit"
             commit = asyncio.create_task(asyncio.to_thread(commit_ticket, claim, temporary))
             try:
                 value = await asyncio.shield(commit)
             except asyncio.CancelledError:
                 await commit
                 raise
+            phase = "response"
             return JSONResponse(public(value), headers=UPLOAD_HEADERS)
         except UploadTicketError as exc:
-            return JSONResponse({"error": str(exc), "code": exc.code}, status_code=exc.status, headers=UPLOAD_HEADERS)
-        except (ValueError, OSError, TimeoutError, ClientDisconnect) as exc:
-            # Internal filesystem paths and credential material are not returned.
-            message = str(exc)[:300] if isinstance(exc, ValueError) else "O envio foi interrompido. Confira o projeto antes de repetir."
-            return JSONResponse({"error": message, "code": "upload_failed"}, status_code=409, headers=UPLOAD_HEADERS)
+            if exc.code in UPLOAD_REJECTED_TICKET_CODES | UPLOAD_UNCERTAIN_TICKET_CODES:
+                return rejected(exc.code, str(exc), exc.status,
+                                uncertain=exc.code in UPLOAD_UNCERTAIN_TICKET_CODES)
+            return rejected("upload_uncertain", "Confira o recebimento no projeto antes de repetir.",
+                            500, uncertain=True)
+        except ValidationError as exc:
+            code = exc.issues[0].get("code") if exc.issues else None
+            if code in UPLOAD_VALIDATION_ERRORS:
+                status, message = UPLOAD_VALIDATION_ERRORS[code]
+                return rejected(code, message, status, uncertain=False)
+            return rejected("upload_uncertain", "Confira o recebimento no projeto antes de repetir.",
+                            500, uncertain=True)
+        except (TimeoutError, ClientDisconnect):
+            return rejected("upload_interrupted", "O envio foi interrompido. Confira o recebimento antes de repetir.",
+                            409, uncertain=True)
+        except (ValueError, OSError):
+            # A failure can occur after the engine has already committed the file.
+            # Never turn an unclassified exception into a definitive rejection.
+            return rejected("upload_uncertain", "O motor não confirmou o envio. Confira o recebimento antes de repetir.",
+                            409, uncertain=True)
         except Exception:
-            return JSONResponse({"error": "Confira o recebimento no projeto antes de repetir.", "code": "upload_uncertain"},
-                                status_code=500, headers=UPLOAD_HEADERS)
+            return rejected("upload_uncertain", "Confira o recebimento no projeto antes de repetir.",
+                            500, uncertain=True)
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)

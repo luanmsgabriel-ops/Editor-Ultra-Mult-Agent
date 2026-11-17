@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import hashlib
 import json
+import logging
 import sqlite3
 import subprocess
 import uuid
@@ -242,6 +243,8 @@ def test_direct_upload_enforces_mime_body_destination_and_revision(connected):
     }))
     stale = client.post(grant["url"], content=content, headers=grant["headers"])
     assert stale.status_code == 409
+    assert stale.json()["code"] == "revision_conflict"
+    assert stale.json()["uncertain"] is False
     assert not app.state.editor_engine.get_project(project["project_id"])["assets"]
     assert app.state.editor_engine.get_project(project["project_id"])["revision"] == changed["revision"]
     assert authorize_upload(session, arguments).get("isError")
@@ -254,16 +257,91 @@ def test_direct_upload_enforces_mime_body_destination_and_revision(connected):
     assert accepted.json()["asset"]["type"] == "video/mp4"
 
 
-def test_commit_receipt_recovers_after_ledger_finalization_failure(connected, monkeypatch):
+def test_invalid_media_is_rejected_without_changing_project_or_misreporting_revision(connected, caplog):
+    app, client, session, project, content = connected
+    invalid = b"\x00" * len(content)
+    arguments, response = begin(session, project, invalid)
+    grant = response["_meta"]["editor"]["upload"]
+    with caplog.at_level(logging.WARNING, logger="editor_ultra.upload"):
+        rejected = client.post(grant["url"], content=invalid, headers=grant["headers"])
+    assert rejected.status_code == 422
+    assert rejected.json()["code"] == "invalid_media"
+    assert rejected.json()["uncertain"] is False
+    assert "projeto mudou" not in rejected.json()["error"]
+    assert app.state.editor_engine.get_project(project["project_id"]) == project
+    assert not list((app.state.editor_engine.data_dir / "incoming").glob("direct-*.upload"))
+    diagnostics = [record.getMessage() for record in caplog.records if record.name == "editor_ultra.upload"]
+    assert diagnostics == [f"upload_rejected code=invalid_media status=422 phase=commit upload_id={arguments['upload_id']}"]
+    assert grant["headers"]["Authorization"] not in " ".join(diagnostics)
+    assert str(app.state.editor_engine.data_dir) not in rejected.text
+    # A definite rejection can obtain a new capability without mutating choices.
+    retry = authorize_upload(session, arguments)
+    assert retry["_meta"]["editor"]["upload"]["upload_id"] == arguments["upload_id"]
+    assert app.state.editor_engine.get_project(project["project_id"]) == project
+
+
+def test_media_duration_has_its_own_error_and_keeps_project_unchanged(connected, tmp_path):
+    app, client, session, project, _ = connected
+    source = tmp_path / "too-long.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                    "color=c=black:size=16x16:rate=1:duration=601", "-an", "-c:v", "libx264",
+                    "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(source)], check=True, timeout=30)
+    content = source.read_bytes()
+    _, response = begin(session, project, content)
+    grant = response["_meta"]["editor"]["upload"]
+    rejected = client.post(grant["url"], content=content, headers=grant["headers"])
+    assert rejected.status_code == 422
+    assert rejected.json()["code"] == "media_duration"
+    assert rejected.json()["uncertain"] is False
+    assert "10 minutos" in rejected.json()["error"]
+    assert app.state.editor_engine.get_project(project["project_id"]) == project
+
+
+def test_revision_change_during_stream_is_rejected_at_commit_without_overwriting(connected, caplog):
+    app, client, session, project, content = connected
+    _, response = begin(session, project, content)
+    grant = response["_meta"]["editor"]["upload"]
+    changed = None
+
+    def stream():
+        nonlocal changed
+        middle = len(content) // 2
+        yield content[:middle]
+        changed = app.state.editor_engine.save_project(project["project_id"],
+                    {"objective": "Concurrent choices must survive"}, expected_revision=project["revision"])
+        yield content[middle:]
+
+    with caplog.at_level(logging.WARNING, logger="editor_ultra.upload"):
+        rejected = client.post(grant["url"], content=stream(), headers=grant["headers"])
+    assert changed is not None
+    assert rejected.status_code == 409
+    assert rejected.json()["code"] == "revision_conflict"
+    assert rejected.json()["uncertain"] is False
+    assert any(record.name == "editor_ultra.upload" and "phase=commit" in record.getMessage()
+               for record in caplog.records)
+    assert app.state.editor_engine.get_project(project["project_id"]) == changed
+    assert not changed["assets"]
+
+
+@pytest.mark.parametrize("failure,status", [(OSError, 409), (ValueError, 409), (RuntimeError, 500)])
+def test_commit_receipt_recovers_after_ledger_finalization_failure(connected, monkeypatch, caplog, failure, status):
     app, client, session, project, content = connected
     arguments, response = begin(session, project, content)
     grant = response["_meta"]["editor"]["upload"]
 
     def interrupted(*args):
-        raise OSError("Synthetic failure after engine commit, before ledger finalization")
+        raise failure("Synthetic post-commit failure /private/secret-diagnostic-marker")
 
     monkeypatch.setattr(app.state.editor_upload_tickets, "complete", interrupted)
-    assert client.post(grant["url"], content=content, headers=grant["headers"]).status_code == 409
+    with caplog.at_level(logging.WARNING, logger="editor_ultra.upload"):
+        failed = client.post(grant["url"], content=content, headers=grant["headers"])
+    assert failed.status_code == status
+    assert failed.json()["code"] == "upload_uncertain"
+    assert failed.json()["uncertain"] is True
+    diagnostics = " ".join(record.getMessage() for record in caplog.records if record.name == "editor_ultra.upload")
+    assert "phase=commit" in diagnostics and "code=upload_uncertain" in diagnostics
+    assert "secret-diagnostic-marker" not in failed.text + diagnostics
+    assert grant["headers"]["Authorization"] not in failed.text + diagnostics
     committed = app.state.editor_engine.get_project(project["project_id"])
     assert len(committed["assets"]) == 1
     # A restarted ledger invalidates incomplete claims, but not the engine receipt.
