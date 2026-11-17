@@ -239,8 +239,12 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
                   "files": [{"path": str(directory / "alpha.json"), "sha256": file_sha256(directory / "alpha.json")}, *originals]})
         capability("matte", "subject_mask", proof, kind="mask")
 
-    if projection:
-        supplied = _load(projection)
+    tracks = projection if isinstance(projection, dict) else ({"": projection} if projection else {})
+    for track_id, projection_path in tracks.items():
+        import re
+        require(track_id == "" or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}", track_id),
+                "projection_id", "Track ID must be a bounded identifier")
+        supplied = _load(projection_path)
         require(supplied.get("clock", "source") == "source", "projection_clock", "Projection must use the source clock")
         require(supplied.get("source_sha256") == source_hash and Fraction(str(supplied["fps"])) == rate
                 and supplied["frame_count"] == count, "projection_source", "Planar tracks need the source clock")
@@ -248,10 +252,11 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
         for frame, points in supplied["quads"].items():
             require(str(int(frame)) == frame and 0 <= int(frame) < count, "projection_frame", "Projection frame is invalid")
             quad(points)
-        proof = receipt("planar", {**supplied, "kind": "planar_tracking",
-                        "files": [{"path": str(Path(projection).resolve()), "sha256": file_sha256(projection)}]})
+        proof = receipt("planar" + ("-" + track_id if track_id else ""), {**supplied, "kind": "planar_tracking",
+                        "files": [{"path": str(Path(projection_path).resolve()), "sha256": file_sha256(projection_path)}]})
         for first, last in _spans(map(int, supplied["quads"])):
-            capability(f"planar:{first}:{last}", "planar_tracking", proof, first=first, last=last, kind="tracking")
+            capability(f"planar:{track_id + ':' if track_id else ''}{first}:{last}", "planar_tracking",
+                       proof, first=first, last=last, kind="tracking")
 
     if assets:
         inventory = _load(assets) if isinstance(assets, (str, Path)) else clone(assets)

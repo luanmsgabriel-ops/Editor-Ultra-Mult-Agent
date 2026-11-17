@@ -118,7 +118,12 @@ def make_art(effect, size, font_path, color, asset_root, poses=None, profile_asp
     if 'asset' in effect:
         with Image.open(asset_root/effect['asset']) as media:
             rgba = media.convert('RGBA')
-        rgba.thumbnail(size,Image.Resampling.LANCZOS)
+        if effect.get('fit_asset'):
+            scale = min(size[0] / rgba.width, size[1] / rgba.height)
+            rgba = rgba.resize((max(1, round(rgba.width * scale)), max(1, round(rgba.height * scale))),
+                               Image.Resampling.LANCZOS)
+        else:
+            rgba.thumbnail(size, Image.Resampling.LANCZOS)
         image = Image.new('RGBA',size)
         image.alpha_composite(rgba, ((size[0]-rgba.width)//2,(size[1]-rgba.height)//2))
         return np.asarray(image)
@@ -192,13 +197,34 @@ def warp_rgba_patch(art, corners, resolution):
     return int(x),int(y),patch
 
 
+def composite_shutter(frame, art, samples, opacity=1., occlusion=None):
+    """Average premultiplied exposure taps before compositing onto the plate."""
+    if opacity <= 0:
+        return
+    patches = [warp_rgba_patch(art, corners, frame.shape[1::-1]) for corners in samples]
+    visible = [patch for patch in patches if patch is not None]
+    if not visible:
+        return
+    x0, y0 = min(p[0] for p in visible), min(p[1] for p in visible)
+    x1 = max(x + patch.shape[1] for x, y, patch in visible)
+    y1 = max(y + patch.shape[0] for x, y, patch in visible)
+    exposure = np.zeros((y1-y0, x1-x0, 4), dtype=np.float32)
+    for x, y, patch in visible:
+        height, width = patch.shape[:2]
+        exposure[y-y0:y-y0+height, x-x0:x-x0+width] += patch / len(samples)
+    _blend_patch(frame, x0, y0, exposure, opacity, occlusion)
+
+
 def composite(frame, art, corners, opacity=1., occlusion=None):
     if opacity<=0:
         return
     warped=warp_rgba_patch(art,corners,frame.shape[1::-1])
     if warped is None:
         return
-    x,y,patch=warped
+    _blend_patch(frame, *warped, opacity, occlusion)
+
+
+def _blend_patch(frame, x, y, patch, opacity, occlusion):
     height,width=patch.shape[:2]
     gain=opacity
     if occlusion is not None:

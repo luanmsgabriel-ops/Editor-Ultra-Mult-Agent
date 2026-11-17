@@ -1,8 +1,10 @@
+import io
 import json
 from pathlib import Path
 import subprocess
 import time
 
+from PIL import Image
 from starlette.testclient import TestClient
 
 from editor_ultra_app.server import create_app, UI_URI
@@ -64,7 +66,7 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
             assert save_tool["inputSchema"]["properties"]["state"]["type"] == "object"
             assert save_tool["inputSchema"]["properties"]["state"]["additionalProperties"] is True
             assert save_tool["annotations"]["readOnlyHint"] is False
-            assert "editor_measure_motion" in tools_by_name
+            assert {"editor_measure_motion", "editor_request_clone_images"} <= tools_by_name.keys()
             for name, tool in tools_by_name.items():
                 if name != "editor_open":
                     metadata = tool.get("_meta", {})
@@ -155,3 +157,26 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
             conflict = session.call_tool("editor_save_project", {"project_id": project_id, "expected_revision": rev, "state": {"objective": "stale"}})
             assert conflict.get("isError")
 
+
+            images = structured(session.call_tool("editor_request_clone_images", {
+                "project_id": project_id, "expected_revision": snapshot["revision"], "needs": [{
+                    "id": "emblem", "scene_id": "fixture", "frames": [0, 10],
+                    "reference_frame": 4, "placement": "planar",
+                    "description": "One green emblem against transparent margins.",
+                    "reason": "Keep the scene attachment editable.",
+                }],
+            }))
+            assert images["image_request"]["status"] == "awaiting_image_generation"
+            still = images["image_request"]["stills"]["4"]
+            assert still["role"] == "evidence"
+            image = Image.new("RGBA", (20, 20))
+            image.paste((64, 255, 64, 255), (2, 2, 18, 18))
+            png = io.BytesIO()
+            image.save(png, format="PNG")
+            uploaded = client.post(f"/uploads/{project_id}/clone_resource?filename=emblem.png",
+                                   content=png.getvalue(), headers={
+                                       **session.headers, "Content-Type": "image/png",
+                                       "X-Editor-Revision": str(images["revision"]),
+                                   })
+            assert uploaded.status_code == 200, uploaded.text
+            assert uploaded.json()["asset"]["type"] == "image/png"

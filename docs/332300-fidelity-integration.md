@@ -90,3 +90,56 @@ forest transition must be rebuilt, not smoothed away with retiming.
 6. Keep v1 rejected and v2 unapproved until a user explicitly reviews new bytes.
 
 No automatic merge, deploy, approval, or whole-film v2 is performed by this PR.
+
+## Hybrid clone rendering
+
+The Studio's clone request now directs the host to inspect each scene for a
+missing visual resource. Generate a transparent PNG for a silhouette, emblem
+or texture when it supports the observed composition. Use animated geometry
+where camera movement reveals depth or a previously hidden surface.
+
+1. Call `editor_request_clone_images` with the asset ID, scene ID, exact
+   `[first,last)` frame interval, reference frame, placement and visual
+   rationale. The app stores the request and returns a viewable still from the
+   scoped reference. Open the still and generate the isolated artwork in the
+   ChatGPT host. This action remains in the host's workflow with image
+   generation access.
+2. Import the actual PNG with `editor_import_file(role="clone_resource")`.
+   The adapter checks the PNG contents and requires both transparent and
+   visible pixels. Import the independently produced plate as `footage`.
+3. Call `editor_prepare(kind="clone", reconstruction=...)` with the plate ID
+   and a mapping from each image request ID to its returned asset ID. The
+   reference and plate must share the same constant frame clock and raster.
+   The renderer takes its base pixels and audio from the imported plate.
+   Put any intended audio mix on that plate before preparation.
+4. Bind every requested image to an effect in the plan across its declared
+   interval. Use `native.overlay` in screen space, `native.behind_subject`
+   with a matte, `native.projected_asset` with planar tracking, or
+   `native.projected_behind` with both. The app validates the planned
+   placement and coverage before accepting direction.
+5. Render and compare the result. Receipts identify the plate, reference,
+   selected PNG bytes, plan and resources actually consumed. Review the
+   resulting MP4 explicitly.
+
+Protection, pose, and projection JSON use the reconstruction plate's SHA-256
+and source clock. For multiple authored tracks, `projection_assets` maps a
+track ID to each verified JSON receipt. `measured_projection` maps one measured
+element explicitly from the clock-aligned reference or plate with continuous
+frame coverage. That mapping applies 2D motion and its provenance remains part
+of the tracking receipt. It requires an unrotated matching raster. Set
+`shutter_fraction` on a planar effect for motion blur sampled from adjacent
+quads. This samples projected movement on the plate; it does not estimate a
+physical 3D camera shutter.
+
+Use a matte ZIP containing `alpha.json` and one `000000.png`-style mask for every
+frame. Assign verified TTF and OTF uploads to `font_asset_id` and
+`script_font_asset_id`. `motion_layers` takes project-owned Motion Lab result
+IDs. The renderer checks source and clock coverage when preparing or consuming
+each resource.
+
+Local release evidence covers a real shield segment of 332300 from frame
+896 through 927. The engine projected a generated, transparent six-piece
+icon onto the independent shield geometry at 30 fps (32 frames).
+The shoulders, lighting, HUD elements and layered glow in that shot still
+differ from the reference. The input video and generated artwork stay outside
+Git. The local proof has no user approval and the whole-film v2 remains open.

@@ -26,7 +26,7 @@ from .planner import validate_plan
 
 BUNDLE_SCHEMA = "contextual-edit/1"
 OPERATIONS = ("kinetic_type", "overlay", "behind_subject", "projected_asset",
-              "body_orbit", "hand_accent", "sfx_spot", "motion_layer", "motion_behind")
+              "body_orbit", "hand_accent", "sfx_spot", "motion_layer", "motion_behind", "projected_behind")
 
 
 def native_catalog() -> dict:
@@ -42,6 +42,7 @@ def native_catalog() -> dict:
 
     animation = {"animation": {"type": "string", "enum": ["hold", "fade", "pop", "slide"]},
                  "entrance_seconds": {"type": "number", "minimum": 0.05, "maximum": 2}}
+    projection_animation = {**animation, "shutter_fraction": {"type": "number", "minimum": 0, "maximum": 1}}
     title = {"title": {"type": "string", "required": True},
              "subtitle": {"type": "string"}}
     return {"schema_version": "1.0", "effects": [
@@ -63,7 +64,11 @@ def native_catalog() -> dict:
                channels=["background_graphic"]),
         effect("native.projected_asset", "projected_asset", ["visualize_concept", "spatial_relation", "identify"],
                anchors=["planar"], requirements=["protected_regions"], bindings={"asset": "image_asset"},
-               parameters=animation, channels=["environment_graphic"]),
+               parameters=projection_animation, channels=["environment_graphic"]),
+        effect("native.projected_behind", "projected_behind", ["visualize_concept", "spatial_relation", "identify"],
+               anchors=["planar"], requirements=["protected_regions"],
+               bindings={"asset": "image_asset", "matte": "subject_mask"},
+               parameters=projection_animation, channels=["background_graphic"]),
         effect("native.body_orbit", "body_orbit", ["emphasize", "spatial_relation", "reveal"],
                anchors=["body"], requirements=["protected_regions"], bindings={"matte": "subject_mask"},
                parameters={"title": title["title"]}, channels=["body_graphic"]),
@@ -347,7 +352,7 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                 mode = "hand_track"
             corners, pixel_size = track, resolution
         else:
-            if kind == "projected_asset":
+            if kind in {"projected_asset", "projected_behind"}:
                 receipt = _read_receipt(capabilities[operation["anchor"]["capability_id"]])
                 require(receipt.get("kind") == "planar_tracking", "receipt_kind", "Expected measured planar quads")
                 require(Fraction(receipt["fps"]) == rate and receipt["frame_count"] == count,
@@ -356,7 +361,8 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                         "tracking_cut", "Projection crosses a candidate shot cut")
                 corners = {i: quad(receipt["quads"][str(i)]) for i in range(first, last)}
                 mode = "planar"
-            if kind in {"behind_subject", "motion_behind"}:
+                effect["shutter_fraction"] = params.get("shutter_fraction", 0)
+            if kind in {"behind_subject", "motion_behind", "projected_behind"}:
                 matte = _matte(capabilities[bindings["matte"]], first, last, resolution, rate, count)
                 effect["occlusion"] = str(matte)
             from visual_fidelity.anchor_graphics import motion
@@ -374,7 +380,7 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                             protected[index], opacity=opacity, matte=mask,
                             min_visible=params.get("min_visible_fraction", 0),
                             min_glyph_visible=params.get("min_glyph_visible_fraction")))
-                    elif kind != "behind_subject":
+                    elif kind not in {"behind_subject", "projected_behind"}:
                         _safe_quad(visible_points, protected[index])
             if kind == "kinetic_type":
                 require(bool(params["title"].strip()), "empty_title", "Typography requires a nonempty title")
@@ -388,17 +394,28 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                 with Image.open(receipt["path"]) as asset:
                     asset.verify()
                 effect["asset"] = receipt["path"]
+                if receipt.get("catalog_metadata", {}).get("provenance", {}).get("method") == "host_generated_png":
+                    effect["fit_asset"] = True
+                    if mode == "planar":
+                        # The projected corners describe the PNG canvas itself.
+                        with Image.open(receipt["path"]) as png:
+                            width, height = png.size
+                        scale = min(1, 1024 / max(width, height))
+                        pixel_size = (max(4, round(width * scale)), max(4, round(height * scale)))
             if motion_layer is not None:
                 require(any(row["visible_alpha_sum"] > 1 for row in evidence), "motion_invisible",
                         "The selected motion is invisible for the entire interval; revise the decision")
         effect["native_operation"] = kind
+        consumed = ({key: capabilities[cap_id]["verification"]["artifact_sha256"]
+                     for key, cap_id in bindings.items()} if bindings else {})
         layers.append(Prepared(effect, first, last, corners, {}, {"mode": mode}, pixel_size, {}, None))
         checks.append({"decision_id": decision["id"], "status": "compiled", "frames": [first, last],
-                       "coverage": len(corners), "mode": mode,
+                       "coverage": len(corners), "mode": mode, "consumed_receipts": consumed,
+                       "shutter_fraction": effect.get("shutter_fraction", 0),
                        "motion_frames": evidence if motion_layer is not None else None,
                        "sampled_orbit_evidence": evidence if motion_layer is None else []})
 
-    depth_order = {"behind_subject": 0, "motion_behind": 0, "projected_asset": 1,
+    depth_order = {"behind_subject": 0, "motion_behind": 0, "projected_behind": 0, "projected_asset": 1,
                    "overlay": 2, "motion_layer": 2, "kinetic_type": 2, "body_orbit": 3, "hand_accent": 4}
     layers.sort(key=lambda layer: (depth_order[layer.effect["native_operation"]], layer.first, layer.effect["id"]))
     require(output.suffix.lower() == (".mp4" if layers or cues else source_path.suffix.lower()),

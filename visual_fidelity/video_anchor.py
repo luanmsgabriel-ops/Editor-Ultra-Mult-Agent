@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 
 from .anchor_camera import parse_colmap, project
-from .anchor_graphics import composite, make_art, motion
+from .anchor_graphics import composite, composite_shutter, make_art, motion
 from .anchor_tracking import track_planar
 from .anchor_ocr import contains, detect, engine
 from .auto_placement import choose_anchor
@@ -363,7 +363,17 @@ def render(picture, destination, resolution, fps, layers, font, root):
                                        effect.get('animation','pop'),
                                        fit_inside=layer.report['mode']=='screen')
                 mask=occlusion_at(root,effect['occlusion'],index,frame.shape[:2]) if effect.get('occlusion') else None
-                composite(frame,art,bounds,opacity,mask)
+                shutter = effect.get('shutter_fraction', 0)
+                if shutter:
+                    center = layer.corners[index]
+                    before = layer.corners.get(index - 1, center)
+                    after = layer.corners.get(index + 1, center)
+                    samples = [bounds + (before - center) * (-t) if t < 0
+                               else bounds + (after - center) * t
+                               for t in np.linspace(-shutter / 2, shutter / 2, 5)]
+                    composite_shutter(frame, art, samples, opacity, mask)
+                else:
+                    composite(frame,art,bounds,opacity,mask)
             encoder.stdin.write(frame.tobytes())
         encoder.stdin.close()
         if encoder.wait():
