@@ -47,6 +47,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Verify codec dependency
         run: ffmpeg -version
+      - name: Install pinned Motion Lab renderer dependencies
+        run: npm ci --ignore-scripts --prefix editorial_engine/backends/motionlab
       - name: Run visual fidelity contract tests
         run: python -m pytest -q tests/test_reference_fidelity.py tests/test_blender_temporal.py tests/test_reference_temporal_qa.py tests/test_app_fidelity_bridge.py
       - name: Verify studio JavaScript syntax
