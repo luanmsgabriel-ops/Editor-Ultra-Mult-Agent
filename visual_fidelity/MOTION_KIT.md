@@ -1,4 +1,17 @@
-# Motion Kit 0.8.0 — recursos reutilizáveis
+# Motion Kit 0.9.0 — recursos reutilizáveis
+
+## Movimento medido por elemento
+
+A versão 0.9 conecta observações de posição, escala e rotação às curvas usadas
+pelos renderers studio e geometric/cadence. `measured-element-motion` exige
+relógio PTS, identidade de elemento, perfil de curvas, binding e cobertura.
+Use `python -m visual_fidelity motion-profile --help` e leia
+[MOTION_PROFILE.md](MOTION_PROFILE.md). Um zoom com centro fixo passa a ter
+movimento de cantos auditável; atividade de luminância não é velocidade.
+
+Manifestos 0.7 e 0.8 preservam suas capacidades originais. Nenhum deles pode
+declarar a capacidade nova sem fixar 0.9. Evidência de execução continua
+separada de revisão visual e aprovação do usuário.
 
 ## Palco de produto e oclusores geométricos
 

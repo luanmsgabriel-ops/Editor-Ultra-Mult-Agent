@@ -163,6 +163,13 @@ def track_motion(track, canvas, fps):
 
 
 def audit(data):
+    # Element profiles preserve scale and rotation in addition to translation.
+    # Keep the historical keyframe/anchor-report path unchanged below.
+    if data.get('schema') in ('element-motion-observations/1', 'element-motion-curves/1'):
+        from .motion_profile import fit_profile
+        from .motion_compare import audit_profile
+        profile = fit_profile(data) if data['schema'] == 'element-motion-observations/1' else data
+        return audit_profile(profile)
     fps = data.get('fps')
     if type(fps) not in (int, float) or not isfinite(fps) or not 0 < fps <= 240:
         raise ValueError('Informe fps como número positivo de até 240.')
@@ -204,9 +211,10 @@ def main(argv=None):
         if args.csv:
             args.csv.parent.mkdir(parents=True, exist_ok=True)
             with args.csv.open('w', newline='', encoding='utf-8') as stream:
-                writer = csv.DictWriter(stream, fieldnames=list(samples[0]))
-                writer.writeheader()
-                writer.writerows(samples)
+                if samples:
+                    writer = csv.DictWriter(stream, fieldnames=list(samples[0]))
+                    writer.writeheader()
+                    writer.writerows(samples)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
