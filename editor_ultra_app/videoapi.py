@@ -5,6 +5,7 @@ Generation is always an explicit, separately confirmed user action.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -169,7 +170,7 @@ class VideoAPIJobs:
                 provider_id TEXT, created REAL NOT NULL, updated REAL NOT NULL,
                 next_poll REAL NOT NULL, deadline REAL NOT NULL, error TEXT,
                 url TEXT, download_url TEXT, expires_at TEXT, balance REAL,
-                requested_seconds INTEGER, duration_seconds INTEGER,
+                requested_seconds INTEGER, duration_seconds INTEGER, retry_count INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(project_id, request_id)
             )""")
             # An ambiguous crash while submitting must never lead to a second paid POST.
@@ -177,10 +178,18 @@ class VideoAPIJobs:
                        "error='Envio não confirmado após reinício. Não repita sem conferir o histórico do provedor.' "
                        "WHERE status='submitting'")
 
+    @contextmanager
     def _db(self):
         db = sqlite3.connect(self.db_path, timeout=15)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            yield db
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def _view(self, row) -> dict | None:
         if row is None:
@@ -255,7 +264,7 @@ class VideoAPIJobs:
                     return value if isinstance(value, str) and value.startswith(BASE_URL + "/v1/") else None
                 with self.lock, self._db() as db:
                     db.execute("""UPDATE videoapi_jobs SET status=?,updated=?,next_poll=?,error=?,
-                                  url=?,download_url=?,expires_at=?,duration_seconds=?
+                                  url=?,download_url=?,expires_at=?,duration_seconds=?,retry_count=0
                                   WHERE job_id=? AND status IN ('queued','generating','poll_retry')""",
                                (status, now, now + POLL_SECONDS,
                                 str(details.get("error") or "Falha sem detalhes.")[:1000] if status == "failed" else None,
@@ -266,15 +275,16 @@ class VideoAPIJobs:
                                 row["job_id"]))
             except VideoAPIError as exc:
                 # GET errors never re-submit a paid generation. Back off temporary failures.
-                if exc.status_code in {401, 404}:
+                attempts = min(8, row["retry_count"] + 1)
+                if exc.status_code in {401, 402, 404}:
                     next_status, delay = "poll_error", POLL_SECONDS
                 elif exc.status_code == 429:
-                    next_status, delay = "poll_retry", 15
+                    next_status, delay = "poll_retry", max(15, POLL_SECONDS * (2 ** (attempts - 1)))
                 else:
-                    next_status, delay = "poll_retry", 10
+                    next_status, delay = "poll_retry", min(120, POLL_SECONDS * (2 ** (attempts - 1)))
                 with self.lock, self._db() as db:
-                    db.execute("UPDATE videoapi_jobs SET status=?,error=?,updated=?,next_poll=? WHERE job_id=?",
-                               (next_status, str(exc), now, now + delay, row["job_id"]))
+                    db.execute("UPDATE videoapi_jobs SET status=?,error=?,updated=?,next_poll=?,retry_count=? WHERE job_id=?",
+                               (next_status, str(exc), now, now + delay, attempts, row["job_id"]))
 
     def _loop(self):
         while not self.stop_event.wait(1):
