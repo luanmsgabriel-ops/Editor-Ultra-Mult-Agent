@@ -791,7 +791,9 @@ class EngineAdapter:
                     "motion_measurement":self._motion_public(record,measurement)}
 
     def _stage_binding(self, record, stage):
-        return self._clone_binding(record) if stage == "clone" else self._generation_basis(record) if stage == "generation" else self._edit_binding(record)
+        if stage in {"clone", "motion"}:
+            return self._clone_binding(record)
+        return self._generation_basis(record) if stage == "generation" else self._edit_binding(record)
 
     def _brief(self, record, stage):
         s = record["state"]
@@ -1137,6 +1139,80 @@ class EngineAdapter:
             return {**self._snapshot(record), "status": "quality_evidence_recorded",
                     "comparison": report, "report_asset": self._public_file(report_item),
                     "image_asset": self._public_file(image_item)}
+
+    def queue_bundled_motion(self, project_id, recipe, *, expected_revision=None):
+        """Queue one bounded, authored, source-associated local motion recipe.
+
+        This is not a video clone. The only exposed executable producer is the
+        already packaged, declarative Motion Lab backend. Fonts, URLs, scripts,
+        external model calls and arbitrary asset paths are not accepted here.
+        """
+        from fractions import Fraction
+        from editorial_engine.production import production_request
+        from editorial_engine.motionlab import validate_scene
+        require(isinstance(recipe, dict) and len(json.dumps(recipe, allow_nan=False)) <= 128 * 1024,
+                "motion_recipe_size", "Motion recipe must be a bounded JSON document")
+        checked = validate_scene(recipe)
+        require(checked.get("mode") == "2d"
+                and checked["width"] * checked["height"] <= 1280 * 720
+                and checked["frame_count"] <= 120
+                and Fraction(checked["fps"]) <= 60,
+                "motion_proof_budget", "The first local proof supports 2D, 120 frames and up to 1280x720 at 60fps")
+        require(not checked.get("fonts"), "motion_proof_fonts",
+                "Font-dependent motion must use the future verified font resource route")
+        require(checked.get("background") is None, "motion_proof_alpha",
+                "This proof requires transparent motion; opaque media use another explicit output contract")
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            refs = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            require(len(refs) == 1, "motion_source", "Select exactly one verified reference video")
+            directory = self._new_engine(record, "motion", [self._input(refs[0], "reference")],
+                                         "reference_generate")
+            request_id = "motion-proof-" + uuid.uuid4().hex
+            request = production_request(request_id, "motion_recipe",
+                prompt="Render a small, authored, independent 2D motion proof. Not a faithful reference reconstruction.",
+                output_kind="motion_layer", adapter_id="bundled.motion",
+                parameters={"backend": "motionlab", "recipe": checked,
+                            "asset_id": "motion-proof", "description": "Local authored motion proof"},
+                context={"project_id": project_id, "reference_sha256": refs[0]["sha256"],
+                         "source_pixels_reused": False, "visual_review": "pending"})
+            engine.queue_production(directory, request)
+            stage = record["engines"]["motion"]
+            stage["request_id"] = request_id
+            stage["request_sha256"] = request["request_sha256"]
+            stage["status"] = "queued_local_motion_unreviewed"
+            self._write(record, "Motion Lab declarativo enfileirado; sem produção ou aprovação")
+            return {**self._snapshot(record), "status": "queued_local_motion_unreviewed",
+                    "request_id": request_id, "request_sha256": request["request_sha256"]}
+
+    def execute_bundled_motion(self, project_id, *, expected_revision=None):
+        """Execute the currently queued local producer under the project ledger."""
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            stage = record["engines"].get("motion")
+            require(stage and stage.get("binding") == self._stage_binding(record, "motion"),
+                    "motion_stale", "Prepare a current source-bound proof")
+            require(stage.get("status") == "queued_local_motion_unreviewed",
+                    "motion_stage", "Only a queued local motion proof can run")
+            request_id = stage["request_id"]
+            engine.produce(stage["directory"], request_id)
+            receipt = engine.artifact(stage["directory"], "execution:" + request_id)
+            stage["status"] = receipt.get("status", "unverified")
+            result_asset = None
+            if stage["status"] == "succeeded":
+                result = engine.artifact(stage["directory"], "result:" + request_id)
+                manifest = result.get("artifact", {})
+                require(manifest.get("path"), "motion_result", "Producer did not return a verified motion layer")
+                result_asset = self._register_internal(record, manifest["path"], role="evidence",
+                                                       name="motion-proof-layer.json")
+                stage["status"] = "motion_produced_unreviewed"
+                stage["result_asset_id"] = result_asset["id"]
+            self._write(record, "Produção local executada; prévia independente sem aprovação")
+            return {**self._snapshot(record), "status": stage["status"],
+                    "execution": self._portable(record, receipt),
+                    "result_asset": self._public_file(result_asset) if result_asset else None}
 
     def compare_temporal(self, project_id, *, center_s=0.0, expected_revision=None):
         """Inspect a bounded three-second source-clock window at the selected time.
