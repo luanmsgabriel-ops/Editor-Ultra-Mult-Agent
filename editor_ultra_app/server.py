@@ -102,6 +102,22 @@ class UIUploadCommand(BaseModel):
     upload_request: UIUploadRequest
 
 
+class UIVideoAPIGeneration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1, max_length=96)
+    kind: Literal["video", "image"]
+    prompt: str = Field(min_length=1, max_length=5000)
+    aspect_ratio: Literal["9:16", "16:9"]
+    duration_seconds: Literal[5, 10, 20, 30] | None = None
+    reference_asset_ids: list[str] = Field(default_factory=list, max_length=3)
+
+
+class UIVideoAPICommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ui_action: Literal["videoapi_generate"]
+    generation_request: UIVideoAPIGeneration
+
+
 def offload(function):
     """Keep the HTTP event loop responsive while a file-bound tool is running."""
     @wraps(function)
@@ -390,6 +406,16 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         O comando state.ui_action='begin_upload', com upload_request estrito,
         apenas autoriza o envio direto e não salva escolhas ou revisões.
         """
+        if state.get("ui_action") == "videoapi_account":
+            if set(state) != {"ui_action"}:
+                raise ValueError("Comando de consulta VIDEOAPI inválido.")
+            return result({"videoapi_account": videoapi_client.account()}, "Saldo VIDEOAPI consultado.")
+        if state.get("ui_action") == "videoapi_generate" or "generation_request" in state:
+            command = UIVideoAPICommand.model_validate(state)
+            if not project_id or expected_revision is None:
+                raise ValueError("Projeto e revisão são obrigatórios para gerar.")
+            revision(project_id, expected_revision)
+            return submit_videoapi_generation(project_id, **command.generation_request.model_dump())
         if "ui_action" in state or "upload_request" in state:
             command = UIUploadCommand.model_validate(state)
             if not project_id or expected_revision is None:
@@ -465,24 +491,11 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """Consulta saldo e preços da VIDEOAPI sem expor a chave nem realizar uma geração."""
         return result({"videoapi_account": videoapi_client.account()}, "Saldo e custos de geração consultados.")
 
-    @server.tool(annotations=write, meta=widget)
-    @offload
-    def editor_videoapi_generate(
-        project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
-        request_id: Annotated[str, Field(min_length=1, max_length=96)],
-        kind: Literal["video", "image"],
-        prompt: Annotated[str, Field(min_length=1, max_length=5000)],
-        aspect_ratio: Literal["9:16", "16:9"] = "9:16",
-        duration_seconds: Literal[5, 10, 20, 30] | None = None,
-        reference_asset_ids: Annotated[list[str], Field(max_length=3)] | None = None,
-    ) -> CallToolResult:
-        """Inicia UMA geração paga após clique explícito; retorna ID persistente e consulta depois o projeto.
-
-        Imagens opcionais são lidas de arquivos já admitidos neste projeto.
-        Não recebe base64 do navegador nem compartilha VIDEOAPI_KEY.
-        A geração não modifica o estado editorial nem aprova resultados.
-        """
-        engine.get_project(project_id)  # Project exists and is visible only to this owner.
+    def submit_videoapi_generation(project_id: str, request_id: str, kind: str, prompt: str,
+                                   aspect_ratio: str, duration_seconds: int | None,
+                                   reference_asset_ids: list[str] | None = None) -> CallToolResult:
+        """Single secure implementation shared by new tools and the legacy UI-compatible command."""
+        engine.get_project(project_id)
         images = []
         for asset_id in reference_asset_ids or []:
             path = engine.resolve_asset(project_id, asset_id)
@@ -497,6 +510,21 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         payload = build_payload(kind, prompt, aspect_ratio, duration_seconds, images)
         job = videoapi_jobs.submit(project_id, request_id, kind, payload)
         return result({"videoapi_job": job}, "Pedido VIDEOAPI registrado. Acompanhe o status no projeto.")
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_videoapi_generate(
+        project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
+        request_id: Annotated[str, Field(min_length=1, max_length=96)],
+        kind: Literal["video", "image"],
+        prompt: Annotated[str, Field(min_length=1, max_length=5000)],
+        aspect_ratio: Literal["9:16", "16:9"] = "9:16",
+        duration_seconds: Literal[5, 10, 20, 30] | None = None,
+        reference_asset_ids: Annotated[list[str], Field(max_length=3)] | None = None,
+    ) -> CallToolResult:
+        """Paid generation with explicit user authorization, persistent ID and secure server-side key."""
+        return submit_videoapi_generation(project_id, request_id, kind, prompt, aspect_ratio,
+                                          duration_seconds, reference_asset_ids)
 
     @server.tool(annotations=write, meta=widget)
     @offload
