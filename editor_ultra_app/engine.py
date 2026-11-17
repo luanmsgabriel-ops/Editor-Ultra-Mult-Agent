@@ -348,6 +348,22 @@ class EngineAdapter:
                 value.update(valid=valid, serverRecorded=True)
             approvals[stage] = value
             state[stage + "Approval"] = value if valid else None
+        # Preserve old evidence for audit, but never describe it as current
+        # after a source or preview replacement.
+        selected_ref = self._selected(record, "ref")
+        selected_clone = self._selected(record, "clone")
+        ref_hashes = {item["sha256"] for item in selected_ref}
+        clone_hashes = {item["sha256"] for item in selected_clone}
+        def mark_current(rows, *, source_field, candidate_field):
+            return [{**clone(row),
+                     "current": row.get(source_field) in ref_hashes
+                                and row.get(candidate_field) in clone_hashes}
+                    for row in rows]
+        inventory = clone(record.get("reference_scene_inventory"))
+        if inventory:
+            inventory["current"] = inventory.get("source_sha256") in ref_hashes
+            if not inventory["current"]:
+                inventory["status"] = "stale_reference_changed"
         public_engines = {}
         for stage, item in record["engines"].items():
             current = item["binding"] == self._stage_binding(record, stage)
@@ -357,9 +373,11 @@ class EngineAdapter:
                 "engine": public_engines, "approval": approvals,
                 "motion_measurements": [self._motion_public(record, item)
                                         for item in record.get("motion_measurements", [])[-20:]],
-                "quality_evidence": clone(record.get("quality_evidence", [])),
-                "temporal_evidence": clone(record.get("temporal_evidence", [])),
-                "reference_scene_inventory": clone(record.get("reference_scene_inventory")),
+                "quality_evidence": mark_current(record.get("quality_evidence", []),
+                                                 source_field="source_sha256", candidate_field="clone_sha256"),
+                "temporal_evidence": mark_current(record.get("temporal_evidence", []),
+                                                  source_field="source_sha256", candidate_field="candidate_sha256"),
+                "reference_scene_inventory": inventory,
                 # Internal host envelope. The MCP layer signs these paths and removes them
                 # before exposing a response. state.assets never contains a local path.
                 "assets": [{**self._public_file(item), "path": item["path"]}
