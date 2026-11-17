@@ -23,6 +23,7 @@ on:
       - "tests/test_blender_temporal.py"
       - "tests/test_reference_temporal_qa.py"
       - "tests/test_app_fidelity_bridge.py"
+      - "Dockerfile"
       - ".github/workflows/visual-fidelity.yml"
   push:
     branches: [main]
@@ -91,3 +92,11 @@ jobs:
           python -m pip install "pytest>=8,<10"
       - name: Run existing app server/authorization regression
         run: python -m pytest -q tests/test_app_server.py
+
+  image-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the deployable image and check native Node bindings
+        run: docker build --tag editor-ultra-homologation .

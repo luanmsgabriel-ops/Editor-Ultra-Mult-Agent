@@ -143,3 +143,6 @@ icon onto the independent shield geometry at 30 fps (32 frames).
 The shoulders, lighting, HUD elements and layered glow in that shot still
 differ from the reference. The input video and generated artwork stay outside
 Git. The local proof has no user approval and the whole-film v2 remains open.
+
+The deployment image bundles the pinned Motion Lab renderer and verifies that
+Node can import its native Canvas dependency and Three.js during the build.
