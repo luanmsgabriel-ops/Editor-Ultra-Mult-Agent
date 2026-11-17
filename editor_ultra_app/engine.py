@@ -357,6 +357,8 @@ class EngineAdapter:
                 "engine": public_engines, "approval": approvals,
                 "motion_measurements": [self._motion_public(record, item)
                                         for item in record.get("motion_measurements", [])[-20:]],
+                "quality_evidence": clone(record.get("quality_evidence", [])),
+                "reference_scene_inventory": clone(record.get("reference_scene_inventory")),
                 # Internal host envelope. The MCP layer signs these paths and removes them
                 # before exposing a response. state.assets never contains a local path.
                 "assets": [{**self._public_file(item), "path": item["path"]}
@@ -1073,6 +1075,71 @@ class EngineAdapter:
             return {**self._snapshot(record), "status": "rendered_unreviewed", "asset_id": item["id"],
                     "asset": public, "result": receipt,
                     "preview_kind": "reference_study" if kind == "clone" else kind}
+
+    def compare_clone(self, project_id, frames, *, expected_revision=None):
+        """Compare selected reference/clone at exact frames and persist evidence.
+
+        Never creates or approves a new clone. Runs only on verified, project-owned
+        asset IDs; neither the caller nor a project document can supply a path.
+        """
+        from visual_fidelity.reference_fidelity import audit_pair
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            references = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            candidates = [a for a in self._selected(record, "clone") if a["type"].startswith("video/")]
+            require(len(references) == 1 and len(candidates) == 1,
+                    "fidelity_inputs", "Exactly one reference video and one clone video are required")
+            reference, candidate = references[0], candidates[0]
+            ref_path = self.resolve_asset(project_id, reference["id"])
+            clone_path = self.resolve_asset(project_id, candidate["id"])
+            directory = self._directory(project_id) / "fidelity" / uuid.uuid4().hex
+            try:
+                report = audit_pair(ref_path, clone_path, directory, frames)
+                report_item = self._register_internal(record, directory / "comparison_report.json",
+                                                       role="evidence")
+                image_item = self._register_internal(record, directory / "aligned_contact_sheet.jpg",
+                                                      role="evidence")
+            except Exception:
+                shutil.rmtree(directory, ignore_errors=True)
+                raise
+            entry = {"reference_asset_id": reference["id"], "clone_asset_id": candidate["id"],
+                     "source_sha256": reference["sha256"], "clone_sha256": candidate["sha256"],
+                     "report_asset_id": report_item["id"], "image_asset_id": image_item["id"],
+                     "frames": list(frames), "status": "diagnostic_not_approved"}
+            record.setdefault("quality_evidence", []).append(entry)
+            record["quality_evidence"] = record["quality_evidence"][-30:]
+            self._write(record, "Comparação exata de referência e clone; sem aprovação")
+            return {**self._snapshot(record), "status": "quality_evidence_recorded",
+                    "comparison": report, "report_asset": self._public_file(report_item),
+                    "image_asset": self._public_file(image_item)}
+
+    def register_reference_scenes(self, project_id, manifest, *, expected_revision=None):
+        """Store an authored, complete-clock event manifest bound to source bytes."""
+        from visual_fidelity.reference_fidelity import _clock
+        from visual_fidelity.reference_scene import validate_reference_scenes
+        require(isinstance(manifest, dict) and len(json.dumps(manifest, ensure_ascii=False)) <= 1024 * 1024,
+                "scene_manifest_size", "Scene manifest must be a bounded JSON object")
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            references = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
+            require(len(references) == 1, "scene_source", "Select exactly one video reference")
+            reference = references[0]
+            clock = _clock(self.resolve_asset(project_id, reference["id"]))
+            coverage = validate_reference_scenes(manifest, source_sha256=reference["sha256"],
+                                                 fps=clock["fps"], frame_count=clock["frame_count"])
+            directory = self._directory(project_id) / "scene_inventories"
+            directory.mkdir(parents=True, exist_ok=True)
+            destination = directory / (uuid.uuid4().hex + ".json")
+            destination.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+                                   encoding="utf-8")
+            item = self._register_internal(record, destination, role="evidence")
+            record["reference_scene_inventory"] = {"asset_id": item["id"], "source_sha256": reference["sha256"],
+                                                   "coverage": coverage, "status": "authored_unreviewed"}
+            self._write(record, "Inventário de cenas registrado; observações não aprovadas")
+            return {**self._snapshot(record), "status": "scene_inventory_registered",
+                    "scene_inventory": coverage, "asset": self._public_file(item)}
 
     def record_review(self, project_id, stage, decision, confirmation, asset_id, notes="", *,
                       checks=None, expected_revision=None, actor="authenticated-user"):
