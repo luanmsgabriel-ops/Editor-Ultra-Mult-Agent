@@ -1,0 +1,40 @@
+name: Visual fidelity contract gate
+
+on:
+  pull_request:
+    paths:
+      - "visual_fidelity/reference_fidelity.py"
+      - "visual_fidelity/reference_scene.py"
+      - "editor_ultra_app/engine.py"
+      - "editor_ultra_app/server.py"
+      - "tests/test_reference_fidelity.py"
+      - ".github/workflows/visual-fidelity.yml"
+  push:
+    branches: [main]
+    paths:
+      - "visual_fidelity/reference_fidelity.py"
+      - "visual_fidelity/reference_scene.py"
+      - "tests/test_reference_fidelity.py"
+
+permissions:
+  contents: read
+
+jobs:
+  reference-fidelity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Verify codec dependency
+        run: ffmpeg -version
+      - name: Run visual fidelity contract tests
+        run: python -m pytest -q tests/test_reference_fidelity.py
