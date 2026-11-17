@@ -1076,13 +1076,13 @@ class EngineAdapter:
                     "asset": public, "result": receipt,
                     "preview_kind": "reference_study" if kind == "clone" else kind}
 
-    def compare_clone(self, project_id, frames, *, expected_revision=None):
+    def compare_clone(self, project_id, frames=None, *, expected_revision=None):
         """Compare selected reference/clone at exact frames and persist evidence.
 
         Never creates or approves a new clone. Runs only on verified, project-owned
         asset IDs; neither the caller nor a project document can supply a path.
         """
-        from visual_fidelity.reference_fidelity import audit_pair
+        from visual_fidelity.reference_fidelity import audit_pair, _clock, sample_frame_indices
         with self._lock(project_id):
             record = self._load(project_id)
             self._expect(record, expected_revision)
@@ -1093,6 +1093,11 @@ class EngineAdapter:
             reference, candidate = references[0], candidates[0]
             ref_path = self.resolve_asset(project_id, reference["id"])
             clone_path = self.resolve_asset(project_id, candidate["id"])
+            # Legacy imports may lack nb_frames metadata. Always resolve the
+            # sample window against the source bytes now, not container duration.
+            actual_frame_count = _clock(ref_path)["frame_count"]
+            if frames is None:
+                frames = sample_frame_indices(actual_frame_count)
             directory = self._directory(project_id) / "fidelity" / uuid.uuid4().hex
             try:
                 report = audit_pair(ref_path, clone_path, directory, frames)
