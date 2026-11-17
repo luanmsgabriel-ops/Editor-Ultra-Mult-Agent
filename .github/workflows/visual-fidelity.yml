@@ -41,6 +41,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
           python -m pip install "pydantic>=2,<3"
+      - name: Install FFmpeg for media-real regression tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Verify codec dependency
         run: ffmpeg -version
       - name: Run visual fidelity contract tests
