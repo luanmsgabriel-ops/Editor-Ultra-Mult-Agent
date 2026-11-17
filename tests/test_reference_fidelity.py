@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from visual_fidelity.reference_fidelity import audit_pair
+from visual_fidelity.reference_fidelity import audit_pair, sample_frame_indices, _clock
 from visual_fidelity.reference_scene import validate_reference_scenes
 
 
@@ -79,3 +79,19 @@ def test_manifest_requires_known_elements_and_current_source():
     manifest["scenes"][1]["events"][0]["element_id"] = "unbound"
     with pytest.raises(ValueError, match="known"):
         validate_reference_scenes(manifest, source_sha256="f"*64, fps="30", frame_count=30)
+
+
+def test_sampling_uses_real_video_frame_clock_not_container_duration(tmp_path):
+    reference = tmp_path / "reference.mp4"
+    _media(reference, "blue", duration=1)
+    count = _clock(reference)["frame_count"]
+    selected = sample_frame_indices(count)
+    assert len(selected) == 16
+    assert selected[0] == 0 and selected[-1] == count - 1
+    assert selected == sorted(set(selected))
+    assert sample_frame_indices(1) == [0]
+    assert sample_frame_indices(3) == [0, 1, 2]
+    with pytest.raises(ValueError):
+        sample_frame_indices(0)
+    with pytest.raises(ValueError):
+        sample_frame_indices(2214, max_samples=17)
