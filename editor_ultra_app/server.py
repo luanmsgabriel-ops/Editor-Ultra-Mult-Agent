@@ -36,7 +36,8 @@ from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 
 
-UI_URI = "ui://editor-ultra/studio-v2.html"
+UI_URI = "ui://editor-ultra/studio-v3.html"
+PREVIOUS_UI_URI = "ui://editor-ultra/studio-v2.html"
 LEGACY_UI_URI = "ui://editor-ultra/studio-v1.html"
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
 
@@ -140,14 +141,15 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, expected)
             return space_for(size)
 
-    def import_received(project_id, role, path, filename, mime_type, shot_id, expected):
+    def import_received(project_id, role, path, filename, mime_type, shot_id, expected, host_file_id=None):
         queue.assert_idle(project_id)
         with lock:
             queue.assert_idle(project_id)
             revision(project_id, expected)
             space_for(path.stat().st_size)
             return engine.import_local_file(project_id, role, path, filename, mime_type,
-                                            shot_id=shot_id, expected_revision=expected)
+                                            shot_id=shot_id, expected_revision=expected,
+                                            host_file_id=host_file_id)
 
     hostname = urlsplit(base).netloc
     server = FastMCP(
@@ -177,6 +179,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     }
 
     @server.resource(UI_URI, name="Editor Ultra", mime_type="text/html;profile=mcp-app", meta=studio_metadata)
+    @server.resource(PREVIOUS_UI_URI, name="Editor Ultra (compatibilidade)",
+                     mime_type="text/html;profile=mcp-app", meta=studio_metadata)
     @server.resource(LEGACY_UI_URI, name="Editor Ultra (compatibilidade)",
                      mime_type="text/html;profile=mcp-app", meta=studio_metadata)
     def studio() -> str:
@@ -253,7 +257,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         try:
             value = await asyncio.to_thread(import_received, project_id, role, downloaded,
                                             file.file_name or "anexo", file.mime_type or mimetypes.guess_type(file.file_name)[0] or "application/octet-stream",
-                                            shot_id, expected_revision)
+                                            shot_id, expected_revision, host_file_id=file.file_id)
             return result(value, "Arquivo recebido e verificado no motor.")
         finally:
             downloaded.unlink(missing_ok=True)

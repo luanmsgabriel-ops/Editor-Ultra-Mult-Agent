@@ -356,3 +356,55 @@ def test_legacy_project_binds_existing_preview_before_accepting_draft_changes(ad
     assert changed["state"]["cloneConfirm"] is False
     assert changed["state"]["comments"] == []
     assert changed["state"]["cloneApproval"] is None
+
+
+def test_host_upload_retry_reuses_asset_without_revision_or_review_changes(adapter, videos):
+    current = upload(adapter, create(adapter, sourceType="brief"), "clone", videos["blue"], host_file_id="file-native-1")
+    asset_id = current["asset_id"]
+    assert current["asset"]["hostFileId"] == "file-native-1"
+    assert current["state"]["assets"]["clone"][0]["hostFileId"] == "file-native-1"
+    current = approve(adapter, current)
+    restored = EngineAdapter(adapter.data_dir).get_project(current["project_id"])
+    retried = upload(adapter, restored, "clone", videos["blue"], host_file_id="file-native-1")
+    assert retried["idempotent"] is True
+    assert retried["asset_id"] == asset_id
+    assert retried["revision"] == restored["revision"]
+    assert retried["state"]["history"] == restored["state"]["history"]
+    assert retried["approval"] == restored["approval"]
+    assert retried["approval"]["clone"]["valid"]
+    assert len(retried["state"]["assets"]["clone"]) == 1
+    assert len(list((adapter.data_dir / current["project_id"] / "media").iterdir())) == 1
+    with pytest.raises(ValidationError, match="revision_conflict"):
+        adapter.import_local_file(current["project_id"], "clone", videos["blue"], "blue.mp4", "video/mp4",
+                                  host_file_id="file-native-1", expected_revision=restored["revision"] - 1)
+
+
+def test_host_upload_id_reuse_verifies_bytes_and_media_type(adapter, videos, tmp_path):
+    current = upload(adapter, create(adapter), "ref", videos["blue"], host_file_id="file-native-1")
+    with pytest.raises(ValidationError, match="host_file_conflict"):
+        upload(adapter, current, "ref", videos["red"], host_file_id="file-native-1")
+    with pytest.raises(ValidationError, match="host_file_conflict"):
+        adapter.import_local_file(current["project_id"], "ref", videos["blue"], "blue.webm", "video/webm",
+                                  host_file_id="file-native-1", expected_revision=current["revision"])
+    invalid = tmp_path / "invalid.mp4"
+    invalid.write_text("A host file ID cannot certify these bytes as video.")
+    with pytest.raises(ValidationError, match="invalid_media"):
+        upload(adapter, current, "ref", invalid, host_file_id="file-native-1")
+    reloaded = adapter.get_project(current["project_id"])
+    assert reloaded["revision"] == current["revision"]
+    assert len(reloaded["state"]["assets"]["ref"]) == 1
+
+
+def test_host_upload_identity_is_scoped_to_project_role_and_shot(adapter, videos):
+    current = create(adapter, shots=[{"id": "shot-one", "seconds": .5}, {"id": "shot-two", "seconds": .5}])
+    current = upload(adapter, current, "ref", videos["blue"], host_file_id="same-host-file")
+    identifiers = {current["asset_id"]}
+    current = upload(adapter, current, "footage", videos["blue"], host_file_id="same-host-file")
+    identifiers.add(current["asset_id"])
+    for shot_id in ("shot-one", "shot-two"):
+        current = upload(adapter, current, "shot", videos["blue"], host_file_id="same-host-file", shot_id=shot_id)
+        identifiers.add(current["asset_id"])
+    assert len(identifiers) == 4
+    other = upload(adapter, create(adapter), "ref", videos["red"], host_file_id="same-host-file")
+    assert other["asset_id"] not in identifiers
+    assert other["asset"]["sha256"] != current["asset"]["sha256"]

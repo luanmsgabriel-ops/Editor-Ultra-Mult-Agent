@@ -7,7 +7,7 @@ A direção criativa continua no ChatGPT: o motor prepara evidências e um contr
 ## Fluxo conectado
 
 1. `editor_open` abre o painel. `editor_save_project` registra as escolhas sem confiar em aprovações contidas no JSON do navegador.
-2. A interface envia cada arquivo ao ChatGPT e usa `editor_import_file` para transferi-lo ao motor. A importação confere o tipo real de mídia, a duração e os bytes. Uma URL `blob:` ou o nome de um arquivo não contam como transferência.
+2. Na home, **Começar projeto** cria o projeto e envia os arquivos selecionados. Nas etapas do fluxo, escolher um novo arquivo inicia seu envio automaticamente. A interface envia cada arquivo ao ChatGPT e usa `editor_import_file` para transferi-lo ao motor. A importação confere o tipo real de mídia, a duração e os bytes. Uma URL `blob:` ou o nome de um arquivo não contam como transferência.
 3. `editor_prepare` registra um trabalho persistente. A preparação chama `editorial_engine.project`, produz análise real quando a rota permite e devolve as pendências e o pedido de direção.
 4. O host usa `editor_get_asset` para inspecionar evidências e `editor_apply_direction` para entregar a direção no contrato solicitado. IDs `asset:<id>` substituem caminhos arbitrários.
 5. `editor_render` executa o plano atual. `editor_get_project` e `editor_get_result` retornam o resultado real com links temporários de prévia.
@@ -16,6 +16,14 @@ A direção criativa continua no ChatGPT: o motor prepara evidências e um contr
 Para referência com pessoa nova, os pixels da referência não podem ser aceitos como novo bruto. O estudo técnico de uma referência é identificado como `reference_study`; ele não comprova reconstrução, troca de personagem nem fidelidade estética.
 
 Na rota de geração, o motor prepara e exporta prompts. O usuário gera os vídeos externamente e devolve os clipes. Não há chave de provedor de geração, chamada ao HeyGen ou job de geração de vídeo.
+
+### Envio de arquivos e retomada
+
+O painel acompanha cada arquivo: selecionado, enviando ao ChatGPT, importando no motor, recebido, falha ou resultado incerto. O estado recebido depende do recibo do servidor. Uma falha conhecida mantém o arquivo disponível para nova tentativa; quando já existe um `fileId`, a tentativa reutiliza esse identificador e solicita um link temporário novo.
+
+Se a resposta da importação se perder, confira o projeto antes de repetir. O motor preserva `hostFileId` no recibo e no estado para que o painel reconheça o arquivo recebido pelo projeto, papel e tomada correspondentes. A interface não reconcilia só por nome ou tamanho nem repete automaticamente uma operação incerta. Se a conferência não encontrar o recibo, o usuário pode tentar novamente. Com a revisão atual, repetir o mesmo identificador, papel, tomada, bytes e MIME recupera o asset existente; conteúdo divergente para o mesmo identificador é recusado.
+
+Após o recibo, a prévia assinada do motor tem preferência sobre o `blob:` local. Uma falha de reprodução local não significa expiração do acesso remoto. O envio e sua retomada não executam clonagem, renderização ou aprovação: essas etapas continuam dependendo do plano atual e das decisões explícitas pertinentes.
 
 ## Execução
 
@@ -48,7 +56,7 @@ O código não instala silenciosamente um plugin na conta do usuário. A conexã
 
 ## Abrir o estúdio e atualizar o plugin
 
-A tela inicial do estúdio é o recurso `ui://editor-ultra/studio-v2.html`, associado à ferramenta `editor_open`. Abrir essa ferramenta com `{}` carrega a interface e consulta os projetos e a situação do catálogo, sem criar projeto, iniciar render ou registrar aprovação.
+A tela inicial do estúdio é o recurso `ui://editor-ultra/studio-v3.html`, associado à ferramenta `editor_open`. Abrir essa ferramenta com `{}` carrega a interface e consulta os projetos e a situação do catálogo, sem criar projeto, iniciar render ou registrar aprovação.
 
 O item **Editor Ultra** declara dois acessos nativos: `global`, na navegação principal do host, e `thread`, como aba de conteúdo da conversa. A interface prefere `fullscreen` e também anuncia suporte a `inline`. O host decide o modo efetivo e quais acessos apresenta. A tela de conexão/configuração do plugin pertence ao ChatGPT; o estúdio é a interface aberta pela ferramenta ou por esses acessos.
 
@@ -60,7 +68,7 @@ Depois de publicar a atualização do servidor:
 2. Feche a instância anterior do painel e abra o Editor Ultra novamente. Uma interface já montada pode continuar executando a versão anterior.
 3. Confira a abertura da tela inicial e a navegação no host usado. Uma chamada MCP bem-sucedida não comprova, sozinha, que o host montou a interface.
 
-A URI do recurso funciona como chave de cache. Em mudanças incompatíveis de HTML, JavaScript ou CSS, publique outra URI e atualize tanto o recurso quanto as referências `ui.resourceUri` e `openai/outputTemplate` da ferramenta. A versão v2 é a URI primária desta atualização. A URI `ui://editor-ultra/studio-v1.html` permanece como alias do mesmo HTML e da mesma metadata, para atender instalações que ainda referenciem a v1 durante a atualização. O alias preserva a leitura do recurso antigo; obter os novos entrypoints e substituir uma interface já montada ainda exige atualizar os metadados e reabrir o painel.
+A URI do recurso funciona como chave de cache. Em mudanças incompatíveis de HTML, JavaScript ou CSS, publique outra URI e atualize tanto o recurso quanto as referências `ui.resourceUri` e `openai/outputTemplate` da ferramenta. A versão v3 é a URI primária da correção de envio automático. As URIs `ui://editor-ultra/studio-v1.html` e `ui://editor-ultra/studio-v2.html` permanecem como aliases do mesmo HTML e da mesma metadata, para atender instalações que ainda referenciem versões anteriores durante a atualização. Os aliases preservam a leitura desses recursos; obter os metadados atuais e substituir uma interface já montada ainda exige atualizar o plugin e reabrir o painel.
 
 O bridge usa `tools/call` do MCP Apps. As ferramentas chamadas pelo painel também declaram `openai/widgetAccessible: true` para o fallback `window.openai.callTool`; `editor_import_file` conserva `openai/fileParams: ["file"]`. Essa metadata não altera as verificações de autenticação, revisão ou confirmação do servidor. Só `editor_open` referencia o template, para que chamadas de dados não remontem a interface.
 
@@ -93,4 +101,4 @@ O helper cria um grant temporário, verifica descoberta e transporte MCP e o rev
 
 O teste de engine usa mídia sintética identificada para conferir importação, direção, execução FFmpeg, revisões e invalidação. Isso comprova conexão técnica e produção de arquivo; não representa revisão perceptiva ou aprovação de um vídeo do usuário.
 
-O teste de servidor confere por MCP os metadados de abertura, entrypoints, permissão do fallback, preservação de file params e o recurso v2 com preferência por fullscreen. Confere também que o alias v1 retorna o mesmo HTML e a mesma metadata, enquanto a ferramenta anuncia a v2. Ele abre `editor_open` com `{}` e verifica que essa abertura não cria projeto. A renderização e a navegação oferecidas pelo ChatGPT exigem conferência visual no host.
+O teste de servidor confere por MCP os metadados de abertura, entrypoints, permissão do fallback, preservação de file params e o recurso v3 com preferência por fullscreen. Confere também que os aliases v1 e v2 retornam o mesmo HTML e a mesma metadata, enquanto a ferramenta anuncia a v3. Ele abre `editor_open` com `{}` e verifica que essa abertura não cria projeto. A importação nativa usa um MP4 sintético com download substituído por cópia local no teste: o recibo e a consulta preservam `hostFileId`, e a repetição na revisão atual não duplica o asset nem incrementa a revisão. Isso verifica o contrato do servidor, sem simular uma aprovação do usuário ou comprovar upload e reprodução no host real. A renderização e a navegação oferecidas pelo ChatGPT exigem conferência visual no host.

@@ -24,7 +24,7 @@ def structured(result):
     return result["structuredContent"]
 
 
-def test_real_mcp_admission_queue_preview_and_retry(tmp_path):
+def test_real_mcp_admission_queue_preview_and_retry(tmp_path, monkeypatch):
     app = create_app(data_dir=tmp_path / "data", base_url=BASE, owner_key=KEY)
     source = tmp_path / "actual.mp4"
     video(source)
@@ -44,7 +44,7 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path):
             assert opening_tool["title"] == "Editor Ultra"
             assert opening_tool["annotations"]["readOnlyHint"] is True
             assert not opening_tool["inputSchema"].get("required")  # Entrypoints invoke the tool with {}.
-            assert opening_tool["_meta"]["ui"]["resourceUri"] == UI_URI == "ui://editor-ultra/studio-v2.html"
+            assert opening_tool["_meta"]["ui"]["resourceUri"] == UI_URI == "ui://editor-ultra/studio-v3.html"
             assert opening_tool["_meta"]["openai/outputTemplate"] == UI_URI
             assert opening_tool["_meta"]["openai/ui"]["entrypoints"] == [{"type": "global"}, {"type": "thread"}]
             for name in widget_tools:
@@ -68,12 +68,12 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path):
             assert resource["text"].strip()
             assert "__CATALOG_DATA__" not in resource["text"]
             assert "EDITOR_ULTRA_OWNER_KEY" not in resource["text"]
-            legacy_uri = "ui://editor-ultra/studio-v1.html"
-            legacy_resource = session.rpc("resources/read", {"uri": legacy_uri})["contents"][0]
-            assert legacy_resource["uri"] == legacy_uri
-            assert legacy_resource["text"] == resource["text"]
-            assert legacy_resource["mimeType"] == resource["mimeType"]
-            assert legacy_resource["_meta"] == resource["_meta"]
+            for legacy_uri in ("ui://editor-ultra/studio-v1.html", "ui://editor-ultra/studio-v2.html"):
+                legacy_resource = session.rpc("resources/read", {"uri": legacy_uri})["contents"][0]
+                assert legacy_resource["uri"] == legacy_uri
+                assert legacy_resource["text"] == resource["text"]
+                assert legacy_resource["mimeType"] == resource["mimeType"]
+                assert legacy_resource["_meta"] == resource["_meta"]
             created = structured(session.call_tool("editor_save_project", {"state": {
                 "schema": "editor-ultra-interface/1", "objective": "Technical connection test", "sourceType": "video",
             }}))
@@ -85,6 +85,33 @@ def test_real_mcp_admission_queue_preview_and_retry(tmp_path):
             asset = structured(session.call_tool("editor_get_asset", {"project_id": project_id, "asset_id": current["asset_id"]}))
             assert client.get(asset["url"]).content == source.read_bytes()
             assert client.get(asset["url"].split("?")[0]).status_code == 403
+
+            async def download_fixture(url, directory, max_bytes):
+                assert url == "https://files.oaiusercontent.com/synthetic-native-upload.mp4"
+                assert source.stat().st_size <= max_bytes
+                directory.mkdir(parents=True, exist_ok=True)
+                target = directory / "synthetic-native-upload.mp4"
+                target.write_bytes(source.read_bytes())
+                return target
+
+            monkeypatch.setattr("editor_ultra_app.server.download_attachment", download_fixture)
+            native_arguments = {
+                "project_id": project_id, "role": "footage", "expected_revision": current["revision"],
+                "file": {"file_id": "file-synthetic-native-upload", "file_name": "native.mp4",
+                         "mime_type": "video/mp4",
+                         "download_url": "https://files.oaiusercontent.com/synthetic-native-upload.mp4"},
+            }
+            admitted = structured(session.call_tool("editor_import_file", native_arguments))
+            assert admitted["asset"]["hostFileId"] == native_arguments["file"]["file_id"]
+            received = structured(session.call_tool("editor_get_project", {"project_id": project_id}))
+            assert received["state"]["assets"]["footage"][0]["hostFileId"] == native_arguments["file"]["file_id"]
+            # Reconcile after a potentially lost response, then retry at the current revision.
+            native_arguments["expected_revision"] = received["revision"]
+            current = structured(session.call_tool("editor_import_file", native_arguments))
+            assert current["idempotent"] is True
+            assert current["asset_id"] == admitted["asset_id"]
+            assert current["revision"] == received["revision"]
+            assert len(current["state"]["assets"]["footage"]) == 1
             arguments = {"project_id": project_id, "kind": "clone", "expected_revision": current["revision"], "request_id": "native-prepare-test-1"}
             queued = structured(session.call_tool("editor_prepare", arguments))
             assert queued["status"] == "queued"
