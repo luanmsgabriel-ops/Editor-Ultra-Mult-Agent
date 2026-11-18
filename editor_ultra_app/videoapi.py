@@ -240,6 +240,13 @@ class VideoAPIJobs:
             return [self._view(r) for r in db.execute(
                 "SELECT * FROM videoapi_jobs WHERE project_id=? ORDER BY created DESC LIMIT 30", (project_id,))]
 
+    def get(self, project_id: str, job_id: str) -> dict | None:
+        """Inspect one exact completed-generation record without submitting a new job."""
+        with self.lock, self._db() as db:
+            return self._view(db.execute(
+                "SELECT * FROM videoapi_jobs WHERE project_id=? AND job_id=?",
+                (project_id, job_id)).fetchone())
+
     def submit(self, project_id: str, request_id: str, kind: str, payload: dict) -> dict:
         if not REQUEST_RE.fullmatch(request_id):
             raise VideoAPIError("request_id", "Identificador da solicitação inválido.")
