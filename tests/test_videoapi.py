@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 import pytest
 
 from editor_ultra_app.videoapi import (
-    BASE_URL, POLL_SECONDS, VideoAPIClient, VideoAPIError, VideoAPIJobs, build_payload,
+    BASE_URL, POLL_SECONDS, VideoAPIClient, VideoAPIError, VideoAPIJobs, build_payload, safe_media_url,
 )
 
 
@@ -197,3 +197,39 @@ def test_retries_transient_poll_errors_with_exponential_backoff(tmp_path):
     now[0] = 20
     jobs.poll_due()
     assert jobs.list("p")[0]["status"] == "done"
+
+
+@pytest.mark.parametrize("candidate", [
+    "javascript:alert(1)", "http://cdn.test/video.mp4",
+    "https://localhost/video.mp4", "https://127.0.0.1/media.mp4",
+    "https://user:pass@cdn.example.com/file.mp4", "https://10.0.0.1/file.mp4",
+    "https://cdn.example.com:8443/video.mp4", "https://cdn.test/file.mp4",
+])
+def test_external_media_url_rejects_unsafe_sources(candidate):
+    assert safe_media_url(candidate) is None
+
+
+def test_external_https_media_url_and_recovery_are_read_only(tmp_path):
+    preview = "https://cdn.example.com/generated/preview.mp4?signature=abcdef"
+    download = "https://cdn.example.com/generated/video.mp4?signature=abcdef"
+    assert safe_media_url(preview) == preview
+    assert safe_media_url("/v1/videos/abc/download") == BASE_URL + "/v1/videos/abc/download"
+    now = [100.0]
+    provider = Provider()
+    jobs = VideoAPIJobs(tmp_path, provider, clock=lambda: now[0])
+    jobs.submit("project", "one-request", "video", build_payload("video", "teste", "9:16", 5))
+    provider.responses = [{"status": "done", "url": preview, "download_url": download,
+                           "expires_at": "2026-11-19T10:00:00Z"}]
+    now[0] = 105
+    jobs.poll_due()
+    done = jobs.list("project")[0]
+    assert done["status"] == "done"
+    assert done["url"] == preview and done["download_url"] == download
+    with jobs._db() as db:
+        db.execute("UPDATE videoapi_jobs SET url=NULL,download_url=NULL WHERE job_id=?", (done["job_id"],))
+    provider.responses = [{"status": "done", "url": preview, "download_url": download}]
+    result = jobs.recover_media("project", done["job_id"])
+    assert result["status"] == "done" and result["url"] == preview and result["download_url"] == download
+    assert len(provider.creations) == 1
+    with pytest.raises(VideoAPIError, match="não encontrada"):
+        jobs.recover_media("other-project", done["job_id"])
