@@ -314,7 +314,7 @@ def occlusion_at(root, spec, index, shape):
     return image
 
 
-def render(picture, destination, resolution, fps, layers, font, root):
+def render(picture, destination, resolution, fps, layers, font, root, *, motion_usage=None):
     w,h=resolution
     command=['ffmpeg','-v','error','-y','-f','rawvideo','-pixel_format','bgr24','-video_size',
              f'{w}x{h}','-framerate',str(fps),'-i','-','-i',str(picture),'-map','0:v:0',
@@ -374,6 +374,17 @@ def render(picture, destination, resolution, fps, layers, font, root):
                     composite_shutter(frame, art, samples, opacity, mask)
                 else:
                     composite(frame,art,bounds,opacity,mask)
+                if "_measured_binding" in effect:
+                    # Only an actually composite-reached frame counts as motion
+                    # consumption; the preflight corner adjustment alone does not.
+                    if motion_usage is None:
+                        raise ValueError("Measured native motion needs a real consumption receipt")
+                    from fractions import Fraction
+                    from .motion_binding import record_motion_use
+                    record_motion_use(
+                        motion_usage, effect["_measured_binding"], index,
+                        float(Fraction(index, 1) / Fraction(str(fps))),
+                        "native:" + effect["id"])
             encoder.stdin.write(frame.tobytes())
         encoder.stdin.close()
         if encoder.wait():
