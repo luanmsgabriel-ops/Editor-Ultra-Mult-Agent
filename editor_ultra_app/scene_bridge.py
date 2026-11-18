@@ -101,12 +101,17 @@ class SceneBridgeMixin:
             covered.update(batch["scene_ids"])
         required = [scene["id"] for scene in manifest["scenes"]]
         missing = [identifier for identifier in required if identifier not in covered]
+        unresolved = sum(len(scene["unresolved"]) + sum(
+            not event["observed"] for event in scene["events"])
+            for scene in manifest["scenes"])
+        status = ("pending_scene_comparison" if missing else
+                  "unresolved_reference_events" if unresolved else
+                  "technical_evidence_complete_visual_review_pending")
         return {
-            "status": "technical_evidence_complete_visual_review_pending" if not missing
-                      else "pending_scene_comparison",
-            "current": not missing, "covered": sorted(covered),
-            "missing": missing, "total_scenes": len(required),
-            "quality_is_user_approved": False,
+            "status": status, "current": not missing and not unresolved,
+            "covered": sorted(covered), "missing": missing,
+            "unresolved_reference_events": unresolved,
+            "total_scenes": len(required), "quality_is_user_approved": False,
         }
 
     def route_reference_scenes(self, project_id, choices, *, expected_revision=None):
