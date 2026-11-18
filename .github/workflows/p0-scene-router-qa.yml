@@ -1,0 +1,47 @@
+name: P0 scene routing and reference QA
+
+on:
+  pull_request:
+    paths:
+      - "editorial_engine/scene_router.py"
+      - "editorial_engine/scene_quality.py"
+      - "editor_ultra_app/scene_bridge.py"
+      - "editor_ultra_app/engine.py"
+      - "editor_ultra_app/server.py"
+      - "tests/test_app_scene_orchestrator.py"
+      - ".github/workflows/p0-scene-router-qa.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  scene-routes-and-real-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-app.txt
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install Python runtime and tests
+        run: |
+          python -m pip install -r requirements-app.txt
+          python -m pip install -r requirements-dev.txt
+      - name: Install pinned Motion Lab
+        run: npm ci --ignore-scripts --prefix editorial_engine/backends/motionlab
+      - name: Compile changed modules
+        run: python -m compileall -q editor_ultra_app editorial_engine visual_fidelity
+      - name: Validate scene router, real producer and per-scene QA
+        run: |
+          python -m pytest -q \
+            tests/test_app_scene_orchestrator.py \
+            tests/test_reference_fidelity.py \
+            tests/test_reference_temporal_qa.py \
+            tests/test_app_fidelity_bridge.py \
+            tests/test_app_server.py

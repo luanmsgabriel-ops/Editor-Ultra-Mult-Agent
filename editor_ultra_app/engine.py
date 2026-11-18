@@ -32,6 +32,7 @@ from .clone_resources import (
     inspect_resource, measured_quads, requested_image_coverage,
 )
 from editorial_engine.contracts import ValidationError, clone, digest, file_sha256, require, verify_file
+from .scene_bridge import SceneBridgeMixin
 
 
 ROLES = {"ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"}
@@ -169,7 +170,7 @@ def _default_state(project_id):
             "cloneChecks": {}, "finalChecks": {}, "cloneConfirm": False, "finalConfirm": False}
 
 
-class EngineAdapter:
+class EngineAdapter(SceneBridgeMixin):
     """All paths come from the trusted host or this adapter, never browser JSON.
 
     ``import_local_file.source`` is a host-materialized upload, not a tool input
@@ -390,6 +391,9 @@ class EngineAdapter:
                 "temporal_evidence": mark_current(record.get("temporal_evidence", []),
                                                   source_field="source_sha256", candidate_field="candidate_sha256"),
                 "reference_scene_inventory": inventory,
+                "scene_route": self._scene_route_public(record),
+                "scene_quality_gate": self._scene_quality_gate(record),
+                "scene_qa_batches": clone(record.get("scene_qa_batches", [])[-30:]),
                 "clone_image_request": image_request,
                 # Internal host envelope. The MCP layer signs these paths and removes them
                 # before exposing a response. state.assets never contains a local path.
@@ -1345,6 +1349,17 @@ class EngineAdapter:
                                 base_sha256=stage["base_sha256"], image_bindings=stage["image_bindings"])
             receipt = self._portable(record, rendered)
             preview_kind = "reconstruction" if reconstruction else "reference_study" if kind == "clone" else kind
+            if kind == "clone" and reconstruction:
+                try:
+                    manifest, _, _ = self._scene_inventory(record)
+                    from editorial_engine.scene_quality import MAX_SCENES
+                    ids = [scene["id"] for scene in manifest["scenes"][:MAX_SCENES]]
+                    self._audit_scene_batch_internal(record, ids)
+                    stage["auto_quality_status"] = "bounded_scene_diagnostics_recorded"
+                except (ValueError, ValidationError, OSError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
+                    # Keep the real video. Technical QA may fail, but never fake success.
+                    stage["auto_quality_status"] = "blocked_until_scene_qa"
+                    stage["auto_quality_issue"] = type(exc).__name__
             self._write(record, "Render real concluído: " + preview_kind)
             return {**self._snapshot(record), "status": "rendered_unreviewed", "asset_id": item["id"],
                     "asset": public, "result": receipt,
@@ -1548,6 +1563,13 @@ class EngineAdapter:
             require(current[0].get("basis_binding") == self._preview_binding(record, stage),
                     "stale_review", "This preview belongs to previous choices or direction; render or import a current preview")
             self.resolve_asset(project_id, asset_id)
+            if stage == "clone" and decision == "approved":
+                rendered_stage = record["engines"].get("clone", {})
+                if rendered_stage.get("preview_kind") == "reconstruction":
+                    quality = self._scene_quality_gate(record)
+                    require(quality["status"] == "technical_evidence_complete_visual_review_pending",
+                            "scene_qa_required",
+                            "Finish current source-clock QA for every inventoried scene before approving reconstruction")
             require(stage == "clone" or self._approval_valid(record, "clone"), "clone_approval_required", "The clone approval is no longer current")
             if checks is not None:
                 allowed = {"ok", "na"} if decision == "approved" else {"ok", "na", "fix", ""}
