@@ -180,3 +180,60 @@ def test_invalid_source_or_scene_does_not_mutate_project(tmp_path, monkeypatch):
         adapter.audit_scene_batch(pid, ["ending", "opening"],
                                   expected_revision=routed["revision"])
     assert adapter.get_project(pid)["revision"] == routed["revision"]
+
+
+def test_tampered_quality_evidence_invalidates_the_release_gate(tmp_path):
+    adapter, current, _ = fixture_project(tmp_path)
+    pid = current["project_id"]
+    verified = adapter.audit_scene_batch(pid, ["opening", "ending"],
+                                         expected_revision=current["revision"])
+    assert verified["scene_quality_gate"]["current"] is True
+    report = adapter.resolve_asset(pid, verified["scene_qa_batch"]["batch_asset_id"])
+    with report.open("ab") as out:
+        out.write(b"\nchanged-after-qc")
+    gate = adapter.get_project(pid)["scene_quality_gate"]
+    assert gate["current"] is False
+    assert gate["missing"] == ["opening", "ending"]
+
+
+def test_auto_qc_can_inspect_a_new_clone_before_the_project_record_is_written(tmp_path):
+    """Exact same atomic import pattern used by EngineAdapter.render before _write."""
+    import uuid
+    adapter, current, _ = fixture_project(tmp_path)
+    pid = current["project_id"]
+    original_id = current["state"]["assets"]["clone"][0]["id"]
+    source = adapter.resolve_asset(pid, original_id)
+    candidate_path = adapter._directory(pid) / ("just-rendered-" + uuid.uuid4().hex + ".mp4")
+    shutil.copyfile(source, candidate_path)
+    with adapter._lock(pid):
+        record = adapter._load(pid)
+        registered = adapter._register_internal(record, candidate_path, role="clone")
+        record["state"]["assets"]["clone"] = [adapter._public_file(registered)]
+        # The clone is not on disk as a record entry until _write.
+        receipt = adapter._audit_scene_batch_internal(record, ["opening"])
+        assert receipt["scene_ids"] == ["opening"]
+        adapter._write(record, "QA run on just-rendered, uncommitted asset")
+    assert adapter.get_project(pid)["scene_quality_gate"]["missing"] == ["ending"]
+
+
+def test_reconstruction_cannot_be_approved_without_all_current_scene_diagnostics(tmp_path):
+    """The reconstruction-only policy blocks user approval while QA is incomplete."""
+    adapter, current, _ = fixture_project(tmp_path)
+    pid = current["project_id"]
+    asset_id = current["state"]["assets"]["clone"][0]["id"]
+    with adapter._lock(pid):
+        record = adapter._load(pid)
+        record["engines"]["clone"] = {"preview_kind": "reconstruction",
+                                       "status": "rendered_unreviewed"}
+        adapter._write(record, "Reconstruction policy gate test")
+    now = adapter.get_project(pid)
+    with pytest.raises(Exception, match="Finish current source-clock QA"):
+        adapter.record_review(pid, "clone", "approved", True, asset_id,
+                              notes="Visual review not sufficient without QA",
+                              expected_revision=now["revision"])
+    checked = adapter.audit_scene_batch(pid, ["opening", "ending"],
+                                        expected_revision=now["revision"])
+    approved = adapter.record_review(pid, "clone", "approved", True, asset_id,
+                                     notes="Visual reviewer explicitly confirms the current file",
+                                     expected_revision=checked["revision"])
+    assert approved["approval"]["clone"]["decision"] == "approved"
