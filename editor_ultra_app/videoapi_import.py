@@ -111,10 +111,11 @@ def download_completed_video(value, destination_dir, *, max_bytes=MAX_DOWNLOAD_B
                 raw_size = response.getheader("Content-Length")
                 if raw_size is not None:
                     try:
-                        if int(raw_size) > max_bytes or int(raw_size) < 0:
-                            raise VideoAPIError("media_budget", "O arquivo ultrapassa o limite de importação.")
+                        declared_size = int(raw_size)
                     except ValueError:
                         raise VideoAPIError("media_length", "O provedor informou tamanho inválido.") from None
+                    if declared_size > max_bytes or declared_size < 0:
+                        raise VideoAPIError("media_budget", "O arquivo ultrapassa o limite de importação.")
                 media_type = str(response.getheader("Content-Type") or "").split(";", 1)[0].lower()
                 if media_type and media_type not in {
                     "video/mp4", "application/octet-stream", "application/mp4",
