@@ -389,6 +389,14 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             if set(state) != {"ui_action"}:
                 raise ValueError("Comando de consulta VIDEOAPI inválido.")
             return result({"videoapi_account": videoapi_client.account()}, "Saldo VIDEOAPI consultado.")
+        if state.get("ui_action") == "videoapi_refresh":
+            if set(state) != {"ui_action", "job_id"} or not isinstance(state.get("job_id"), str):
+                raise ValueError("Pedido de recuperação VIDEOAPI inválido.")
+            if not project_id or expected_revision is None:
+                raise ValueError("Projeto e revisão são obrigatórios para recuperar mídia.")
+            revision(project_id, expected_revision)
+            return result({"videoapi_job": videoapi_jobs.recover_media(project_id, state["job_id"])},
+                          "Resultado recuperado da VIDEOAPI sem criar outra geração.")
         if state.get("ui_action") == "videoapi_generate" or "generation_request" in state:
             command = UIVideoAPICommand.model_validate(state)
             if not project_id or expected_revision is None:
