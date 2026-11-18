@@ -130,6 +130,9 @@ def test_project_routes_are_source_bound_and_qa_records_temporal_gaps(tmp_path, 
     assert changed["scene_quality_gate"]["missing"] == ["opening", "ending"]
     # Route stays bound to the same reference; QA does not remain valid.
     assert changed["scene_route"]["current"] is True
+    updated = adapter.save_project(pid, {"objective": "New creative direction"},
+                                   expected_revision=changed["revision"])
+    assert updated["scene_route"]["current"] is False
 
 
 def test_executable_scene_uses_real_producer_ledger_and_reuses_receipt(tmp_path, monkeypatch):
