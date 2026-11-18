@@ -15,7 +15,7 @@ A direção criativa continua no ChatGPT: o motor prepara evidências e um contr
 
 Para referência com pessoa nova, os pixels da referência não podem ser aceitos como novo bruto. O estudo técnico de uma referência é identificado como `reference_study`; ele não comprova reconstrução, troca de personagem nem fidelidade estética.
 
-Na rota de geração, o motor prepara e exporta prompts. O usuário gera os vídeos externamente e devolve os clipes. Não há chave de provedor de geração, chamada ao HeyGen ou job de geração de vídeo.
+Na rota padrão de geração, o motor prepara e exporta prompts. Opcionalmente, a integração [VIDEOAPI](videoapi-integration.md) gera vídeo ou imagem mediante ação explícita e consumo de créditos, sempre no back-end com `VIDEOAPI_KEY`. Essa integração não envia prompts ao HeyGen e não aprova ou importa automaticamente resultados.
 
 ### Envio de arquivos e retomada
 
