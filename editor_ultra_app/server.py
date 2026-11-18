@@ -615,9 +615,11 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     @server.tool(annotations=write, meta=widget)
     @offload
     def editor_prepare(project_id: str, kind: Literal["clone", "edit", "prompts", "assembly"],
-                       expected_revision: int, request_id: str) -> CallToolResult:
-        """Executa preparação real de evidências e pedido de direção. Não inventa plano, clonagem, render ou aprovação."""
-        return enqueue(project_id, "prepare", kind, expected_revision, request_id)
+                       expected_revision: int, request_id: str,
+                       reconstruction: CloneResources | None = None) -> CallToolResult:
+        """Prepara evidência e direção. Em clone, avalie o pedido de imagens e use reconstruction para compor sobre footage independente."""
+        params = {"reconstruction": reconstruction.model_dump(exclude_none=True)} if reconstruction else {}
+        return enqueue(project_id, "prepare", kind, expected_revision, request_id, **params)
 
     @server.tool(annotations=write)
     @offload
