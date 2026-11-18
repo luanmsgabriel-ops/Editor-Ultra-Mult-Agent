@@ -1,0 +1,52 @@
+name: P0 VIDEOAPI verified import
+
+on:
+  pull_request:
+    paths:
+      - "editor_ultra_app/videoapi_import.py"
+      - "editor_ultra_app/videoapi.py"
+      - "editor_ultra_app/engine.py"
+      - "editor_ultra_app/server.py"
+      - "editor_ultra_app/ui.html"
+      - "tests/test_videoapi_import.py"
+      - ".github/workflows/p0-videoapi-import.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verified-import-and-studio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-app.txt
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements-app.txt
+          python -m pip install "pytest>=8,<10"
+      - name: Compile Python
+        run: python -m compileall -q editor_ultra_app
+      - name: Verify import security and existing app
+        run: |
+          python -m pytest -q \
+            tests/test_videoapi_import.py \
+            tests/test_videoapi.py \
+            tests/test_app_server.py
+      - name: Verify Studio JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("editor_ultra_app/ui.html").read_text(encoding="utf-8")
+          Path("/tmp/editor-videoapi-import.js").write_text(
+              html.split("<script>", 1)[1].split("</script>", 1)[0], encoding="utf-8")
+          PY
+          node --check /tmp/editor-videoapi-import.js
