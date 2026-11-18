@@ -243,3 +243,55 @@ def test_reconstruction_cannot_be_approved_without_all_current_scene_diagnostics
                                      notes="Visual reviewer explicitly confirms the current file",
                                      expected_revision=checked["revision"])
     assert approved["approval"]["clone"]["decision"] == "approved"
+
+
+def test_mcp_scene_router_and_qa_are_queued_and_project_scoped(tmp_path):
+    """Exercise authenticated MCP tools and durable queue, not just Python calls."""
+    import time
+    from starlette.testclient import TestClient
+    from editor_ultra_app.server import create_app
+    from scripts.check_app_connection import authorize_owner
+
+    adapter, current, _ = fixture_project(tmp_path)
+    pid = current["project_id"]
+    app = create_app(data_dir=adapter.data_dir,
+                     base_url="https://editor.example",
+                     owner_key="test-only-scene-router-owner-key-012345678901234567890")
+    with TestClient(app, base_url="https://editor.example") as client:
+        with authorize_owner("https://editor.example",
+                             "test-only-scene-router-owner-key-012345678901234567890",
+                             client=client) as session:
+            tools = {entry["name"] for entry in session.rpc("tools/list")["tools"]}
+            assert {"editor_route_reference_scenes", "editor_run_scene_motion",
+                    "editor_audit_scene_batch"} <= tools
+
+            def submit(name, args):
+                data = session.call_tool(name, args)
+                assert not data.get("isError"), data
+                return data["structuredContent"]
+
+            def completed(job_id):
+                for _ in range(120):
+                    state = submit("editor_get_project", {"project_id": pid})
+                    job = next(item for item in state["jobs"] if item["id"] == job_id)
+                    if job["status"] not in {"queued", "running"}:
+                        return job, state
+                    time.sleep(.05)
+                pytest.fail("Scene MCP work did not finish")
+
+            spec = {"schema": "editor-ultra-scene-routing/1",
+                    "scenes": [{"scene_id": "opening", "needs": ["preserve"]},
+                               {"scene_id": "ending", "needs": ["preserve"]}]}
+            scheduled = submit("editor_route_reference_scenes", {
+                "project_id": pid, "expected_revision": current["revision"],
+                "request_id": "mcp-scene-route-001", "choices": spec})
+            run, state = completed(scheduled["id"])
+            assert run["status"] == "completed", run
+            assert run["result"]["scene_route"]["status"] == "planned_not_executed"
+            audit = submit("editor_audit_scene_batch", {
+                "project_id": pid, "expected_revision": state["revision"],
+                "request_id": "mcp-scene-qa-001", "scene_ids": ["opening", "ending"]})
+            checked, state = completed(audit["id"])
+            assert checked["status"] == "completed", checked
+            assert state["scene_quality_gate"]["current"] is True
+            assert state["approval"]["clone"] is None
