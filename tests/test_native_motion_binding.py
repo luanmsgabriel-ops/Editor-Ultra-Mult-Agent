@@ -86,6 +86,11 @@ def motion_project(tmp_path):
     from test_clone_resources import direction_for
     direction = direction_for(analysis, {"start_s": 0., "end_s": 1.},
                               "panel", "native.overlay")
+    # The generic helper authors a spatial_relation, while screen overlay
+    # supports a visualization/reveal function. Keep editorial eligibility real.
+    for event in direction["event_annotations"]:
+        for opportunity in event["opportunities"]:
+            opportunity["function"] = "visualize_concept"
     directed = adapter.apply_direction(pid, "clone", direction,
                                        expected_revision=prepared["revision"])
     stage = adapter._load(pid)["engines"]["clone"]
