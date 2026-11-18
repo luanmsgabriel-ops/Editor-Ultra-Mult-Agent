@@ -38,6 +38,7 @@ from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
 from .clone_resources import CloneResources, ImageNeed, MAX_RESOURCE_BYTES
 from .motion_apply import MotionApplicationSpecification
+from .native_motion import NativeMeasuredMotionRequest
 from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
@@ -169,7 +170,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             if job["operation"] == "direction":
                 return engine.apply_direction(project_id, kind, job["direction"], expected_revision=job["expected_revision"])
             if job["operation"] == "render":
-                return engine.render(project_id, kind, expected_revision=job["expected_revision"])
+                return engine.render(project_id, kind, expected_revision=job["expected_revision"],
+                                     native_motion=job.get("native_motion"))
             if job["operation"] == "queue_bundled_motion":
                 return engine.queue_bundled_motion(project_id, job["recipe"],
                                                     expected_revision=job["expected_revision"])
@@ -634,9 +636,15 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     @server.tool(annotations=write)
     @offload
     def editor_render(project_id: str, kind: Literal["clone", "edit", "assembly"],
-                      expected_revision: int, request_id: str) -> CallToolResult:
-        """Executa o plano atual no motor local e devolve um MP4 real. Não aprova o resultado nem chama geradores."""
-        return enqueue(project_id, "render", kind, expected_revision, request_id)
+                      expected_revision: int, request_id: str,
+                      native_motion: NativeMeasuredMotionRequest | None = None) -> CallToolResult:
+        """Renders a validated plan, optionally binding current measured motion to a native screen layer.
+
+        Source video remains unchanged; no actor generation or implicit approval.
+        """
+        extra = ({"native_motion": native_motion.model_dump(by_alias=True, exclude_none=True)}
+                 if native_motion is not None else {})
+        return enqueue(project_id, "render", kind, expected_revision, request_id, **extra)
 
     @server.tool(annotations=write)
     @offload
