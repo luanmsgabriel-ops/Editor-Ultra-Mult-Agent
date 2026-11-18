@@ -36,6 +36,8 @@ from editorial_engine.contracts import ValidationError
 from . import __version__
 from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
+from .clone_resources import CloneResources, ImageNeed, MAX_RESOURCE_BYTES
+from .motion_apply import MotionApplicationSpecification
 from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
@@ -88,7 +90,7 @@ class Attachment(BaseModel):
 class UIUploadRequest(BaseModel):
     """Private command payload inside the established save tool's state object."""
     model_config = ConfigDict(extra="forbid", strict=True)
-    role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"]
+    role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"]
     file_name: str = Field(min_length=1, max_length=240)
     mime_type: str = Field(min_length=3, max_length=150)
     size_bytes: int = Field(ge=1, le=MAX_FILE_BYTES)
@@ -472,6 +474,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                                  expected_revision: int, shot_id: str | None = None) -> CallToolResult:
         """Transfere anexo real do ChatGPT, verifica mídia e registra referência/bruto/identidade/prévia; não gera vídeo."""
         available = await asyncio.to_thread(upload_preflight, project_id, expected_revision)
+        if role == "clone_resource":
+            available = min(available, MAX_RESOURCE_BYTES)
         downloaded = await download_attachment(file.download_url, root / "incoming", max_bytes=available)
         try:
             value = await asyncio.to_thread(import_received, project_id, role, downloaded,
@@ -485,7 +489,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     @offload
     def editor_begin_upload(
         project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
-        role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot"],
+        role: Literal["ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"],
         expected_revision: Annotated[int, Field(strict=True, ge=0)],
         file_name: Annotated[str, Field(min_length=1, max_length=240)],
         mime_type: Annotated[str, Field(min_length=3, max_length=150)],
@@ -678,6 +682,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             expected = int(request.headers.get("x-editor-revision", "-1"))
             size = int(request.headers.get("content-length", "0"))
             available = await asyncio.to_thread(upload_preflight, project_id, expected, size * 2)
+            if role == "clone_resource":
+                available = min(available, MAX_RESOURCE_BYTES)
         except (ValueError, OSError) as exc:
             return JSONResponse({"error": str(exc)[:300]}, status_code=409)
         incoming = root / "incoming"
