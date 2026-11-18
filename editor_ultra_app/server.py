@@ -37,6 +37,7 @@ from . import __version__
 from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
 from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
+from .motion_apply import MotionApplicationSpecification
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError, UploadTicketStore
@@ -168,6 +169,10 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
                 return engine.measure_motion(project_id,job["asset_id"],job["specification"],
                                              expected_revision=job["expected_revision"])
+            if job["operation"] == "apply_motion":
+                space_for(96 * 1024 * 1024)
+                return engine.apply_measured_motion(project_id, job["specification"],
+                                                    expected_revision=job["expected_revision"])
             raise ValueError("Operação indisponível.")
 
     queue = JobQueue(root, execute)
@@ -296,6 +301,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                       "para trabalhos e pendências. "
                       "Use editor_measure_motion com asset_id e janelas/ROIs explícitas para medir movimento; "
                       "o resultado é evidência por elemento, ainda sem aplicar motion ou aprovar render. "
+                      "Use editor_apply_measured_motion com imagens e máscara do projeto para renderizar uma prova 2D real; "
+                      "é um preview técnico sem áudio ou aprovação visual e nunca uma troca automática de pessoa. "
                       "Não chame um pedido ou teste técnico de clonagem pronta, "
                       "nem registre aprovação do usuário sem confirmação explícita do arquivo atual. "
                       "Anexos do chat usam file params; o painel autoriza envio direto por editor_save_project "
@@ -467,6 +474,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, expected_revision)
             if operation=="measure_motion":
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
+            if operation=="apply_motion":
+                space_for(96 * 1024 * 1024)
             job = queue.enqueue(project_id, operation, arguments, request_id)
             return result(job, "Trabalho registrado. Consulte o projeto para acompanhar a execução e o resultado.")
 
@@ -547,6 +556,21 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         return enqueue(project_id,"measure_motion","motion",expected_revision,request_id,
                        asset_id=asset_id,
                        specification=specification.model_dump(by_alias=True,exclude_none=True))
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_apply_measured_motion(project_id: str,
+                                     specification: MotionApplicationSpecification,
+                                     expected_revision: int, request_id: str) -> CallToolResult:
+        """Aplica curvas de medição atual a uma imagem recortada com matte sobre NOVO bruto.
+
+        Esta prova 2D usa o renderer geometric_video e registra os quadros
+        realmente transformados. A fonte de referência jamais vira plate de
+        saída; exige asset IDs atuais, mapa temporal explícito e revisão visual
+        posterior. Não chama VIDEOAPI, não produz nova atuação nem gera custos.
+        """
+        return enqueue(project_id, "apply_motion", "motion_preview", expected_revision, request_id,
+                       specification=specification.model_dump(by_alias=True, exclude_none=True))
 
     @server.tool(annotations=write, meta=widget)
     @offload
