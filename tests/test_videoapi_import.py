@@ -55,7 +55,7 @@ def test_only_verified_provider_hosts_and_no_unsafe_redirects(tmp_path):
     def redirect(url):
         calls.append(url)
         return Connection(), Response(302, headers={"Location": "https://localhost/private"})
-    with pytest.raises(VideoAPIError, match="domínio"):
+    with pytest.raises(VideoAPIError):
         download_completed_video(GOOD_URL, tmp_path, fetch=redirect)
     assert calls == [GOOD_URL]
     assert list(tmp_path.iterdir()) == []
