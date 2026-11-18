@@ -81,10 +81,23 @@ class SceneBridgeMixin:
         manifest_hash = digest(manifest)
         covered = set()
         for batch in record.get("scene_qa_batches", []):
-            if (batch["reference_sha256"] == ref["sha256"]
+            if not (batch["reference_sha256"] == ref["sha256"]
                     and batch["candidate_sha256"] == candidate["sha256"]
                     and batch["scene_manifest_sha256"] == manifest_hash):
-                covered.update(batch["scene_ids"])
+                continue
+            # Evidence must still exist with exactly the recorded bytes, not
+            # merely a matching metadata hash in a mutable record.
+            ids = [batch["batch_asset_id"], *(
+                artifact_id for scene in batch["scenes"]
+                for artifact_id in (scene["spatial_asset_id"], scene["contact_asset_id"]))]
+            if batch.get("temporal_asset_id"):
+                ids.append(batch["temporal_asset_id"])
+            try:
+                for identifier in ids:
+                    self.resolve_asset(record["project_id"], identifier)
+            except (ValidationError, ValueError, OSError, KeyError):
+                continue
+            covered.update(batch["scene_ids"])
         required = [scene["id"] for scene in manifest["scenes"]]
         missing = [identifier for identifier in required if identifier not in covered]
         return {
@@ -209,7 +222,15 @@ class SceneBridgeMixin:
         require(len(candidates) == 1, "scene_clone_video",
                 "A real current clone video is required for scene QA")
         candidate = candidates[0]
-        path = self.resolve_asset(record["project_id"], candidate["id"])
+        # The just-rendered clone is registered in memory before the atomic
+        # project write. Resolve it from this locked record, not from a stale
+        # on-disk snapshot, while still enforcing the private root and SHA.
+        path = Path(candidate["path"])
+        private_root = self._directory(record["project_id"]).resolve()
+        require(path.is_file() and not path.is_symlink()
+                and path.resolve().is_relative_to(private_root)
+                and file_sha256(path) == candidate["sha256"],
+                "scene_clone_changed", "Clone pixels differ from its newly registered asset")
         folder = self._directory(record["project_id"]) / "scene-quality" / uuid.uuid4().hex
         report = audit_scenes(ref_path, path, manifest, scene_ids, folder)
         try:
