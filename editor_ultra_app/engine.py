@@ -375,7 +375,8 @@ class EngineAdapter(SceneBridgeMixin):
             if item.get("preview_kind") == "reconstruction":
                 current = current and item["image_request_digest"] == digest(self._current_clone_images(record))
             public_engines[stage] = {"current": current, "status": item.get("status", "prepared") if current else "stale",
-                                     "preview_kind": item.get("preview_kind", "reference_study" if stage == "clone" else stage)}
+                                     "preview_kind": item.get("preview_kind", "reference_study" if stage == "clone" else stage),
+                                     "native_motion": clone(item.get("native_motion")) if current else None}
         image_request = clone(self._current_clone_images(record))
         clone_stage = record["engines"].get("clone", {})
         if image_request and clone_stage.get("image_request_digest") == digest(self._current_clone_images(record)):
@@ -1414,8 +1415,17 @@ class EngineAdapter(SceneBridgeMixin):
             self._write(record, "Direção validada: " + kind)
             return {**self._snapshot(record), "status": stage["status"], **result}
 
-    def render(self, project_id, kind, *, expected_revision=None):
+    def render(self, project_id, kind, *, expected_revision=None, native_motion=None):
         require(kind in {"clone", "edit", "assembly"}, "engine_kind", "Only local study, editing and assembly can render")
+        from .native_motion import NativeMeasuredMotionRequest, bind_native_motion
+        model = None
+        if native_motion is not None:
+            require(isinstance(native_motion, dict), "native_motion_request", "Expected a typed native motion request")
+            try:
+                model = NativeMeasuredMotionRequest.model_validate(native_motion)
+            except ModelValidationError as exc:
+                details = "; ".join(str(issue["msg"]) for issue in exc.errors(include_input=False, include_url=False)[:3])
+                raise ValidationError("native_motion_request", "Invalid native motion contract: " + details) from None
         with self._lock(project_id):
             record = self._load(project_id)
             self._expect(record, expected_revision)
@@ -1438,13 +1448,29 @@ class EngineAdapter(SceneBridgeMixin):
                               for key, identifier in stage["fonts"].items()}
                 for item in stage["image_bindings"].values():
                     self.resolve_asset(project_id, item["asset_id"])
-            engine.render_project(directory, kind="assembly" if kind == "assembly" else "edit", **font_paths)
+            native_bindings = None
+            native_summary = None
+            if model is not None:
+                require(kind in {"clone", "edit"} and (kind != "clone" or reconstruction),
+                        "native_motion_route", "Only independent reconstruction or a new-footage edit can receive native measured motion")
+                native_bindings, native_summary = bind_native_motion(self, record, stage, model)
+            engine.render_project(directory, kind="assembly" if kind == "assembly" else "edit",
+                                  measured_bindings=native_bindings, **font_paths)
             rendered = engine.artifact(directory, "render")
             role = "clone" if kind == "clone" else "result"
             item = self._register_internal(record, rendered["path"], role=role,
                                            name=("Reconstrucao-renderizada.mp4" if reconstruction else
                                                  "Estudo-da-referencia.mp4" if kind == "clone" else "Edicao-renderizada.mp4"))
             item.update(duration=rendered["duration_s"], fps=rendered["fps"])
+            if native_summary is not None:
+                use = rendered.get("measured_motion")
+                require(use and use.get("bindings"), "native_motion_not_applied",
+                        "Native renderer did not report real curve consumption")
+                stage["native_motion"] = {**native_summary,
+                                          "status": "rendered_unreviewed",
+                                          "render_sha256": rendered["sha256"],
+                                          "consumption": clone(use),
+                                          "user_approved": False}
             item["basis_binding"] = self._preview_binding(record, "clone" if kind == "clone" else "final")
             public = self._public_file(item)
             before = self._clone_binding(record), self._edit_binding(record)
