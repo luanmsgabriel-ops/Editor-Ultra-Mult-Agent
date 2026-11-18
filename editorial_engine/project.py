@@ -995,10 +995,11 @@ def _start_review(state, plan, rendered):
     _record(state, "review", review, _dependencies(state, "artifact:render", "artifact:review_plan"))
 
 
-def render_project(directory, *, kind, font=None, script_font=None, style=None):
+def render_project(directory, *, kind, font=None, script_font=None, style=None, measured_bindings=None):
     state = _checked_state(directory)
     workspace = _workspace(state, "render")
     if kind == "assembly":
+        require(not measured_bindings, "motion_assembly", "Measured native curves require an editable single-source bundle")
         from .assembly import render_assembly
         assembly = _artifact(state, "assembly_plan")
         _recreation_source_guard(state, assembly["sources"], assembly=assembly)
@@ -1010,7 +1011,8 @@ def render_project(directory, *, kind, font=None, script_font=None, style=None):
         require(kind == "edit", "render_kind", "Use assembly or edit")
         bundle = _artifact(state, "edit_bundle")
         _recreation_source_guard(state, bundle["analysis"]["sources"])
-        result = render_bundle(bundle, workspace / "render.mp4", font=font, script_font=script_font, style=style)
+        result = render_bundle(bundle, workspace / "render.mp4", font=font, script_font=script_font,
+                               style=style, measured_bindings=measured_bindings)
         review_plan = bundle["plan"]
         dependencies = _dependencies(state, "artifact:edit_bundle")
         if bundle.get("project_source_id") == "film":
