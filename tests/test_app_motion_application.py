@@ -114,7 +114,7 @@ def test_measured_profile_is_actually_consumed_in_real_encoded_mp4(prepared):
         ok, frame = cap.read()
         if not ok:
             break
-        pixels = (frame[:, :, 1] > 160) & (frame[:, :, 0] < 140)
+        pixels = (frame[:, :, 1] > 160) & (frame[:, :, 2] < 140)
         ys, xs = np.where(pixels)
         assert len(xs) > 1300
         centers.append(float(xs.mean()))
