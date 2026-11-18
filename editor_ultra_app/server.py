@@ -41,6 +41,7 @@ from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError, UploadTicketStore
 from .videoapi import BASE_URL as VIDEOAPI_BASE, VideoAPIClient, VideoAPIJobs, VideoAPIError, build_payload
+from .videoapi_import import download_completed_video, verified_origin
 
 
 UI_URI = "ui://editor-ultra/studio-v9.html"
@@ -168,11 +169,56 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
                 return engine.measure_motion(project_id,job["asset_id"],job["specification"],
                                              expected_revision=job["expected_revision"])
+            if job["operation"] == "videoapi_import":
+                return import_completed_generation(project_id, job["videoapi_job_id"],
+                                                   job.get("shot_id"), job["expected_revision"])
             raise ValueError("Operação indisponível.")
 
     queue = JobQueue(root, execute)
     videoapi_client = VideoAPIClient()
     videoapi_jobs = VideoAPIJobs(root, videoapi_client)
+
+    def import_completed_generation(project_id, job_id, shot_id, expected_revision):
+        """Import an existing completed VIDEOAPI video; never create paid jobs."""
+        receipt = videoapi_jobs.get(project_id, job_id)
+        if not receipt or receipt["status"] != "done" or receipt["kind"] != "video":
+            raise VideoAPIError("import_state", "Selecione uma geração de vídeo concluída deste projeto.")
+        current = engine.get_project(project_id)
+        existing = next((a for a in current["assets"]
+                         if a.get("hostFileId") == "videoapi:" + job_id), None)
+        if existing:
+            engine.resolve_asset(project_id, existing["asset_id"])
+            return {**current, "status": "videoapi_imported", "asset_id": existing["asset_id"],
+                    "asset": existing, "idempotent": True}
+        target = "shot" if shot_id else "footage"
+        if current["state"]["mode"] == "generate":
+            if not shot_id or not any(s["id"] == shot_id for s in current["state"]["shots"]):
+                raise VideoAPIError("import_shot_required",
+                                    "Selecione uma tomada existente para receber o vídeo concluído.")
+        elif shot_id:
+            raise VideoAPIError("import_mode", "Tomadas recebem vídeo apenas no modo de geração.")
+        source_url = receipt.get("download_url") or receipt.get("url")
+        if not source_url:
+            receipt = videoapi_jobs.recover_media(project_id, job_id)
+            source_url = receipt.get("download_url") or receipt.get("url")
+        # Check the provider-controlled URL and exact host before any outbound call.
+        origin = verified_origin(source_url)
+        hostname = urlsplit(origin).hostname
+        maximum = space_for()
+        incoming = download_completed_video(origin, root / "incoming", max_bytes=maximum)
+        try:
+            imported = engine.import_local_file(
+                project_id, target, incoming,
+                "VIDEOAPI-" + job_id + ".mp4", "video/mp4",
+                shot_id=shot_id, expected_revision=expected_revision,
+                host_file_id="videoapi:" + job_id,
+                provenance={"schema": "videoapi-import/1", "provider": "VIDEOAPI",
+                            "job_id": job_id, "provider_id": receipt["provider_id"],
+                            "original_request_id": receipt["request_id"],
+                            "media_host": hostname, "target_role": target})
+            return {**imported, "status": "videoapi_imported", "idempotent": imported.get("idempotent", False)}
+        finally:
+            incoming.unlink(missing_ok=True)
 
     def public(value):
         """Keep engine paths internal; expose only scoped expiring media URLs."""
@@ -290,6 +336,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         "Editor Ultra", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")),
         instructions=("Editor Ultra: use editor_open para abrir o painel. O fluxo padrão de direção exporta prompts; "
                       "a VIDEOAPI é opção adicional, explícita e cobrada, acionada somente por editor_videoapi_generate. "
+                      "Use editor_import_videoapi_result para importar um clipe VIDEOAPI já concluído; essa ação só faz GET, sem nova geração paga. "
                       "Sem aprovação automática e sem substituir preparação/render do motor. prepare cria análise/pedido real; "
                       "a direção criativa deve ser autorada no host, depois importada com editor_apply_direction. "
                       "Execute editor_render somente após um plano atual válido. Consulte editor_get_project "
@@ -467,6 +514,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, expected_revision)
             if operation=="measure_motion":
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
+            if operation=="videoapi_import":
+                space_for()
             job = queue.enqueue(project_id, operation, arguments, request_id)
             return result(job, "Trabalho registrado. Consulte o projeto para acompanhar a execução e o resultado.")
 
@@ -510,6 +559,23 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """Paid generation with explicit user authorization, persistent ID and secure server-side key."""
         return submit_videoapi_generation(project_id, request_id, kind, prompt, aspect_ratio,
                                           duration_seconds, reference_asset_ids)
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_import_videoapi_result(
+        project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
+        videoapi_job_id: Annotated[str, Field(min_length=36, max_length=36)],
+        expected_revision: int, request_id: str,
+        shot_id: str | None = None,
+    ) -> CallToolResult:
+        """Importa vídeo concluído do ledger VIDEOAPI para a montagem do projeto.
+
+        Não gera outro vídeo, não cobra créditos nem aceita URL externa. Use
+        shot_id no modo generate; caso contrário entra como footage.
+        Arquivos importados passam por validação de vídeo e SHA-256 reais.
+        """
+        return enqueue(project_id, "videoapi_import", "generation_result", expected_revision,
+                       request_id, videoapi_job_id=videoapi_job_id, shot_id=shot_id)
 
     @server.tool(annotations=write, meta=widget)
     @offload
