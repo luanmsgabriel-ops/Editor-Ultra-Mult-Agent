@@ -71,7 +71,7 @@ def test_provider_download_enforces_bytes_mime_and_cleanup(tmp_path):
     downloaded = download_completed_video(GOOD_URL, tmp_path, max_bytes=100, fetch=valid)
     assert downloaded.read_bytes() == clip and visits == [GOOD_URL]
     downloaded.unlink()
-    with pytest.raises(VideoAPIError, match="armazenamento"):
+    with pytest.raises(VideoAPIError, match="limite"):
         download_completed_video(GOOD_URL, tmp_path, max_bytes=8, fetch=valid)
     assert not list(tmp_path.iterdir())
     def malformed(url):
