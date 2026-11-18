@@ -223,8 +223,11 @@ def test_reconstruction_cannot_be_approved_without_all_current_scene_diagnostics
     asset_id = current["state"]["assets"]["clone"][0]["id"]
     with adapter._lock(pid):
         record = adapter._load(pid)
-        record["engines"]["clone"] = {"preview_kind": "reconstruction",
-                                       "status": "rendered_unreviewed"}
+        from editorial_engine.contracts import digest
+        record["engines"]["clone"] = {
+            "binding": adapter._stage_binding(record, "clone"),
+            "preview_kind": "reconstruction", "status": "rendered_unreviewed",
+            "image_request_digest": digest(adapter._current_clone_images(record))}
         adapter._write(record, "Reconstruction policy gate test")
     now = adapter.get_project(pid)
     with pytest.raises(Exception, match="Finish current source-clock QA"):
