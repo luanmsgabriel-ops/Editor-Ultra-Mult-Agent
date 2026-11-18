@@ -162,15 +162,44 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, job["expected_revision"])
             kind = job["kind"]
             if job["operation"] == "prepare":
-                return engine.prepare(project_id, kind, expected_revision=job["expected_revision"])
+                if job.get("reconstruction"):
+                    space_for(160 * 1024 * 1024)
+                return engine.prepare(project_id, kind, expected_revision=job["expected_revision"],
+                                      reconstruction=job.get("reconstruction"))
             if job["operation"] == "direction":
                 return engine.apply_direction(project_id, kind, job["direction"], expected_revision=job["expected_revision"])
             if job["operation"] == "render":
                 return engine.render(project_id, kind, expected_revision=job["expected_revision"])
+            if job["operation"] == "queue_bundled_motion":
+                return engine.queue_bundled_motion(project_id, job["recipe"],
+                                                    expected_revision=job["expected_revision"])
+            if job["operation"] == "execute_bundled_motion":
+                space_for(16 * 1024 * 1024)
+                return engine.execute_bundled_motion(project_id,
+                                                      expected_revision=job["expected_revision"])
+            if job["operation"] == "route_scenes":
+                return engine.route_reference_scenes(project_id, job["choices"],
+                                                     expected_revision=job["expected_revision"])
+            if job["operation"] == "execute_scene_motion":
+                space_for(96 * 1024 * 1024)
+                return engine.execute_local_scene_motion(project_id, job["scene_id"],
+                                                         expected_revision=job["expected_revision"])
+            if job["operation"] == "audit_scene_batch":
+                space_for(12 * 1024 * 1024)
+                return engine.audit_scene_batch(project_id, job["scene_ids"],
+                                                expected_revision=job["expected_revision"])
+            if job["operation"] == "compare_temporal":
+                space_for(4 * 1024 * 1024)
+                return engine.compare_temporal(project_id, center_s=job["center_s"],
+                                               expected_revision=job["expected_revision"])
             if job["operation"] == "measure_motion":
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
                 return engine.measure_motion(project_id,job["asset_id"],job["specification"],
                                              expected_revision=job["expected_revision"])
+            if job["operation"] == "apply_motion":
+                space_for(96 * 1024 * 1024)
+                return engine.apply_measured_motion(project_id, job["specification"],
+                                                    expected_revision=job["expected_revision"])
             if job["operation"] == "videoapi_import":
                 return import_completed_generation(project_id, job["videoapi_job_id"],
                                                    job.get("shot_id"), job["expected_revision"])
@@ -520,6 +549,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
             if operation=="videoapi_import":
                 space_for()
+            if operation=="apply_motion":
+                space_for(96 * 1024 * 1024)
             job = queue.enqueue(project_id, operation, arguments, request_id)
             return result(job, "Trabalho registrado. Consulte o projeto para acompanhar a execução e o resultado.")
 
