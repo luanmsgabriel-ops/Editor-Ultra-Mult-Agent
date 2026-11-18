@@ -29,7 +29,8 @@ class NativeMeasuredMotionRequest(BaseModel):
     schema_name: Literal["editor-ultra-native-measured-motion/1"] = Field(
         default="editor-ultra-native-measured-motion/1", alias="schema")
     measurement_id: str = Field(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
-    decision_id: str = Field(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
+    # The planner uses native decision identifiers such as decision:shield-layer.
+    decision_id: str = Field(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")
     element_id: str = Field(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
     channels: list[Literal["position", "scale", "angle"]] = Field(min_length=1, max_length=3)
     pivot_px: list[float] = Field(min_length=2, max_length=2)
