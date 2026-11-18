@@ -49,9 +49,10 @@ class SceneBridgeMixin:
         inventory = record.get("reference_scene_inventory")
         try:
             ref = [a for a in self._selected(record, "ref") if a["type"].startswith("video/")]
-            current = len(ref) == 1 and ref[0]["sha256"] == route["source_sha256"] and bool(
-                inventory and inventory.get("source_sha256") == route["source_sha256"]
-                and inventory.get("asset_id") == route["inventory_asset_id"])
+            current = (len(ref) == 1 and ref[0]["sha256"] == route["source_sha256"]
+                       and route.get("clone_binding") == self._clone_binding(record)
+                       and bool(inventory and inventory.get("source_sha256") == route["source_sha256"]
+                                and inventory.get("asset_id") == route["inventory_asset_id"]))
         except (KeyError, TypeError):
             current = False
         return {
@@ -129,6 +130,7 @@ class SceneBridgeMixin:
                 record["scene_route"] = {
                     "status": "planned_not_executed", "plan_asset_id": item["id"],
                     "source_sha256": source["sha256"],
+                    "clone_binding": self._clone_binding(record),
                     "inventory_asset_id": record["reference_scene_inventory"]["asset_id"],
                     "scene_ids": [x["scene_id"] for x in plan["scenes"]],
                     "executions": {}, "folder": str(folder)}
