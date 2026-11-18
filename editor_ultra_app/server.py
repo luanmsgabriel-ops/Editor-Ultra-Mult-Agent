@@ -157,6 +157,17 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 space_for(16 * 1024 * 1024)
                 return engine.execute_bundled_motion(project_id,
                                                       expected_revision=job["expected_revision"])
+            if job["operation"] == "route_scenes":
+                return engine.route_reference_scenes(project_id, job["choices"],
+                                                     expected_revision=job["expected_revision"])
+            if job["operation"] == "execute_scene_motion":
+                space_for(96 * 1024 * 1024)
+                return engine.execute_local_scene_motion(project_id, job["scene_id"],
+                                                         expected_revision=job["expected_revision"])
+            if job["operation"] == "audit_scene_batch":
+                space_for(12 * 1024 * 1024)
+                return engine.audit_scene_batch(project_id, job["scene_ids"],
+                                                expected_revision=job["expected_revision"])
             if job["operation"] == "compare_temporal":
                 space_for(4 * 1024 * 1024)
                 return engine.compare_temporal(project_id, center_s=job["center_s"],
@@ -294,6 +305,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                       "Use editor_measure_motion com asset_id e janelas/ROIs explícitas para medir movimento; "
                       "Para aplicar a trajetória 2D aprovada para uso, vincule measured_projection na "
                       "preparação da reconstrução. Uma medição sozinha não aplica motion nem aprova o render. "
+                      "Com inventário atual, editor_route_reference_scenes escolhe motores com probes; só uma receita 2D autorada pode executar por editor_run_scene_motion. "
+                      "editor_audit_scene_batch mede e registra no máximo quatro cenas por lote sem aprovação estética; reconstruções exigem cobertura de QA para aprovação. "
                       "Não chame um pedido ou teste técnico de clonagem pronta, "
                       "nem registre aprovação do usuário sem confirmação explícita do arquivo atual. "
                       "Anexos do chat usam file params; o painel autoriza envio direto por editor_save_project "
@@ -553,6 +566,46 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """
         return enqueue(project_id, "compare_temporal", "cadence", expected_revision,
                        request_id, center_s=center_s)
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_route_reference_scenes(project_id: str, choices: dict[str, Any],
+                                      expected_revision: int, request_id: str) -> CallToolResult:
+        """Roteia TODAS as cenas do inventário com probes locais; NÃO executa por planejar.
+
+        needs: preserve, motion_graphic_2d, measured_motion_2d,
+        native_composite, typography_3d, environment_3d,
+        temporal_occlusion, synchronized_sfx ou new_actor_performance.
+        Para motion_graphic_2d, uma receita Motion Lab explícita pode ser
+        marcada pronta quando bater relógio, FPS e limites do motor.
+        """
+        return enqueue(project_id, "route_scenes", "scene_plan", expected_revision,
+                       request_id, choices=choices)
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_run_scene_motion(project_id: str, scene_id: str,
+                                expected_revision: int, request_id: str) -> CallToolResult:
+        """Executa um componente 2D pronto da cena através do produtor Motion Lab.
+
+        O recibo de execução é real e registra um motion_layer, mas NÃO cria
+        MP4 de clone, não aprova estética e não faz geração paga.
+        """
+        return enqueue(project_id, "execute_scene_motion", "scene_motion",
+                       expected_revision, request_id, scene_id=scene_id)
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_audit_scene_batch(project_id: str, scene_ids: Annotated[list[str],
+                                 Field(min_length=1, max_length=4)],
+                                 expected_revision: int, request_id: str) -> CallToolResult:
+        """Audita até quatro cenas da referência contra um clone real já recebido.
+
+        Comparação de quadros/fluxo no relógio exato, sem ajustar tempos,
+        supor fidelidade 3D ou registrar aprovação automática.
+        """
+        return enqueue(project_id, "audit_scene_batch", "scene_qa", expected_revision,
+                       request_id, scene_ids=scene_ids)
 
     @server.tool(annotations=write)
     @offload
