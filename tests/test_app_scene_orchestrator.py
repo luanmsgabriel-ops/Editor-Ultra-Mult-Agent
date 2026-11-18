@@ -119,7 +119,7 @@ def test_project_routes_are_source_bound_and_qa_records_temporal_gaps(tmp_path, 
     assert all(row["spatial_metrics"]["mae_rgb_mean"] > 0 for row in batch["scenes"])
     report = adapter.resolve_asset(pid, batch["batch_asset_id"])
     data = json.loads(report.read_text())
-    assert data["source_sha256"] if "source_sha256" in data else data["reference_sha256"] == file_sha256(reference)
+    assert data["reference_sha256"] == file_sha256(reference)
     assert not data["user_approved"]
     # Old QA must not certify a newly supplied candidate.
     replacement = tmp_path / "replacement.mp4"
