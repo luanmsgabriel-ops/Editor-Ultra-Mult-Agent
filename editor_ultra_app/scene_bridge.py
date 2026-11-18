@@ -151,9 +151,9 @@ class SceneBridgeMixin:
                     and op["backend"] == "motionlab",
                     "scene_not_executable", "Only a ready authored 2D Motion Lab step can run")
             authored = next(row for row in manifest["scenes"] if row["id"] == scene_id)
-            recipe = validate_local_recipe(selected["motion_recipe"], authored, manifest["fps"])
-            require(digest(recipe) == selected["motion_recipe_sha256"],
+            require(digest(selected["motion_recipe"]) == selected["motion_recipe_sha256"],
                     "scene_recipe_changed", "The authored scene recipe changed")
+            recipe = validate_local_recipe(selected["motion_recipe"], authored, manifest["fps"])
             previous = route.get("executions", {}).get(scene_id)
             if previous:
                 self.resolve_asset(project_id, previous["motion_asset_id"])
