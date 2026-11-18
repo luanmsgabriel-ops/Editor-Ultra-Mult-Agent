@@ -1,0 +1,42 @@
+name: P0 measured motion application
+
+on:
+  pull_request:
+    paths:
+      - "editor_ultra_app/motion_apply.py"
+      - "editor_ultra_app/engine.py"
+      - "editor_ultra_app/server.py"
+      - "tests/test_app_motion_application.py"
+      - ".github/workflows/p0-measured-motion.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  motion-contract-and-real-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-app.txt
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements-app.txt
+          python -m pip install "pytest>=8,<10"
+      - name: Check Python syntax
+        run: python -m compileall -q editor_ultra_app visual_fidelity editorial_engine
+      - name: Measure, render and inspect encoded pixels
+        run: |
+          python -m pytest -q \
+            tests/test_app_motion_application.py \
+            tests/test_app_motion.py \
+            tests/test_motion_binding.py \
+            tests/test_app_server.py

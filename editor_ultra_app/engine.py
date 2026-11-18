@@ -239,7 +239,7 @@ class EngineAdapter(SceneBridgeMixin):
         os.replace(temp, root / "record.json")
 
     def _public_file(self, item):
-        keys = ("id", "name", "type", "size", "sha256", "duration", "width", "height", "fps", "role", "shot_id", "hostFileId")
+        keys = ("id", "name", "type", "size", "sha256", "duration", "width", "height", "fps", "role", "shot_id", "hostFileId", "provenance")
         return {**{key: item[key] for key in keys if key in item}, "asset_id": item["id"],
                 "available": True, "server": True}
 
@@ -386,6 +386,7 @@ class EngineAdapter(SceneBridgeMixin):
                 "engine": public_engines, "approval": approvals,
                 "motion_measurements": [self._motion_public(record, item)
                                         for item in record.get("motion_measurements", [])[-20:]],
+                "motion_applications": clone(record.get("motion_applications", [])[-20:]),
                 "quality_evidence": mark_current(record.get("quality_evidence", []),
                                                  source_field="source_sha256", candidate_field="clone_sha256"),
                 "temporal_evidence": mark_current(record.get("temporal_evidence", []),
@@ -571,11 +572,19 @@ class EngineAdapter(SceneBridgeMixin):
         return info
 
     def import_local_file(self, project_id, role, source: Path, filename: str, mime_type: str,
-                          shot_id=None, *, expected_revision=None, host_file_id=None):
+                          shot_id=None, *, expected_revision=None, host_file_id=None,
+                          provenance=None):
         require(role in ROLES, "asset_role", "Unsupported media role")
         require(isinstance(mime_type, str), "asset_type", "Declare a MIME type")
         if host_file_id is not None:
             require(bool(_text(host_file_id, 300).strip()), "host_file_id", "Use a nonempty host file identifier")
+        if provenance is not None:
+            require(isinstance(provenance, dict) and provenance.get("schema") == "videoapi-import/1"
+                    and role in {"footage", "shot"}
+                    and host_file_id == "videoapi:" + provenance.get("job_id", "")
+                    and all(isinstance(provenance.get(key), str) and provenance[key]
+                            for key in ("job_id", "provider_id", "original_request_id")),
+                    "media_provenance", "VIDEOAPI provenance must be linked to an original job receipt")
         allowed = {"narration": ("audio/",), "logo": ("image/",), "footage": ("video/",),
                    "result": ("video/",), "shot": ("video/",)}.get(role, ("video/", "image/"))
         require(mime_type in RESOURCE_TYPES if role == "clone_resource" else mime_type.startswith(allowed),
@@ -620,6 +629,8 @@ class EngineAdapter(SceneBridgeMixin):
                     "role": role, "shot_id": shot_id, **info}
             if host_file_id is not None:
                 item["hostFileId"] = host_file_id
+            if provenance is not None:
+                item["provenance"] = clone(provenance)
             if role in {"clone", "result"}:
                 item["basis_binding"] = self._preview_binding(record, "clone" if role == "clone" else "final")
             record["files"][identifier] = item
@@ -807,6 +818,104 @@ class EngineAdapter(SceneBridgeMixin):
                 raise
             return {**self._snapshot(record),"status":"motion_measured",
                     "motion_measurement":self._motion_public(record,measurement)}
+
+    def apply_measured_motion(self, project_id, specification, *, expected_revision=None):
+        """Render an explicit 2D proof from immutable measured curves and NEW media.
+
+        This is a separate technical preview, not a clone/final approval. The
+        reference MP4 is never used as the visible base or replacement layer.
+        An image matte and an RGBA still are required; gestures/occlusion are
+        not synthesized. The existing geometric renderer must prove consumption.
+        """
+        from .motion_apply import MotionApplicationSpecification, prepare_timeline, render_preview
+        from visual_fidelity.motion_profile import profile_digest
+        require(isinstance(specification, dict), "motion_application",
+                "Expected a bounded measured-motion application specification")
+        try:
+            model = MotionApplicationSpecification.model_validate(specification)
+        except ModelValidationError as exc:
+            details = "; ".join(".".join(map(str, issue["loc"])) + ": " + issue["msg"]
+                                for issue in exc.errors(include_input=False, include_url=False)[:3])
+            raise ValidationError("motion_application", "Invalid motion mapping: " + details) from None
+        with self._lock(project_id):
+            record = self._load(project_id)
+            self._expect(record, expected_revision)
+            matches = [item for item in record.get("motion_measurements", [])
+                       if item["id"] == model.measurement_id]
+            require(len(matches) == 1, "motion_measurement_missing",
+                    "Choose one measured motion receipt from this project")
+            measurement = matches[0]
+            require(self._motion_public(record, measurement)["current"],
+                    "motion_measurement_stale", "Remeasure current reference after the project or input changes")
+            require(measurement["scope"] == "evidence_not_applied", "motion_measurement_scope",
+                    "Expected the original unconsumed evidence scope")
+            profile_asset = measurement["artifacts"]["profile"]
+            profile_file = self.resolve_asset(project_id, profile_asset["asset_id"])
+            profile = json.loads(profile_file.read_text(encoding="utf-8"))
+            require(profile_digest(profile) == measurement["profile_sha256"],
+                    "motion_profile_changed", "Measured profile no longer matches its receipt")
+            evidence = profile.get("application_binding", {})
+            require(evidence.get("measurement_id") == measurement["id"]
+                    and evidence.get("source", {}).get("sha256") == measurement["source"]["sha256"]
+                    and evidence.get("specification_sha256") == measurement["specification_sha256"],
+                    "motion_profile_provenance", "The profile does not bind to the current measurement")
+            ids = (model.base_asset_id, model.overlay_asset_id, model.matte_asset_id)
+            base_item, overlay_item, matte_item = [record["files"].get(identifier) for identifier in ids]
+            require(all(item is not None for item in (base_item, overlay_item, matte_item)),
+                    "motion_target_assets", "Use only verified media IDs from this project")
+            require(base_item["role"] in {"footage", "shot"} and base_item["type"].startswith("video/"),
+                    "motion_target_base", "Base must be new footage imported to this project")
+            require(overlay_item["role"] in {"identity", "logo", "ref", "clone_resource"} and overlay_item["type"].startswith("image/")
+                    and matte_item["type"].startswith("image/"),
+                    "motion_target_layer", "Overlay and matte must be verified project images")
+            require(all(item["sha256"] != measurement["source"]["sha256"]
+                        for item in (base_item, overlay_item, matte_item)),
+                    "motion_reference_pixels", "Reference media cannot be used as new target content")
+            base, overlay, matte = [self.resolve_asset(project_id, identifier) for identifier in ids]
+            # Do not allow the render to consume an old or tampered file silently.
+            for identifier, item in zip(ids, (base_item, overlay_item, matte_item)):
+                require(file_sha256(self.resolve_asset(project_id, identifier)) == item["sha256"],
+                        "motion_asset_changed", "Motion target asset changed: " + identifier)
+            timeline, clock = prepare_timeline(model, profile, base=base, overlay=overlay, matte=matte)
+            storage_limit = int(os.environ.get("EDITOR_ULTRA_MAX_STORAGE_MB", "850")) * 1024 * 1024
+            budget = 96 * 1024 * 1024
+            require(stored_bytes(self.data_dir) + budget <= storage_limit
+                    and shutil.disk_usage(self.data_dir).free >= budget + 64 * 1024 * 1024,
+                    "motion_render_storage", "Insufficient disk quota for bounded measured-motion proof")
+            identifier = uuid.uuid4().hex
+            directory = self._directory(project_id) / "motion-renders" / identifier
+            directory.parent.mkdir(exist_ok=True, mode=0o700)
+            try:
+                produced = render_preview(timeline, directory)
+                files = {
+                    name: self._public_file(self._register_internal(
+                        record, produced[name], role="motion-preview" if name == "video" else "evidence"))
+                    for name in ("video", "manifest", "sidecar")
+                }
+                rendered = {
+                    "schema": "editor-ultra-applied-motion/1", "id": identifier,
+                    "created_at": _now(), "measurement_id": measurement["id"],
+                    "measurement_profile_sha256": measurement["profile_sha256"],
+                    "source": measurement["source"], "base_asset_id": model.base_asset_id,
+                    "overlay_asset_id": model.overlay_asset_id, "matte_asset_id": model.matte_asset_id,
+                    "target_hashes": {key: record["files"][key]["sha256"] for key in ids},
+                    "render_asset_id": files["video"]["asset_id"], "artifacts": files,
+                    "render_sha256": produced["report"]["render_sha256"],
+                    "manifest_sha256": produced["report"]["manifest_sha256"],
+                    "consumption": produced["consumption"],
+                    "clock": {"fps": clock["fps"], "frames": model.frame_count,
+                              "first_target_frame": model.base_start_frame},
+                    "status": "rendered_unreviewed", "technical_render": "verified",
+                    "perceptual_review": "pending", "user_approved": False,
+                    "limitations": produced["limitations"],
+                }
+                record.setdefault("motion_applications", []).append(rendered)
+                self._write(record, "Prévia 2D com curva medida aplicada e consumo auditado")
+            except BaseException:
+                shutil.rmtree(directory, ignore_errors=True)
+                raise
+            return {**self._snapshot(record), "status": "rendered_unreviewed",
+                    "motion_application": clone(rendered), "asset_id": files["video"]["asset_id"]}
 
     def _stage_binding(self, record, stage):
         if stage in {"clone", "motion"}:

@@ -15,6 +15,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 from pathlib import Path
 import shutil
 import threading
@@ -36,14 +37,17 @@ from . import __version__
 from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
 from .clone_resources import CloneResources, ImageNeed, MAX_RESOURCE_BYTES
+from .motion_apply import MotionApplicationSpecification
 from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
 from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError, UploadTicketStore
+from .videoapi import BASE_URL as VIDEOAPI_BASE, VideoAPIClient, VideoAPIJobs, VideoAPIError, build_payload
+from .videoapi_import import download_completed_video, verified_origin
 
 
-UI_URI = "ui://editor-ultra/studio-v8.html"
-UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4, 5, 6, 7))
+UI_URI = "ui://editor-ultra/studio-v9.html"
+UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4, 5, 6, 7, 8))
 BRAND_MARK_PATH = "/brand/e-mark-v1.png"
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
 UPLOAD_HEADERS = {
@@ -98,6 +102,22 @@ class UIUploadCommand(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     ui_action: Literal["begin_upload"]
     upload_request: UIUploadRequest
+
+
+class UIVideoAPIGeneration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1, max_length=96)
+    kind: Literal["video", "image"]
+    prompt: str = Field(min_length=1, max_length=5000)
+    aspect_ratio: Literal["9:16", "16:9"]
+    duration_seconds: Literal[5, 10, 20, 30] | None = None
+    reference_asset_ids: list[str] = Field(default_factory=list, max_length=3)
+
+
+class UIVideoAPICommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ui_action: Literal["videoapi_generate"]
+    generation_request: UIVideoAPIGeneration
 
 
 def offload(function):
@@ -176,9 +196,60 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
                 return engine.measure_motion(project_id,job["asset_id"],job["specification"],
                                              expected_revision=job["expected_revision"])
+            if job["operation"] == "apply_motion":
+                space_for(96 * 1024 * 1024)
+                return engine.apply_measured_motion(project_id, job["specification"],
+                                                    expected_revision=job["expected_revision"])
+            if job["operation"] == "videoapi_import":
+                return import_completed_generation(project_id, job["videoapi_job_id"],
+                                                   job.get("shot_id"), job["expected_revision"])
             raise ValueError("Operação indisponível.")
 
     queue = JobQueue(root, execute)
+    videoapi_client = VideoAPIClient()
+    videoapi_jobs = VideoAPIJobs(root, videoapi_client)
+
+    def import_completed_generation(project_id, job_id, shot_id, expected_revision):
+        """Import an existing completed VIDEOAPI video; never create paid jobs."""
+        receipt = videoapi_jobs.get(project_id, job_id)
+        if not receipt or receipt["status"] != "done" or receipt["kind"] != "video":
+            raise VideoAPIError("import_state", "Selecione uma geração de vídeo concluída deste projeto.")
+        current = engine.get_project(project_id)
+        existing = next((a for a in current["assets"]
+                         if a.get("hostFileId") == "videoapi:" + job_id), None)
+        if existing:
+            engine.resolve_asset(project_id, existing["asset_id"])
+            return {**current, "status": "videoapi_imported", "asset_id": existing["asset_id"],
+                    "asset": existing, "idempotent": True}
+        target = "shot" if shot_id else "footage"
+        if current["state"]["mode"] == "generate":
+            if not shot_id or not any(s["id"] == shot_id for s in current["state"]["shots"]):
+                raise VideoAPIError("import_shot_required",
+                                    "Selecione uma tomada existente para receber o vídeo concluído.")
+        elif shot_id:
+            raise VideoAPIError("import_mode", "Tomadas recebem vídeo apenas no modo de geração.")
+        source_url = receipt.get("download_url") or receipt.get("url")
+        if not source_url:
+            receipt = videoapi_jobs.recover_media(project_id, job_id)
+            source_url = receipt.get("download_url") or receipt.get("url")
+        # Check the provider-controlled URL and exact host before any outbound call.
+        origin = verified_origin(source_url)
+        hostname = urlsplit(origin).hostname
+        maximum = space_for()
+        incoming = download_completed_video(origin, root / "incoming", max_bytes=maximum)
+        try:
+            imported = engine.import_local_file(
+                project_id, target, incoming,
+                "VIDEOAPI-" + job_id + ".mp4", "video/mp4",
+                shot_id=shot_id, expected_revision=expected_revision,
+                host_file_id="videoapi:" + job_id,
+                provenance={"schema": "videoapi-import/1", "provider": "VIDEOAPI",
+                            "job_id": job_id, "provider_id": receipt["provider_id"],
+                            "original_request_id": receipt["request_id"],
+                            "media_host": hostname, "target_role": target})
+            return {**imported, "status": "videoapi_imported", "idempotent": imported.get("idempotent", False)}
+        finally:
+            incoming.unlink(missing_ok=True)
 
     def public(value):
         """Keep engine paths internal; expose only scoped expiring media URLs."""
@@ -202,6 +273,8 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     def snapshot(project_id):
         value = engine.get_project(project_id)
         value["jobs"] = queue.list(project_id)
+        value["videoapi_jobs"] = videoapi_jobs.list(project_id)
+        value["videoapi_enabled"] = videoapi_client.enabled
         return value
 
     def space_for(size=0):
@@ -292,21 +365,18 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     hostname = urlsplit(base).netloc
     server = FastMCP(
         "Editor Ultra", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")),
-        instructions=("Editor Ultra: use editor_open para abrir o painel. A geração de vídeo é apenas exportação "
-                      "de prompts; o usuário produz clipes fora e os devolve. prepare cria análise/pedido real; "
+        instructions=("Editor Ultra: use editor_open para abrir o painel. O fluxo padrão de direção exporta prompts; "
+                      "a VIDEOAPI é opção adicional, explícita e cobrada, acionada somente por editor_videoapi_generate. "
+                      "Use editor_import_videoapi_result para importar um clipe VIDEOAPI já concluído; essa ação só faz GET, sem nova geração paga. "
+                      "Sem aprovação automática e sem substituir preparação/render do motor. prepare cria análise/pedido real; "
                       "a direção criativa deve ser autorada no host, depois importada com editor_apply_direction. "
-                      "Na clonagem, escolha por cena entre render procedural, geometria real e PNG de imagem. "
-                      "Quando um PNG ganhar fidelidade, use editor_request_clone_images, abra o quadro "
-                      "associado via editor_get_asset, gere a imagem com transparência no host, importe "
-                      "como clone_resource e retome editor_prepare com reconstruction. Se a análise indicar que "
-                      "nenhuma cena requer imagem gerada, documente a escolha em no_generated_images_reason. "
+                      "Para clonar motion, use editor_request_clone_images ao exigir PNG, importe clone_resource e prepare reconstruction. "
+                      "editor_route_reference_scenes escolhe motores por cena; editor_run_scene_motion só executa provas 2D válidas, "
+                      "editor_audit_scene_batch registra divergências técnicas, e editor_apply_measured_motion vincula curvas 2D a novo material. "
                       "Execute editor_render somente após um plano atual válido. Consulte editor_get_project "
                       "para trabalhos e pendências. "
                       "Use editor_measure_motion com asset_id e janelas/ROIs explícitas para medir movimento; "
-                      "Para aplicar a trajetória 2D aprovada para uso, vincule measured_projection na "
-                      "preparação da reconstrução. Uma medição sozinha não aplica motion nem aprova o render. "
-                      "Com inventário atual, editor_route_reference_scenes escolhe motores com probes; só uma receita 2D autorada pode executar por editor_run_scene_motion. "
-                      "editor_audit_scene_batch mede e registra no máximo quatro cenas por lote sem aprovação estética; reconstruções exigem cobertura de QA para aprovação. "
+                      "o resultado é evidência por elemento, ainda sem aplicar motion ou aprovar render. "
                       "Não chame um pedido ou teste técnico de clonagem pronta, "
                       "nem registre aprovação do usuário sem confirmação explícita do arquivo atual. "
                       "Anexos do chat usam file params; o painel autoriza envio direto por editor_save_project "
@@ -324,7 +394,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     widget = {"openai/widgetAccessible": True}
 
     studio_metadata = {
-        "ui": {"prefersBorder": True, "csp": {"connectDomains": [base], "resourceDomains": [base]}},
+        "ui": {"prefersBorder": True, "csp": {"connectDomains": [base], "resourceDomains": [base, VIDEOAPI_BASE]}},
         "openai/ui": {"availableDisplayModes": ["inline", "fullscreen"], "preferredDisplayMode": "fullscreen"},
         "openai/widgetDescription": "Painel privado de clonagem de edição, aprovação, prompts e renderização do Editor Ultra.",
     }
@@ -346,6 +416,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """Abre o painel nativo e projetos privados, sem iniciar render nem aprovar arquivos."""
         return result({"project": snapshot(project_id) if project_id else None,
                        "projects": engine.list_projects(), "catalog_status": catalog.status(),
+                       "videoapi_enabled": videoapi_client.enabled,
                        "upload_capabilities": {"direct": True, "origin": base, "max_bytes": MAX_FILE_BYTES,
                                                "ticket_ttl_seconds": TICKET_TTL_SECONDS}}, "Editor Ultra aberto.")
 
@@ -395,6 +466,24 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         O comando state.ui_action='begin_upload', com upload_request estrito,
         apenas autoriza o envio direto e não salva escolhas ou revisões.
         """
+        if state.get("ui_action") == "videoapi_account":
+            if set(state) != {"ui_action"}:
+                raise ValueError("Comando de consulta VIDEOAPI inválido.")
+            return result({"videoapi_account": videoapi_client.account()}, "Saldo VIDEOAPI consultado.")
+        if state.get("ui_action") == "videoapi_refresh":
+            if set(state) != {"ui_action", "job_id"} or not isinstance(state.get("job_id"), str):
+                raise ValueError("Pedido de recuperação VIDEOAPI inválido.")
+            if not project_id or expected_revision is None:
+                raise ValueError("Projeto e revisão são obrigatórios para recuperar mídia.")
+            revision(project_id, expected_revision)
+            return result({"videoapi_job": videoapi_jobs.recover_media(project_id, state["job_id"])},
+                          "Resultado recuperado da VIDEOAPI sem criar outra geração.")
+        if state.get("ui_action") == "videoapi_generate" or "generation_request" in state:
+            command = UIVideoAPICommand.model_validate(state)
+            if not project_id or expected_revision is None:
+                raise ValueError("Projeto e revisão são obrigatórios para gerar.")
+            revision(project_id, expected_revision)
+            return submit_videoapi_generation(project_id, **command.generation_request.model_dump())
         if "ui_action" in state or "upload_request" in state:
             command = UIUploadCommand.model_validate(state)
             if not project_id or expected_revision is None:
@@ -461,8 +550,70 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             revision(project_id, expected_revision)
             if operation=="measure_motion":
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
+            if operation=="videoapi_import":
+                space_for()
+            if operation=="apply_motion":
+                space_for(96 * 1024 * 1024)
             job = queue.enqueue(project_id, operation, arguments, request_id)
             return result(job, "Trabalho registrado. Consulte o projeto para acompanhar a execução e o resultado.")
+
+    @server.tool(annotations=read, meta=widget)
+    @offload
+    def editor_videoapi_account() -> CallToolResult:
+        """Consulta saldo e preços da VIDEOAPI sem expor a chave nem realizar uma geração."""
+        return result({"videoapi_account": videoapi_client.account()}, "Saldo e custos de geração consultados.")
+
+    def submit_videoapi_generation(project_id: str, request_id: str, kind: str, prompt: str,
+                                   aspect_ratio: str, duration_seconds: int | None,
+                                   reference_asset_ids: list[str] | None = None) -> CallToolResult:
+        """Single secure implementation shared by new tools and the legacy UI-compatible command."""
+        engine.get_project(project_id)
+        images = []
+        for asset_id in reference_asset_ids or []:
+            path = engine.resolve_asset(project_id, asset_id)
+            mime = signer.mime(path)
+            if mime not in {"image/png", "image/jpeg", "image/webp"}:
+                raise VideoAPIError("reference_type", "Selecione uma imagem PNG, JPEG ou WebP do projeto.")
+            if path.stat().st_size > 3_000_000:
+                raise VideoAPIError("reference_size", "Imagem de referência muito grande. Use arquivo menor que 3 MB.")
+            filename = re.sub(r"[^A-Za-z0-9._-]", "_", path.name)[:80] or "referencia.png"
+            images.append({"mime_type": mime, "data_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
+                           "filename": filename})
+        payload = build_payload(kind, prompt, aspect_ratio, duration_seconds, images)
+        job = videoapi_jobs.submit(project_id, request_id, kind, payload)
+        return result({"videoapi_job": job}, "Pedido VIDEOAPI registrado. Acompanhe o status no projeto.")
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_videoapi_generate(
+        project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
+        request_id: Annotated[str, Field(min_length=1, max_length=96)],
+        kind: Literal["video", "image"],
+        prompt: Annotated[str, Field(min_length=1, max_length=5000)],
+        aspect_ratio: Literal["9:16", "16:9"] = "9:16",
+        duration_seconds: Literal[5, 10, 20, 30] | None = None,
+        reference_asset_ids: Annotated[list[str], Field(max_length=3)] | None = None,
+    ) -> CallToolResult:
+        """Paid generation with explicit user authorization, persistent ID and secure server-side key."""
+        return submit_videoapi_generation(project_id, request_id, kind, prompt, aspect_ratio,
+                                          duration_seconds, reference_asset_ids)
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_import_videoapi_result(
+        project_id: Annotated[str, Field(min_length=1, max_length=96, pattern=ID)],
+        videoapi_job_id: Annotated[str, Field(min_length=36, max_length=36)],
+        expected_revision: int, request_id: str,
+        shot_id: str | None = None,
+    ) -> CallToolResult:
+        """Importa vídeo concluído do ledger VIDEOAPI para a montagem do projeto.
+
+        Não gera outro vídeo, não cobra créditos nem aceita URL externa. Use
+        shot_id no modo generate; caso contrário entra como footage.
+        Arquivos importados passam por validação de vídeo e SHA-256 reais.
+        """
+        return enqueue(project_id, "videoapi_import", "generation_result", expected_revision,
+                       request_id, videoapi_job_id=videoapi_job_id, shot_id=shot_id)
 
     @server.tool(annotations=write, meta=widget)
     @offload
@@ -472,20 +623,6 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """Prepara evidência e direção. Em clone, avalie o pedido de imagens e use reconstruction para compor sobre footage independente."""
         params = {"reconstruction": reconstruction.model_dump(exclude_none=True)} if reconstruction else {}
         return enqueue(project_id, "prepare", kind, expected_revision, request_id, **params)
-
-    @server.tool(annotations=write)
-    @offload
-    def editor_request_clone_images(project_id: str, needs: Annotated[list[ImageNeed], Field(min_length=1, max_length=12)],
-                                    expected_revision: int) -> CallToolResult:
-        """Registra o que precisa de imagem. Gere no host com alpha, importe como clone_resource e associe ao ID via editor_prepare."""
-        queue.assert_idle(project_id)
-        with lock:
-            queue.assert_idle(project_id)
-            revision(project_id, expected_revision)
-            space_for(4 * 1024 * 1024)
-            return result(engine.request_clone_images(project_id, [n.model_dump() for n in needs],
-                                                     expected_revision=expected_revision),
-                          "Gere os PNGs transparentes solicitados no host e importe os arquivos reais antes da direção.")
 
     @server.tool(annotations=write)
     @offload
@@ -517,6 +654,21 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                        asset_id=asset_id,
                        specification=specification.model_dump(by_alias=True,exclude_none=True))
 
+    @server.tool(annotations=write)
+    @offload
+    def editor_request_clone_images(project_id: str, needs: Annotated[list[ImageNeed], Field(min_length=1, max_length=12)],
+                                    expected_revision: int) -> CallToolResult:
+        """Registra o que precisa de imagem. Gere no host com alpha, importe como clone_resource e associe ao ID via editor_prepare."""
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            space_for(4 * 1024 * 1024)
+            return result(engine.request_clone_images(project_id, [n.model_dump() for n in needs],
+                                                     expected_revision=expected_revision),
+                          "Gere os PNGs transparentes solicitados no host e importe os arquivos reais antes da direção.")
+
+
     @server.tool(annotations=write, meta=widget)
     @offload
     def editor_compare_clone(project_id: str, expected_revision: int, frames: list[int] | None = None) -> CallToolResult:
@@ -532,6 +684,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             return result(engine.compare_clone(project_id, frames, expected_revision=expected_revision),
                           "Comparação por quadro registrada. Fidelidade estética e aprovação continuam pendentes.")
 
+
     @server.tool(annotations=write)
     @offload
     def editor_queue_bundled_motion(project_id: str, recipe: dict[str, Any],
@@ -544,6 +697,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         return enqueue(project_id, "queue_bundled_motion", "motion", expected_revision,
                        request_id, recipe=recipe)
 
+
     @server.tool(annotations=write)
     @offload
     def editor_execute_bundled_motion(project_id: str, expected_revision: int,
@@ -554,6 +708,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """
         return enqueue(project_id, "execute_bundled_motion", "motion", expected_revision,
                        request_id)
+
 
     @server.tool(annotations=write, meta=widget)
     @offload
@@ -566,6 +721,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """
         return enqueue(project_id, "compare_temporal", "cadence", expected_revision,
                        request_id, center_s=center_s)
+
 
     @server.tool(annotations=write, meta=widget)
     @offload
@@ -582,6 +738,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         return enqueue(project_id, "route_scenes", "scene_plan", expected_revision,
                        request_id, choices=choices)
 
+
     @server.tool(annotations=write)
     @offload
     def editor_run_scene_motion(project_id: str, scene_id: str,
@@ -593,6 +750,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """
         return enqueue(project_id, "execute_scene_motion", "scene_motion",
                        expected_revision, request_id, scene_id=scene_id)
+
 
     @server.tool(annotations=write, meta=widget)
     @offload
@@ -606,6 +764,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         """
         return enqueue(project_id, "audit_scene_batch", "scene_qa", expected_revision,
                        request_id, scene_ids=scene_ids)
+
 
     @server.tool(annotations=write)
     @offload
@@ -622,6 +781,23 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             return result(engine.register_reference_scenes(project_id, manifest,
                                                            expected_revision=expected_revision),
                           "Inventário de eventos registrado como evidência autorada.")
+
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_apply_measured_motion(project_id: str,
+                                     specification: MotionApplicationSpecification,
+                                     expected_revision: int, request_id: str) -> CallToolResult:
+        """Aplica curvas de medição atual a uma imagem recortada com matte sobre NOVO bruto.
+
+        Esta prova 2D usa o renderer geometric_video e registra os quadros
+        realmente transformados. A fonte de referência jamais vira plate de
+        saída; exige asset IDs atuais, mapa temporal explícito e revisão visual
+        posterior. Não chama VIDEOAPI, não produz nova atuação nem gera custos.
+        """
+        return enqueue(project_id, "apply_motion", "motion_preview", expected_revision, request_id,
+                       specification=specification.model_dump(by_alias=True, exclude_none=True))
+
 
     @server.tool(annotations=write, meta=widget)
     @offload
@@ -833,7 +1009,7 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
 
     async def health(request):
         return JSONResponse({"service": "editor-ultra", "version": __version__, "status": "ok",
-                             "video_generation": "prompt_export_only", "ffmpeg": bool(shutil.which("ffmpeg"))})
+                             "video_generation": "prompt_export_only + optional_videoapi", "ffmpeg": bool(shutil.which("ffmpeg"))})
 
     async def home(request):
         return HTMLResponse("<!doctype html><html lang='pt-BR'><meta charset='utf-8'><title>Editor Ultra</title>"
@@ -855,16 +1031,19 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
     @asynccontextmanager
     async def lifespan(application):
         queue.start()
+        videoapi_jobs.start()
         try:
             async with original_lifespan(application):
                 yield
         finally:
+            videoapi_jobs.close()
             queue.close()
 
     app.router.lifespan_context = lifespan
     app.state.editor_engine = engine
     app.state.editor_catalog = catalog
     app.state.editor_queue = queue
+    app.state.editor_videoapi_jobs = videoapi_jobs
     app.state.editor_mcp = server
     app.state.editor_owner = owner
     app.state.editor_upload_tickets = tickets
