@@ -94,7 +94,8 @@ def implementation_fingerprint() -> dict:
              "visual_fidelity/anchor_graphics.py", "visual_fidelity/editorial_motion.py",
              "visual_fidelity/body_depth.py", "visual_fidelity/orbit_type.py",
              "audiovisual/semantic_audio.py", "editorial_engine/audio_render.py",
-             "editorial_engine/motion_assets.py"]
+             "editorial_engine/motion_assets.py", "visual_fidelity/native_motion.py",
+             "visual_fidelity/motion_binding.py", "visual_fidelity/motion_profile.py"]
     return {name: file_sha256(root / name) for name in names if (root / name).is_file()}
 
 
@@ -210,13 +211,23 @@ def _safe_quad(corners, protected, *, expansion=1.0):
 
 
 def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None = None,
-                  script_font: str | Path | None = None, style: dict | None = None) -> dict:
+                  script_font: str | Path | None = None, style: dict | None = None,
+                  measured_bindings: dict | None = None) -> dict:
     from visual_fidelity.body_depth import hand_track, orbit_track, verify_orbit
     from visual_fidelity.reference_cadence import video_clock
     from visual_fidelity.video_anchor import Prepared, render, screen_quad, quad
 
     require(bundle.get("schema") == BUNDLE_SCHEMA, "bundle_schema", "Unsupported contextual edit bundle")
     analysis, catalog, plan = bundle["analysis"], bundle["catalog"], bundle["plan"]
+    if measured_bindings is None:
+        measured_bindings = {}
+    require(isinstance(measured_bindings, dict) and len(measured_bindings) <= 6
+            and all(isinstance(k, str) and isinstance(v, dict)
+                    for k, v in measured_bindings.items()),
+            "measured_motion_contract", "Use at most six explicit decision-to-binding mappings")
+    decision_ids = {d["id"] for d in plan["decisions"]}
+    require(set(measured_bindings) <= decision_ids,
+            "measured_motion_decision", "Motion binding names an unknown editorial decision")
     validation = validate_plan(plan, analysis, catalog, verify_files=True)
     require(validation["executable_now"] and plan["validation"]["executable"],
             "plan_not_executable", "Every event needs an eligible explicit decision before rendering")
@@ -365,6 +376,16 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
             if kind in {"behind_subject", "motion_behind", "projected_behind"}:
                 matte = _matte(capabilities[bindings["matte"]], first, last, resolution, rate, count)
                 effect["occlusion"] = str(matte)
+            if decision["id"] in measured_bindings:
+                require(kind in {"overlay", "motion_layer"} and mode == "screen"
+                        and effect["animation"] == "hold" and not effect.get("shutter_fraction"),
+                        "measured_motion_scope",
+                        "Native measured curves require hold animation on a screen overlay or motion layer")
+                from visual_fidelity.native_motion import apply_measured_screen_quads
+                measured = measured_bindings[decision["id"]]
+                corners = apply_measured_screen_quads(
+                    corners, measured, resolution=resolution, fps=rate)
+                effect["_measured_binding"] = measured
             from visual_fidelity.anchor_graphics import motion
             speed = max(1, round(effect["entrance_seconds"] * rate))
             for index, points in corners.items():
@@ -415,16 +436,21 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                        "motion_frames": evidence if motion_layer is not None else None,
                        "sampled_orbit_evidence": evidence if motion_layer is None else []})
 
+    require(set(measured_bindings) <= {layer.effect["id"] for layer in layers
+                                     if "_measured_binding" in layer.effect},
+            "measured_motion_scope", "Each supplied binding must reach one compiled visual layer")
     depth_order = {"behind_subject": 0, "motion_behind": 0, "projected_behind": 0, "projected_asset": 1,
                    "overlay": 2, "motion_layer": 2, "kinetic_type": 2, "body_orbit": 3, "hand_accent": 4}
     layers.sort(key=lambda layer: (depth_order[layer.effect["native_operation"]], layer.first, layer.effect["id"]))
     require(output.suffix.lower() == (".mp4" if layers or cues else source_path.suffix.lower()),
             "output_container", "Native effects use MP4; byte-preserving output must keep the source extension")
     output.parent.mkdir(parents=True, exist_ok=True)
+    motion_usage = {}
     with tempfile.TemporaryDirectory(prefix="contextual-render-", dir=output.parent) as temporary:
         visual_output = Path(temporary) / "visual.mp4"
         if layers:
-            render(source_path, visual_output, resolution, rate, layers, Path(font) if font else None, Path("/"))
+            render(source_path, visual_output, resolution, rate, layers,
+                   Path(font) if font else None, Path("/"), motion_usage=motion_usage)
         else:
             shutil.copyfile(source_path, visual_output)
         audio_report = None
@@ -442,12 +468,27 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
         # The final path is created only after the full render and technical checks.
         with output.open("xb") as destination, final_output.open("rb") as rendered:
             shutil.copyfileobj(rendered, destination)
+    if measured_bindings:
+        from visual_fidelity.motion_binding import motion_use_report
+        consumption = motion_use_report(motion_usage)
+        for decision in plan["decisions"]:
+            if decision["id"] not in measured_bindings:
+                continue
+            first, last = _frames(decision["interval"], rate, count)
+            proofs = [row for row in consumption["bindings"]
+                      if row["target"] == "native:" + decision["id"]]
+            require(len(proofs) == 1 and proofs[0]["frames"] == list(range(first, last)),
+                    "measured_motion_not_consumed",
+                    "The encoded native render did not consume measured motion on every requested frame")
+    else:
+        consumption = None
     artifact = {"path": str(output), "sha256": file_sha256(output), "plan_sha256": plan["plan_sha256"],
                 "duration_s": float(count / rate), "clock": "output",
                 "decision_ids": [d["id"] for d in plan["decisions"]],
                 "source_sha256": source["sha256"], "fps": str(rate), "frame_count": count,
                 "implementation": expected_implementation, "render_settings": settings,
                 "render_settings_sha256": digest(settings), "compilation": checks, "audio": audio_report,
+                "measured_motion": consumption,
                 "technical_checks": {"decode": "pass", "source_unchanged": "pass", "clock": "pass"},
                 "perceptual_review": {"motion": "unverified", "audio": "unverified", "editorial": "unverified"},
                 "user_approval": "pending"}
