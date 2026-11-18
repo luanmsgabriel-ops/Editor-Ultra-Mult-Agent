@@ -234,7 +234,7 @@ class EngineAdapter:
         os.replace(temp, root / "record.json")
 
     def _public_file(self, item):
-        keys = ("id", "name", "type", "size", "sha256", "duration", "width", "height", "fps", "role", "shot_id", "hostFileId")
+        keys = ("id", "name", "type", "size", "sha256", "duration", "width", "height", "fps", "role", "shot_id", "hostFileId", "provenance")
         return {**{key: item[key] for key in keys if key in item}, "asset_id": item["id"],
                 "available": True, "server": True}
 
@@ -533,11 +533,19 @@ class EngineAdapter:
         return info
 
     def import_local_file(self, project_id, role, source: Path, filename: str, mime_type: str,
-                          shot_id=None, *, expected_revision=None, host_file_id=None):
+                          shot_id=None, *, expected_revision=None, host_file_id=None,
+                          provenance=None):
         require(role in ROLES, "asset_role", "Unsupported media role")
         require(isinstance(mime_type, str), "asset_type", "Declare a MIME type")
         if host_file_id is not None:
             require(bool(_text(host_file_id, 300).strip()), "host_file_id", "Use a nonempty host file identifier")
+        if provenance is not None:
+            require(isinstance(provenance, dict) and provenance.get("schema") == "videoapi-import/1"
+                    and role in {"footage", "shot"}
+                    and host_file_id == "videoapi:" + provenance.get("job_id", "")
+                    and all(isinstance(provenance.get(key), str) and provenance[key]
+                            for key in ("job_id", "provider_id", "original_request_id")),
+                    "media_provenance", "VIDEOAPI provenance must be linked to an original job receipt")
         allowed = {"narration": ("audio/",), "logo": ("image/",), "footage": ("video/",),
                    "result": ("video/",), "shot": ("video/",)}.get(role, ("video/", "image/"))
         require(mime_type.startswith(allowed), "asset_type", "Media type does not match the selected role")
@@ -581,6 +589,8 @@ class EngineAdapter:
                     "role": role, "shot_id": shot_id, **info}
             if host_file_id is not None:
                 item["hostFileId"] = host_file_id
+            if provenance is not None:
+                item["provenance"] = clone(provenance)
             if role in {"clone", "result"}:
                 item["basis_binding"] = self._preview_binding(record, "clone" if role == "clone" else "final")
             record["files"][identifier] = item
