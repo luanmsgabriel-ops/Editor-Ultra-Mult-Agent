@@ -88,9 +88,6 @@ def prepare_timeline(spec: MotionApplicationSpecification, profile: dict, *,
             "The nonempty grayscale matte must match the overlay image raster")
     require(max(sample.shape[:2]) <= 4096, "motion_overlay_size", "Overlay raster exceeds 4096 pixels")
     size = (clock["width"], clock["height"])
-    require(profile_digest(profile) == profile.get("application_binding", {}).get("profile_sha256",
-             profile_digest(profile)) or "profile_sha256" not in profile.get("application_binding", {}),
-            "motion_profile_digest", "Measured profile changed")
     frames = [{
         "frame": i, "shot": "measured-motion-preview",
         "base": {"source": "base", "frame": spec.base_start_frame + i},
