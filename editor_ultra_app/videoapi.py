@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import sqlite3
 import threading
 import time
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -53,6 +55,43 @@ def _error_from_http(status: int, body: dict) -> VideoAPIError:
     else:
         message = explanations.get(status, "Falha VIDEOAPI (HTTP " + str(status) + "): " + detail)
     return VideoAPIError("http_" + str(status), message, status)
+
+
+def safe_media_url(value: object) -> str | None:
+    """Validate provider-supplied playback/download HTTPS links; never fetch them server-side."""
+    if not isinstance(value, str) or not (0 < len(value) <= 4096):
+        return None
+    if value.startswith("/v1/"):
+        value = BASE_URL + value
+    try:
+        parsed = urlsplit(value)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        if (parsed.scheme != "https" or not host or "." not in host or
+                parsed.username or parsed.password or parsed.port not in (None, 443) or
+                any(c in value for c in "\r\n\x00")):
+            return None
+        if host == "localhost" or host.endswith((".localhost", ".local", ".internal", ".test")):
+            return None
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            if not address.is_global:
+                return None
+        return value
+    except ValueError:
+        return None
+
+
+def _media_fields(details: dict) -> tuple[str | None, str | None]:
+    nested = details.get("result")
+    nested = nested if isinstance(nested, dict) else {}
+    def first(*names):
+        return next((value for name in names for value in (safe_media_url(details.get(name)),
+                      safe_media_url(nested.get(name))) if value), None)
+    return (first("url", "preview_url", "video_url", "image_url", "output_url"),
+            first("download_url", "downloadUrl", "file_url", "output_url"))
 
 
 class VideoAPIClient:
@@ -240,6 +279,32 @@ class VideoAPIJobs:
         with self.lock, self._db() as db:
             return self._view(db.execute("SELECT * FROM videoapi_jobs WHERE job_id=?", (job_id,)).fetchone())
 
+    def recover_media(self, project_id: str, job_id: str) -> dict:
+        """GET-only recovery for a completed job; never submits or charges a second generation."""
+        with self.lock, self._db() as db:
+            row = db.execute("SELECT * FROM videoapi_jobs WHERE project_id=? AND job_id=?",
+                             (project_id, job_id)).fetchone()
+        if row is None:
+            raise VideoAPIError("job_missing", "Geração não encontrada neste projeto.")
+        if row["status"] != "done" or not row["provider_id"]:
+            raise VideoAPIError("not_done", "A geração ainda não terminou.")
+        details = self.client.status(row["kind"], row["provider_id"])
+        if details.get("status") != "done":
+            raise VideoAPIError("provider_not_done", "O provedor ainda não disponibilizou a mídia.")
+        preview, download = _media_fields(details)
+        if not preview and not download:
+            keys = ", ".join(sorted(k for k in details if isinstance(k, str) and
+                                     k not in {"prompt", "images", "metadata", "api_key"}))[:240]
+            raise VideoAPIError("media_missing", "Vídeo concluído, mas sem URLs compatíveis. Campos retornados: " + keys)
+        with self.lock, self._db() as db:
+            db.execute("""UPDATE videoapi_jobs SET url=?,download_url=?,expires_at=?,updated=?
+                          WHERE project_id=? AND job_id=? AND status='done'""",
+                       (preview or row["url"], download or row["download_url"],
+                        details.get("expires_at") or row["expires_at"], self.clock(), project_id, job_id))
+            updated = db.execute("SELECT * FROM videoapi_jobs WHERE project_id=? AND job_id=?",
+                                 (project_id, job_id)).fetchone()
+        return self._view(updated)
+
     def poll_due(self):
         now = self.clock()
         with self.lock, self._db() as db:
@@ -258,18 +323,15 @@ class VideoAPIJobs:
                 status = details.get("status")
                 if status not in {"queued", "generating", "done", "failed"}:
                     raise VideoAPIError("invalid_status", "Status desconhecido retornado pelo provedor.")
-                # Never accept javascript: or arbitrary media domains from response JSON.
-                def url(field):
-                    value = details.get(field)
-                    return value if isinstance(value, str) and value.startswith(BASE_URL + "/v1/") else None
+                preview, download = _media_fields(details)
                 with self.lock, self._db() as db:
                     db.execute("""UPDATE videoapi_jobs SET status=?,updated=?,next_poll=?,error=?,
                                   url=?,download_url=?,expires_at=?,duration_seconds=?,retry_count=0
                                   WHERE job_id=? AND status IN ('queued','generating','poll_retry')""",
                                (status, now, now + POLL_SECONDS,
                                 str(details.get("error") or "Falha sem detalhes.")[:1000] if status == "failed" else None,
-                                url("url") or url("preview_url") if status == "done" else None,
-                                url("download_url") if status == "done" else None,
+                                preview if status == "done" else None,
+                                download if status == "done" else None,
                                 details.get("expires_at") if status == "done" else None,
                                 details.get("duration_seconds") if status == "done" else None,
                                 row["job_id"]))
