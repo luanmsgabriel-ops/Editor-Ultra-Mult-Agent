@@ -182,7 +182,7 @@ class SceneBridgeMixin:
             work = Path(route["folder"]) / ("scene-" + scene_id)
             work.mkdir(parents=True, exist_ok=True)
             request = production_request(
-                "scene-" + scene_id + "-" + selected["motion_recipe_sha256"][:12],
+                "scene-" + scene_id[:48] + "-" + selected["motion_recipe_sha256"][:16],
                 "motion_recipe", prompt="Render an explicitly authored transparent 2D scene component",
                 output_kind="motion_layer", adapter_id="bundled.motion",
                 parameters={"backend": "motionlab", "recipe": recipe,
