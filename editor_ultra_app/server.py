@@ -651,6 +651,151 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                        asset_id=asset_id,
                        specification=specification.model_dump(by_alias=True,exclude_none=True))
 
+    @server.tool(annotations=write)
+    @offload
+    def editor_request_clone_images(project_id: str, needs: Annotated[list[ImageNeed], Field(min_length=1, max_length=12)],
+                                    expected_revision: int) -> CallToolResult:
+        """Registra o que precisa de imagem. Gere no host com alpha, importe como clone_resource e associe ao ID via editor_prepare."""
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            space_for(4 * 1024 * 1024)
+            return result(engine.request_clone_images(project_id, [n.model_dump() for n in needs],
+                                                     expected_revision=expected_revision),
+                          "Gere os PNGs transparentes solicitados no host e importe os arquivos reais antes da direção.")
+
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_compare_clone(project_id: str, expected_revision: int, frames: list[int] | None = None) -> CallToolResult:
+        """Compara os mesmos quadros da referência e da prévia, sem retime, ajuste ou aprovação.
+
+        Máximo de 16 quadros, selecionados pelo relógio real ou por índices explícitos. Retorna comparação, erros localizados
+        e imagem original/clone/diferença, com IDs de evidência vinculados ao projeto.
+        """
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            return result(engine.compare_clone(project_id, frames, expected_revision=expected_revision),
+                          "Comparação por quadro registrada. Fidelidade estética e aprovação continuam pendentes.")
+
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_queue_bundled_motion(project_id: str, recipe: dict[str, Any],
+                                   expected_revision: int, request_id: str) -> CallToolResult:
+        """Enfileira receita 2D declarativa e limitada no produtor Motion Lab já registrado.
+
+        Não usa pixels da referência para montar a animação; a autoria e a
+        execução são separadas, sem alegação de clonagem fiel.
+        """
+        return enqueue(project_id, "queue_bundled_motion", "motion", expected_revision,
+                       request_id, recipe=recipe)
+
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_execute_bundled_motion(project_id: str, expected_revision: int,
+                                      request_id: str) -> CallToolResult:
+        """Executa a receita atualmente enfileirada no motor local e registra recibo.
+
+        Uma sequência renderizada pode ser revisada; não recebe aprovação automática.
+        """
+        return enqueue(project_id, "execute_bundled_motion", "motion", expected_revision,
+                       request_id)
+
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_compare_temporal(project_id: str, center_s: float,
+                                expected_revision: int, request_id: str) -> CallToolResult:
+        """Agenda comparação de mudanças visuais e fluxo óptico em 3s da referência.
+
+        O relógio é extraído do MP4 no servidor. As medições são 2D,
+        sem inferir velocidade 3D, aprovar vídeo ou editar a referência.
+        """
+        return enqueue(project_id, "compare_temporal", "cadence", expected_revision,
+                       request_id, center_s=center_s)
+
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_route_reference_scenes(project_id: str, choices: dict[str, Any],
+                                      expected_revision: int, request_id: str) -> CallToolResult:
+        """Roteia TODAS as cenas do inventário com probes locais; NÃO executa por planejar.
+
+        needs: preserve, motion_graphic_2d, measured_motion_2d,
+        native_composite, typography_3d, environment_3d,
+        temporal_occlusion, synchronized_sfx ou new_actor_performance.
+        Para motion_graphic_2d, uma receita Motion Lab explícita pode ser
+        marcada pronta quando bater relógio, FPS e limites do motor.
+        """
+        return enqueue(project_id, "route_scenes", "scene_plan", expected_revision,
+                       request_id, choices=choices)
+
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_run_scene_motion(project_id: str, scene_id: str,
+                                expected_revision: int, request_id: str) -> CallToolResult:
+        """Executa um componente 2D pronto da cena através do produtor Motion Lab.
+
+        O recibo de execução é real e registra um motion_layer, mas NÃO cria
+        MP4 de clone, não aprova estética e não faz geração paga.
+        """
+        return enqueue(project_id, "execute_scene_motion", "scene_motion",
+                       expected_revision, request_id, scene_id=scene_id)
+
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_audit_scene_batch(project_id: str, scene_ids: Annotated[list[str],
+                                 Field(min_length=1, max_length=4)],
+                                 expected_revision: int, request_id: str) -> CallToolResult:
+        """Audita até quatro cenas da referência contra um clone real já recebido.
+
+        Comparação de quadros/fluxo no relógio exato, sem ajustar tempos,
+        supor fidelidade 3D ou registrar aprovação automática.
+        """
+        return enqueue(project_id, "audit_scene_batch", "scene_qa", expected_revision,
+                       request_id, scene_ids=scene_ids)
+
+
+    @server.tool(annotations=write)
+    @offload
+    def editor_register_reference_scenes(project_id: str, manifest: dict[str, Any],
+                                         expected_revision: int) -> CallToolResult:
+        """Registra eventos observados e incertezas com cobertura total do relógio da referência.
+
+        Não descobre conteúdo automaticamente, não reconstrói frames e não aprova a prévia.
+        """
+        queue.assert_idle(project_id)
+        with lock:
+            queue.assert_idle(project_id)
+            revision(project_id, expected_revision)
+            return result(engine.register_reference_scenes(project_id, manifest,
+                                                           expected_revision=expected_revision),
+                          "Inventário de eventos registrado como evidência autorada.")
+
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_apply_measured_motion(project_id: str,
+                                     specification: MotionApplicationSpecification,
+                                     expected_revision: int, request_id: str) -> CallToolResult:
+        """Aplica curvas de medição atual a uma imagem recortada com matte sobre NOVO bruto.
+
+        Esta prova 2D usa o renderer geometric_video e registra os quadros
+        realmente transformados. A fonte de referência jamais vira plate de
+        saída; exige asset IDs atuais, mapa temporal explícito e revisão visual
+        posterior. Não chama VIDEOAPI, não produz nova atuação nem gera custos.
+        """
+        return enqueue(project_id, "apply_motion", "motion_preview", expected_revision, request_id,
+                       specification=specification.model_dump(by_alias=True, exclude_none=True))
+
+
     @server.tool(annotations=write, meta=widget)
     @offload
     def editor_record_review(project_id: str, kind: Literal["clone", "final"],
