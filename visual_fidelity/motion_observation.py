@@ -27,7 +27,7 @@ from .anchor_tracking import _looks_like_cut
 
 SCHEMA = 'element-motion-observations/1'
 SPEC_SCHEMA = 'element-motion-measurement/1'
-METHOD = 'opencv_lk_seed_local_visible_support_v2'
+METHOD = 'opencv_lk_seed_local_visible_support_v3'
 _DEFAULTS = {
     'max_corners': 240,
     'min_points': 6,
@@ -266,7 +266,7 @@ def _visible_support(seed_points, inlier_points, matrix, size, initial_hull, set
                    'support_policy': 'visible_raster_with_original_hull_floor'}
 
 
-def _reanchor(seed_image, current, original, matrix, settings, flow, size):
+def _reanchor_at_level(seed_image, current, original, matrix, settings, flow, size, level):
     """Refine against seed texture after compensating the provisional transform.
 
     Adjacent-frame LK alone accumulates patch-shape bias during rotations/zoom.
@@ -278,7 +278,7 @@ def _reanchor(seed_image, current, original, matrix, settings, flow, size):
         flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
     # The provisional transform already removes gross motion. Coarse pyramids
     # here mix invalid warp borders into small seed ROIs and lose valid texture.
-    local_flow = {**flow, "maxLevel": 0}
+    local_flow = {**flow, "maxLevel": level}
     corrected, status, _ = cv2.calcOpticalFlowPyrLK(seed_image, aligned, original, None, **local_flow)
     if corrected is None or status is None:
         return None
@@ -307,12 +307,23 @@ def _reanchor(seed_image, current, original, matrix, settings, flow, size):
     projected = original[:, 0] @ refined[:, :2].T + refined[:, 2]
     residual = np.linalg.norm(projected - current_points[:, 0], axis=1)
     return refined, original[inliers], current_points[inliers], {
-        'seed_reanchored': True, 'refinement_pyramid_levels': 0,
+        'seed_reanchored': True, 'refinement_pyramid_levels': level,
         'refinement_support': 'fresh_original_seed_features', 'seed_reanchor_inliers': int(inliers.sum()),
         'seed_reanchor_inlier_ratio': float(inliers.mean()),
         'seed_reanchor_reprojection_median_px': float(np.median(residual[inliers])),
         'seed_reanchor_reprojection_p90_px': float(np.percentile(residual[inliers], 90)),
     }
+
+
+def _reanchor(seed_image, current, original, matrix, settings, flow, size):
+    primary = _reanchor_at_level(seed_image, current, original, matrix, settings, flow, size, 0)
+    if primary is not None:
+        return primary
+    # Try one finer bounded pyramid when local correspondences cannot handle
+    # remaining scale/focus changes after compensation. Do not skip the caller's
+    # independent geometric support checks or bridge a gap.
+    level = min(1, flow['maxLevel'])
+    return _reanchor_at_level(seed_image, current, original, matrix, settings, flow, size, level) if level else None
 
 
 def _observe(index, pts, segment, matrix, center, quad, previous_angle, diagnostics):
