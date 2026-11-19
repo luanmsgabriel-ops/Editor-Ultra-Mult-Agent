@@ -93,6 +93,7 @@ def implementation_fingerprint() -> dict:
     root = Path(__file__).resolve().parents[1]
     names = ["visual_fidelity/shot_boundaries.py", "editorial_engine/native.py", "visual_fidelity/video_anchor.py",
              "visual_fidelity/anchor_graphics.py", "visual_fidelity/editorial_motion.py",
+             "visual_fidelity/focus_pulse.py", "visual_fidelity/liquid_glass.py",
              "visual_fidelity/body_depth.py", "visual_fidelity/orbit_type.py",
              "audiovisual/semantic_audio.py", "editorial_engine/audio_render.py",
              "editorial_engine/motion_assets.py", "visual_fidelity/native_motion.py",

@@ -1,0 +1,11 @@
+# Per-effect evidence gate and material primitives
+
+The renderer may produce a technically valid MP4 that misses a required material, layer, phase, shape or anchor. Use an independently computed witness for each applicable effect before declaring the visual delivery eligible. Do not infer fidelity from an alpha layer, tool receipt, or global similarity.
+
+- `visual_fidelity.liquid_glass` bends the pixels of the current framebuffer and provides a controlled, zero-displacement ablation. Material support is not recovered optics and is not evidence of matching the reference by itself. Explicit mattes must match the rendered frame and never may fail silently for this operation.
+- `visual_fidelity.foreground_keyframes` provides independent typed layer paths with bounded, neutral bookends and no declared shot crossing.
+- `editorial_engine.effect_gate.audit` aggregates independently verified per-effect metrics. Pin source, reference, render and recipe hashes, a policy of allowed metric ranges and a separate clip-specific fixture of phase pairs. Missing or unverified evidence blocks; violations fail; mechanically witnessed effects are only eligible for aesthetic review. The synthetic test fixture is not a default policy for new videos.
+- Integration points: build per-effect intents and reference/target phase pairs during analysis; validate material/anchor before allocating a layer; capture independent controlled before/after renders for optical and motion proof; evaluate protected-area masks on the final timed render. A blocked motion anchor must not be replaced by arbitrary screen coordinates. Only a trusted verifier may supply witnesses; the render recipe does not choose them.
+- This branch adds the core rendering primitive and the validation library, not automatic recognition of effects from arbitrary input, an enabled hosted delivery gate, or approval for any production render.
+
+For a local delivery job, call `python -m editorial_engine.effect_gate --source ... --reference ... --render ... --recipe ... --policy ... --fixture ... --reports ... --witness-dir ...` with a trusted witness directory. Exit 2 means the delivery is blocked or needs changes. Exit 0 permits human review, not aesthetic or production approval.

@@ -1,0 +1,187 @@
+{
+  "schema": "ultra-effect-policy/1",
+  "scope": "Per-effect capability profiles. Programs choose the applicable profiles and frame pairs as fixture input; illustrative/ref-specific thresholds need calibration per profile.",
+  "effects": {
+    "I03.projected_type": {
+      "requirements": {
+        "motion_quad_valid": [
+          1,
+          1
+        ],
+        "foreground_delta_outside_face_mask_px": [
+          100,
+          null
+        ],
+        "protected_overlap_px": [
+          0,
+          0
+        ],
+        "phase_error_frames": [
+          0,
+          2
+        ],
+        "moving_foreground_separate_from_static_plate": [
+          1,
+          1
+        ],
+        "occlusion_qa_checked": [
+          1,
+          1
+        ]
+      }
+    },
+    "R02.glass_subtle": {
+      "requirements": {
+        "displacement_material_rendered": [
+          1,
+          1
+        ],
+        "refraction_witness_mean_px": [
+          0.6,
+          24
+        ],
+        "outside_material_changed_px": [
+          0,
+          0
+        ],
+        "phase_error_frames": [
+          0,
+          2
+        ],
+        "anchor_verified": [
+          1,
+          1
+        ]
+      }
+    },
+    "R02.glass_warm_peak": {
+      "requirements": {
+        "displacement_material_rendered": [
+          1,
+          1
+        ],
+        "refraction_witness_mean_px": [
+          0.6,
+          24
+        ],
+        "outside_material_changed_px": [
+          0,
+          0
+        ],
+        "phase_error_frames": [
+          0,
+          2
+        ],
+        "serif_short_bright_word_phase": [
+          1,
+          1
+        ],
+        "localized_warm_halo_witness": [
+          1,
+          1
+        ]
+      }
+    },
+    "W03.text_hierarchy": {
+      "requirements": {
+        "distinct_verified_glyph_bands": [
+          3,
+          3
+        ],
+        "upper_glyph_height_over_width": [
+          1.6,
+          8
+        ],
+        "arc_signed_curvature_matches": [
+          1,
+          1
+        ],
+        "lower_word_span_over_safe_width": [
+          0.72,
+          1
+        ],
+        "protected_overlap_px": [
+          0,
+          0
+        ],
+        "phase_error_frames": [
+          0,
+          2
+        ]
+      }
+    },
+    "C02.warm": {
+      "requirements": {
+        "primary_stripe_color_groups": [
+          3,
+          4
+        ],
+        "emitter_side_right": [
+          1,
+          1
+        ],
+        "target_local_glow_energy_ratio": [
+          1.15,
+          6
+        ],
+        "source_caption_roundness_verified": [
+          1,
+          1
+        ],
+        "phase_error_frames": [
+          0,
+          2
+        ]
+      }
+    },
+    "C02.cool": {
+      "requirements": {
+        "primary_stripe_color_groups": [
+          3,
+          4
+        ],
+        "emitter_side_right": [
+          0,
+          0
+        ],
+        "target_local_glow_energy_ratio": [
+          1.15,
+          6
+        ],
+        "source_caption_roundness_verified": [
+          1,
+          1
+        ],
+        "phase_error_frames": [
+          0,
+          2
+        ]
+      }
+    },
+    "C05.hand_clusters": {
+      "anchor": "hands_two_sides",
+      "requirements": {
+        "minimum_hand_track_confidence": [
+          0.75,
+          1
+        ],
+        "hand_anchors_visible_count": [
+          2,
+          2
+        ],
+        "cluster_center_distance_over_palm_width": [
+          0,
+          1.25
+        ],
+        "nonhand_anchor_count": [
+          0,
+          0
+        ],
+        "phase_error_frames": [
+          0,
+          2
+        ]
+      }
+    }
+  }
+}

@@ -295,15 +295,19 @@ def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None, bod
     return Prepared(effect,first,last,corners,palette,audit,pixels,glyph_profile,aspect,body,requested,events,masks)
 
 
-def occlusion_at(root, spec, index, shape):
+def occlusion_at(root, spec, index, shape, *, strict=False):
     folder=root/spec
     path=folder/f'{index:06d}.png'
     if not path.is_file():
+        if strict:
+            raise ValueError(f'Missing required foreground matte for frame {index}')
         return None
     image=cv2.imread(str(path),cv2.IMREAD_GRAYSCALE)
     if image is None:
         raise ValueError(f'Máscara não pôde ser decodificada: {path}')
     if image.shape!=shape:
+        if strict:
+            raise ValueError(f'Foreground matte dimensions do not match frame {index}')
         image=cv2.resize(image,(shape[1],shape[0]),interpolation=cv2.INTER_LINEAR)
     return image
 
@@ -324,6 +328,15 @@ def render(picture, destination, resolution, fps, layers, font, root, *, motion_
                 if index not in layer.corners:
                     continue
                 effect=layer.effect
+                if 'liquid_glass' in effect:
+                    from .liquid_glass import composite_liquid_glass
+                    optics = effect['liquid_glass']
+                    if not isinstance(optics, dict) or set(optics) - {'strength_px', 'opacity', 'bevel_px', 'glow'}:
+                        raise ValueError('Invalid liquid glass parameters')
+                    matte = (occlusion_at(root, effect['occlusion'], index, frame.shape[:2], strict=True)
+                             if effect.get('occlusion') else None)
+                    composite_liquid_glass(frame, layer.corners[index], protection=matte, **optics)
+                    continue
                 if 'body_depth' in effect:
                     compositor = composite_orbit_context if effect['body_depth']['kind']=='orbit' else composite_hand_context
                     compositor(frame,layer,index,fps)
