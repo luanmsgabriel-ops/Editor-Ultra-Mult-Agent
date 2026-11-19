@@ -72,10 +72,13 @@ class CloneResources(StrictModel):
     matte_asset_id: AssetId | None = None
     font_asset_id: AssetId | None = None
     script_font_asset_id: AssetId | None = None
+    font_pack_asset_id: AssetId | None = None
 
 
     @model_validator(mode="after")
     def one_projection(self):
+        if self.font_pack_asset_id and (self.font_asset_id or self.script_font_asset_id):
+            raise ValueError("Bind either a reusable font pack or individual legacy fonts")
         if sum(bool(option) for option in (self.projection_asset_id, self.projection_assets, self.measured_projection)) > 1:
             raise ValueError("Choose either authored quads or one measured trajectory")
         return self

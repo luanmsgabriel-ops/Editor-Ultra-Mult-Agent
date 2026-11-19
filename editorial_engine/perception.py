@@ -1,7 +1,7 @@
 """Prepare factual evidence and native capabilities without inventing semantics.
 
-Source frames are sampled for a human or multimodal director. Pixel differences
-are candidate cuts, not a learned scene detector. Pose, masks and transcript
+Source frames are sampled for a human or multimodal director. Cut and transition
+evidence is heuristic, not a learned scene detector. Pose, masks and transcript
 must already identify the same source. Semantic interpretation is a separate,
 explicit step in directions.py.
 """
@@ -47,7 +47,8 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
                      pose=None, mattes=None, protection=None, projection=None,
                      assets=None, sample_every_s=1.0) -> dict:
     from visual_fidelity.reference_cadence import video_clock
-    from visual_fidelity.video_anchor import frames_of, quad, shot_starts
+    from visual_fidelity.video_anchor import frames_of, quad
+    from visual_fidelity.shot_boundaries import ALGORITHM, detect_shot_boundaries
     from visual_fidelity.adaptive_template import inspect_pose
 
     source, work = Path(source).resolve(), Path(work).resolve()
@@ -63,7 +64,7 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
     analysis = {"schema_version": "1.0", "sources": [source_record], "evidence": [],
                 "events": [], "capabilities": [],
                 "preparation": {"semantic_status": "awaiting_direction", "sample_every_s": sample_every_s,
-                                "cut_detector": "pixel_difference_candidate", "audio_semantics": "unverified"}}
+                                "cut_detector": ALGORITHM, "audio_semantics": "unverified"}}
     def location(first=0, last=count):
         return {"source_id": "source", "source_sha256": source_hash, "clock": "source",
                 "interval": {"start_s": float(first / rate), "end_s": float(last / rate)}}
@@ -93,15 +94,26 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
         resolution = resolution or image.shape[1::-1]
         mini.append(cv2.resize(image, (72, 48), interpolation=cv2.INTER_AREA))
     require(len(mini) == count, "decode_count", "Decoded source count differs from the source clock")
-    cuts = shot_starts(mini)
+    cut_evidence = detect_shot_boundaries(mini, rate)
+    cuts = cut_evidence["shot_starts"]
     del mini
-    evidence("source-clock", "metadata", f"CFR source: {count} frames at {rate} fps. Pixel cut candidates: {cuts}.")
+    evidence("source-clock", "metadata", f"CFR source: {count} frames at {rate} fps. Shot starts incl. frame zero: {cuts}.")
+    for index, transition in enumerate(cut_evidence["transitions"]):
+        start, end = transition["start_frame"], transition["end_frame_exclusive"]
+        evidence(f"transition:{index}", "metadata",
+                 f"Heuristic {transition['kind']} at source frames [{start}, {end}); review the matching samples.",
+                 start, end)
 
     stride = max(1, round(sample_every_s * float(rate)))
     sample_ids = {0, count - 1, *range(0, count, stride)}
     around = max(1, round(.12 * float(rate)))
     for cut in cuts:
         sample_ids.update(i for i in (cut - around, cut - 1, cut, cut + 1, cut + around) if 0 <= i < count)
+    for transition in cut_evidence["transitions"]:
+        if transition["kind"] != "hard_cut_candidate":
+            start, end = transition["start_frame"], transition["end_frame_exclusive"]
+            sample_ids.update(i for i in (start - 1, start, (start + end) // 2, end - 1, end)
+                              if 0 <= i < count)
     (work / "frames").mkdir()
     for index, image in enumerate(frames_of(source)):
         if index == 0:
@@ -152,7 +164,7 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
 
     backend = probe_native_backend()
     runtime = receipt("native-runtime", {"kind": "native_runtime", "implementation": implementation_fingerprint(),
-                "cut_candidates": cuts, "operations": list(OPERATIONS),
+                "cut_candidates": cut_evidence["tracking_breaks"], "content_cut_candidates": cuts, "cut_evidence": cut_evidence, "operations": list(OPERATIONS),
                 "checks": {"source_decode": "pass", "ffmpeg_present": True, "ffprobe_present": True,
                            "opencv": cv2.__version__, "backend": backend, "applied_to_source": False}})
     for operation in OPERATIONS:
@@ -317,3 +329,4 @@ def prepare_analysis(source: str | Path, work: str | Path, *, transcript=None,
     write_json(work / "analysis.json", analysis)
     write_json(work / "catalog.json", native_catalog())
     return analysis
+

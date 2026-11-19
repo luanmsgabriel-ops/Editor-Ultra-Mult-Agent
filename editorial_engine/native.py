@@ -11,6 +11,7 @@ from __future__ import annotations
 from fractions import Fraction
 import json
 import math
+from unicodedata import normalize
 from pathlib import Path
 import shutil
 import subprocess
@@ -26,7 +27,7 @@ from .planner import validate_plan
 
 BUNDLE_SCHEMA = "contextual-edit/1"
 OPERATIONS = ("kinetic_type", "overlay", "behind_subject", "projected_asset",
-              "body_orbit", "hand_accent", "sfx_spot", "motion_layer", "motion_behind", "projected_behind")
+              "body_orbit", "hand_accent", "sfx_spot", "motion_layer", "motion_behind", "projected_behind", "liquid_glass")
 
 
 def native_catalog() -> dict:
@@ -48,6 +49,12 @@ def native_catalog() -> dict:
     return {"schema_version": "1.0", "effects": [
         effect("native.kinetic_type", "kinetic_type", ["emphasize", "explain", "identify"],
                requirements=["protected_regions"], parameters=title),
+        effect("native.liquid_glass", "liquid_glass", ["emphasize", "reveal", "visualize_concept"],
+               requirements=["protected_regions"], bindings={"protection": "protected_regions"},
+               parameters={"strength_px": {"type": "number", "minimum": .1, "maximum": 32},
+                           "opacity": {"type": "number", "minimum": .01, "maximum": 1},
+                           "bevel_px": {"type": "number", "minimum": 2, "maximum": 64},
+                           "glow": {"type": "number", "minimum": 0, "maximum": 1}}),
         effect("native.overlay", "overlay", ["visualize_concept", "emphasize", "reveal"],
                requirements=["protected_regions"], bindings={"asset": "image_asset"}, parameters=animation),
         effect("native.behind_subject", "behind_subject", ["visualize_concept", "spatial_relation", "reveal"],
@@ -90,8 +97,9 @@ def native_catalog() -> dict:
 
 def implementation_fingerprint() -> dict:
     root = Path(__file__).resolve().parents[1]
-    names = ["editorial_engine/native.py", "visual_fidelity/video_anchor.py",
+    names = ["visual_fidelity/shot_boundaries.py", "editorial_engine/native.py", "visual_fidelity/video_anchor.py",
              "visual_fidelity/anchor_graphics.py", "visual_fidelity/editorial_motion.py",
+             "visual_fidelity/focus_pulse.py", "visual_fidelity/liquid_glass.py",
              "visual_fidelity/body_depth.py", "visual_fidelity/orbit_type.py",
              "audiovisual/semantic_audio.py", "editorial_engine/audio_render.py",
              "editorial_engine/motion_assets.py", "visual_fidelity/native_motion.py",
@@ -321,6 +329,24 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
             frame_map = placement(motion_layer, source_sha256=source["sha256"], fps=rate, frame_count=count,
                                   first=first, last=last, asset_start_frame=params.get("asset_start_frame", 0))
             effect["motion_frames"] = frame_map
+        if kind == "liquid_glass":
+            require("region" in decision["proposal"], "glass_region", "Glass requires an explicit screen region")
+            require(operation["anchor"]["space"] == "screen" and set(bindings) == {"protection"},
+                    "glass_bindings", "Glass needs only an explicit protection binding, never a background asset")
+            protection_id = bindings["protection"]
+            require(protection_id in decision["capability_ids"] and capabilities[protection_id]["name"] == "protected_regions",
+                    "glass_protection", "Bound protection must be a consumed protected-regions capability")
+            bound_decision = {**decision, "capability_ids": [protection_id]}
+            protected = _protected(capabilities, bound_decision, source, rate, count)
+            optics = {"strength_px": params.get("strength_px", 10.), "opacity": params.get("opacity", .9),
+                      "bevel_px": params.get("bevel_px", 18.), "glow": params.get("glow", 0.)}
+            # Region is the total reserved body+halo envelope, not just glass core.
+            padding = math.ceil(4 * max(2., optics["bevel_px"] * .7)) if optics["glow"] else 2
+            require(min(w*resolution[0], h*resolution[1]) > 2*padding+20,
+                    "glass_region_small", "Reserved region cannot contain lens and glow margin")
+            gx, gy = padding/resolution[0], padding/resolution[1]
+            effect.update({"liquid_glass": optics, "_planned_glass": True,
+                           "_glass_protected": protected, "_glass_region": bounds})
         art_w, art_h = w, h
         center = (x + w / 2, y + h / 2)
         # region reserves the full animated envelope, not just the final pose.
@@ -339,6 +365,8 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
             pixel_w = min(art_w * resolution[0], art_h * resolution[1] * aspect)
             art_w, art_h = pixel_w / resolution[0], pixel_w / aspect / resolution[1]
         corners = {i: screen_quad(center, (art_w, art_h)) for i in range(first, last)}
+        if kind == "liquid_glass":
+            corners = {i: screen_quad(center, (w-2*gx, h-2*gy)) for i in range(first, last)}
         pixel_size = (max(4, round(art_w * resolution[0])), max(4, round(art_h * resolution[1])))
         mode, evidence = "screen", []
         if kind in {"body_orbit", "hand_accent"}:
@@ -351,9 +379,9 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
             if kind == "body_orbit":
                 track = orbit_track(pose, protected, first, last, matte)
                 require(len(track) == last - first, "orbit_unavailable", "Measured scene cannot support the requested orbit over every frame")
-                evidence = verify_orbit(track, resolution, matte, params["title"], str(font), tuple(style["ink"]), float(rate))
+                evidence = verify_orbit(track, resolution, matte, normalize("NFC", params["title"]), str(font), tuple(style["ink"]), float(rate))
                 require(bool(evidence), "orbit_passes", "Orbit did not demonstrate front/rear visibility and occlusion")
-                effect["body_depth"] = {"kind": "orbit", "title": params["title"], "font": str(font),
+                effect["body_depth"] = {"kind": "orbit", "title": normalize("NFC", params["title"]), "font": str(font),
                                         "mattes": str(matte), "ink": style["ink"]}
                 mode = "body_orbit"
             else:
@@ -401,14 +429,15 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                             protected[index], opacity=opacity, matte=mask,
                             min_visible=params.get("min_visible_fraction", 0),
                             min_glyph_visible=params.get("min_glyph_visible_fraction")))
-                    elif kind not in {"behind_subject", "projected_behind"}:
+                    elif kind not in {"behind_subject", "projected_behind", "liquid_glass"}:
                         _safe_quad(visible_points, protected[index])
             if kind == "kinetic_type":
                 require(bool(params["title"].strip()), "empty_title", "Typography requires a nonempty title")
                 effect["editorial_scene"] = {"kind": "kinetic_type",
-                    "cue": {"title": params["title"], "script": params.get("subtitle", "")},
+                    "cue": {"title": normalize("NFC", params["title"]),
+                            "script": normalize("NFC", params.get("subtitle", ""))},
                     "style": style, "condensed": str(font), "script": str(script_font)}
-            elif motion_layer is None:
+            elif motion_layer is None and kind != "liquid_glass":
                 receipt = _read_receipt(capabilities[bindings["asset"]])
                 require(receipt.get("kind") == "image_asset", "receipt_kind", "Expected a prepared image asset")
                 _bound_file(receipt, receipt["path"])
@@ -440,19 +469,29 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                                      if "_measured_binding" in layer.effect},
             "measured_motion_scope", "Each supplied binding must reach one compiled visual layer")
     depth_order = {"behind_subject": 0, "motion_behind": 0, "projected_behind": 0, "projected_asset": 1,
-                   "overlay": 2, "motion_layer": 2, "kinetic_type": 2, "body_orbit": 3, "hand_accent": 4}
+                   "liquid_glass": 2, "overlay": 2, "motion_layer": 2, "kinetic_type": 2, "body_orbit": 3, "hand_accent": 4}
     layers.sort(key=lambda layer: (depth_order[layer.effect["native_operation"]], layer.first, layer.effect["id"]))
     require(output.suffix.lower() == (".mp4" if layers or cues else source_path.suffix.lower()),
             "output_container", "Native effects use MP4; byte-preserving output must keep the source extension")
     output.parent.mkdir(parents=True, exist_ok=True)
     motion_usage = {}
+    glass_usage = {}
     with tempfile.TemporaryDirectory(prefix="contextual-render-", dir=output.parent) as temporary:
         visual_output = Path(temporary) / "visual.mp4"
         if layers:
             render(source_path, visual_output, resolution, rate, layers,
-                   Path(font) if font else None, Path("/"), motion_usage=motion_usage)
+                   Path(font) if font else None, Path("/"), motion_usage=motion_usage, glass_usage=glass_usage)
         else:
             shutil.copyfile(source_path, visual_output)
+        for layer in layers:
+            if layer.effect.get("_planned_glass"):
+                executed = glass_usage.get(layer.effect["id"], [])
+                require([row["frame"] for row in executed] == list(range(layer.first, layer.last)),
+                        "glass_not_consumed", "Glass must execute on every requested frame")
+                require(all(row["protected_modified_pixels"] == 0 and row["outside_modified_pixels"] == 0 for row in executed),
+                        "glass_protection", "Glass modified protected/outside pixels")
+                require(any(row["body_alpha_max"] > 0 for row in executed),
+                        "glass_invisible", "Protection masks hide the entire glass interval")
         audio_report = None
         if cues:
             from .audio_render import mix_sfx
@@ -489,6 +528,7 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
                 "implementation": expected_implementation, "render_settings": settings,
                 "render_settings_sha256": digest(settings), "compilation": checks, "audio": audio_report,
                 "measured_motion": consumption,
+                "liquid_glass_execution": glass_usage or None,
                 "technical_checks": {"decode": "pass", "source_unchanged": "pass", "clock": "pass"},
                 "perceptual_review": {"motion": "unverified", "audio": "unverified", "editorial": "unverified"},
                 "user_approval": "pending"}

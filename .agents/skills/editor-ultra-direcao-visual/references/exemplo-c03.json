@@ -1,0 +1,7 @@
+{
+  "schema": "ultra-local-visual-direction/1",
+  "reference": {"clip": "referencia-exemplo", "evidence_frames": [344,345,346,347,348], "observation": "After the title clears, teal crests span both edges, concentrate into lateral dots, then persist only at the bottom. The color picks up contrast in darker regions; it does not act like an evenly luminous display over a bright surface."},
+  "destination": {"clip": "bruto-exemplo", "clock_fps": 24, "size": [720,1280], "event": "post-title optical handoff", "start": 220, "end_exclusive": 223, "frame_pairs": [[345,220],[346,221],[347,222]], "protection": "all middle rows and bright portions of the actual target plate; the cream vertical surface is not an emitter"},
+  "effect": {"operator": "native.plate_conditioned_edge_ripple", "change": "attenuate extra emission over bright target pixels", "highlight_guard": {"low_rgb_luma": 95, "high_rgb_luma": 190, "remaining_peak_gain": 0.25}, "scope": "same geometry/timing, local light gain only"},
+  "acceptance": {"strong_difference": 24, "phase_difference": 12, "min_peak_per_edge_at_12": 200, "min_bottom_tail_at_12": 10, "max_top_tail_at_12": 10, "max_center_strong": 40, "min_bright_suppression_relative_to_prior": 0.65, "min_dark_peak_preserved": 0.80}
+}

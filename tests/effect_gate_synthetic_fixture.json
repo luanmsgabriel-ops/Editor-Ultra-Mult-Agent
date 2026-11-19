@@ -1,0 +1,33 @@
+{
+  "schema": "ultra-effect-fixture/1",
+  "pairs": {
+    "I03.projected_type": [
+      5,
+      3
+    ],
+    "R02.glass_subtle": [
+      12,
+      8
+    ],
+    "R02.glass_warm_peak": [
+      19,
+      13
+    ],
+    "W03.text_hierarchy": [
+      26,
+      18
+    ],
+    "C02.warm": [
+      33,
+      23
+    ],
+    "C02.cool": [
+      40,
+      28
+    ],
+    "C05.hand_clusters": [
+      47,
+      33
+    ]
+  }
+}

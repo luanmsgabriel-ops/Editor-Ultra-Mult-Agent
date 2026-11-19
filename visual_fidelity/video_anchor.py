@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -12,6 +13,7 @@ from tempfile import TemporaryDirectory
 import cv2
 import numpy as np
 
+from .shot_boundaries import detect_shot_boundaries
 from .anchor_camera import parse_colmap, project
 from .anchor_graphics import composite, composite_shutter, make_art, motion
 from .anchor_tracking import track_planar
@@ -48,16 +50,9 @@ def quad(value):
     return points
 
 
-def shot_starts(frames):
-    cuts=[0]
-    if not len(frames):
-        return cuts
-    mini=[cv2.resize(frame,(72,48),interpolation=cv2.INTER_AREA) for frame in frames]
-    for index,(previous,current) in enumerate(zip(mini,mini[1:]),1):
-        diff=np.mean(cv2.absdiff(previous,current))
-        if diff>32 and np.count_nonzero(np.max(cv2.absdiff(previous,current),axis=2)>38)>.42*72*48:
-            cuts.append(index)
-    return cuts
+def shot_starts(frames, fps=30):
+    mini = (cv2.resize(frame, (72, 48), interpolation=cv2.INTER_AREA) for frame in frames)
+    return detect_shot_boundaries(mini, fps)["tracking_breaks"]
 
 
 def interval(effect, fps):
@@ -301,20 +296,24 @@ def prepare(effect, frames, cuts, fps, resolution, root, occupied, ocr=None, bod
     return Prepared(effect,first,last,corners,palette,audit,pixels,glyph_profile,aspect,body,requested,events,masks)
 
 
-def occlusion_at(root, spec, index, shape):
+def occlusion_at(root, spec, index, shape, *, strict=False):
     folder=root/spec
     path=folder/f'{index:06d}.png'
     if not path.is_file():
+        if strict:
+            raise ValueError(f'Missing required foreground matte for frame {index}')
         return None
     image=cv2.imread(str(path),cv2.IMREAD_GRAYSCALE)
     if image is None:
         raise ValueError(f'Máscara não pôde ser decodificada: {path}')
     if image.shape!=shape:
+        if strict:
+            raise ValueError(f'Foreground matte dimensions do not match frame {index}')
         image=cv2.resize(image,(shape[1],shape[0]),interpolation=cv2.INTER_LINEAR)
     return image
 
 
-def render(picture, destination, resolution, fps, layers, font, root, *, motion_usage=None):
+def render(picture, destination, resolution, fps, layers, font, root, *, motion_usage=None, focus_pulses=(), glass_usage=None):
     w,h=resolution
     command=['ffmpeg','-v','error','-y','-f','rawvideo','-pixel_format','bgr24','-video_size',
              f'{w}x{h}','-framerate',str(fps),'-i','-','-i',str(picture),'-map','0:v:0',
@@ -323,10 +322,40 @@ def render(picture, destination, resolution, fps, layers, font, root, *, motion_
     cache={}
     with subprocess.Popen(command,stdin=subprocess.PIPE) as encoder:
         for index,frame in enumerate(frames_of(picture)):
+            if focus_pulses:
+                from .focus_pulse import apply_focus_pulses
+                frame=apply_focus_pulses(frame,index,focus_pulses)
             for layer_id, layer in enumerate(layers):
                 if index not in layer.corners:
                     continue
                 effect=layer.effect
+                if 'liquid_glass' in effect:
+                    from .liquid_glass import composite_liquid_glass
+                    optics = effect['liquid_glass']
+                    if not isinstance(optics, dict) or set(optics) - {'strength_px', 'opacity', 'bevel_px', 'glow'}:
+                        raise ValueError('Invalid liquid glass parameters')
+                    matte = (occlusion_at(root, effect['occlusion'], index, frame.shape[:2], strict=True)
+                             if effect.get('occlusion') else None)
+                    receipt = None
+                    if effect.get('_planned_glass'):
+                        if glass_usage is None:
+                            raise ValueError('Planned glass requires an execution receipt collector')
+                        x, y, rw, rh = effect['_glass_region']
+                        protection = np.full(frame.shape[:2], 255, np.uint8)
+                        height, width = frame.shape[:2]
+                        protection[math.ceil(y*height):math.floor((y+rh)*height),
+                                   math.ceil(x*width):math.floor((x+rw)*width)] = 0
+                        for x0,y0,x1,y1 in effect['_glass_protected'][index]:
+                            protection[math.floor(y0*height):math.ceil(y1*height),
+                                       math.floor(x0*width):math.ceil(x1*width)] = 255
+                        matte = protection if matte is None else np.maximum(matte, protection)
+                        receipt = {}
+                    composite_liquid_glass(frame, layer.corners[index], protection=matte, receipt=receipt, **optics)
+                    if receipt is not None:
+                        glass_usage.setdefault(effect['id'], []).append({"frame": index, **receipt,
+                            "optics": dict(optics), "protection_applied": True,
+                            "perceptual_review": "unverified"})
+                    continue
                 if 'body_depth' in effect:
                     compositor = composite_orbit_context if effect['body_depth']['kind']=='orbit' else composite_hand_context
                     compositor(frame,layer,index,fps)
@@ -460,7 +489,7 @@ def main():
                 raise ValueError('Nenhum quadro decodificado.')
             resolution=original.shape[1::-1]
             frames=list(frames_of(picture,analysis=True))
-            cuts=shot_starts(frames)
+            cuts=shot_starts(frames, args.fps)
             occupied=defaultdict(list)
             ocr=None
             if args.ocr_language:
@@ -493,4 +522,5 @@ def main():
 
 if __name__=='__main__':
     main()
+
 

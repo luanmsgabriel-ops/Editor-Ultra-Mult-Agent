@@ -2,11 +2,57 @@
 
 Fluxo de edição no Codex com nove agentes, nove skills e comandos para inventário de mídia, catálogo com escopo no Drive, curadoria, validação de cortes e áudio em amostras, renderização e auditoria. O piloto Oníria mantém um plano editorial definido e recompila a variante com novos SFX. A direção escolhe os cortes e aprova os efeitos com evidência. O motor valida, aplica e confere o que foi aprovado.
 
-## Começar no Codex
+## Comece por aqui
 
-Abra o repositório no Codex com acesso aos arquivos do projeto. Informe fontes, referência, destino e raízes permitidas do Drive. Peça ao coordenador para executar `AGENTS.md` e produzir um plano com timecodes, catálogo, cortes e uma versão comparável. Os papéis do Codex ficam em `.codex/agents` e os procedimentos em `.agents/skills`. [Documentação de agentes](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+Esta página descreve a branch de teste do [PR #18](https://github.com/luanmsgabriel-ops/Editor-Ultra-Mult-Agent/pull/18). O modo **Só efeitos** roda por comando local nesta branch. Não está na interface publicada do Studio.
 
-O repo usa Python 3.11+ e ffprobe. O piloto requer FFmpeg (libass, zscale e libx264), NumPy e fontes do sistema. Reconstruir o letreiro requer também Blender e Pillow.
+1. Abra esta branch do repositório no Codex com acesso aos arquivos que vai usar. Peça ao coordenador para seguir `AGENTS.md` e a [skill de direção visual](.agents/skills/editor-ultra-direcao-visual/SKILL.md). Os papéis ficam em `.codex/agents` e os procedimentos em `.agents/skills`.
+2. Escolha o resultado abaixo e anexe só o material necessário. Diga o formato, a duração e o que precisa ficar intacto. Para Drive, indique apenas as raízes autorizadas.
+3. Revise a direção ou a prévia antes de aprovar o arquivo final. Um teste técnico confirma que o arquivo foi produzido; a comparação visual confirma se os efeitos servem para a entrega.
+
+| Quero… | O que enviar e pedir | Onde continuar |
+| --- | --- | --- |
+| Criar um motion do zero | Briefing, duração, formato e materiais de marca. Ex.: “Crie um motion vertical de 10 s para anunciar meu produto.” | [Criação de motion](#criação-de-motion-e-aplicação-ao-bruto) |
+| Recriar só os efeitos | Uma referência, sem segundo vídeo. Ex.: “Recrie só os efeitos em um vídeo novo; mantenha o ritmo e use formas autorais no lugar do personagem.” | [Só efeitos](#só-efeitos) |
+| Aplicar efeitos ao meu vídeo | Referência e bruto autorizado. Ex.: “Traga a tipografia e o ritmo da referência, mas preserve a fala e o enquadramento do bruto.” | [Direção contextual](#direção-contextual-de-novos-vídeos) |
+| Só analisar | Uma referência. Ex.: “Mapeie os efeitos, cortes e timecodes. Não renderize.” | [Dossiê de referência](docs/reference-direction.md) |
+| Organizar um projeto inteiro | Fontes, referência, destino e os recursos disponíveis. | [Projeto Clone](#projeto-clone-da-entrada-à-entrega) |
+| Preparar uma geração externa | Briefing, personagens e arquivos visuais autorizados. Exporte os prompts ou use um adaptador explicitamente configurado. | [Direção e geração de prompts](#direção-e-geração-de-prompts-de-vídeo) |
+
+**Requisitos:** Python 3.11 ou superior, FFmpeg e FFprobe. O modo Só efeitos também usa Pillow. A auditoria visual usa NumPy. Os requisitos dos fluxos mais completos variam: o piloto Oníria usa FFmpeg com libass, zscale e libx264 e fontes do sistema; a reconstrução de letreiro também usa Blender. Veja [o inventário e os testes](#inventário-e-verificação-do-projeto).
+
+## Só efeitos
+
+A referência serve para **analisar** cortes, progressão, tipografia, transições e camadas. Não entra como imagem, pessoa ou áudio na nova composição.
+
+1. **Mapeie a referência.** Anote os intervalos por quadro, a ordem de desenho e o que precisa ser recriado. Separe observações de hipóteses. Se o efeito depende da posição de uma pessoa ou objeto, proponha uma base autoral para demonstrá-lo.
+2. **Prepare os recursos.** Use a fonte exata quando tiver o arquivo autorizado. Se não tiver, crie no chat o lettering para as frases necessárias (SVG editável) ou um arquivo de fonte reutilizável, conforme a cobertura. Crie também os ícones que faltarem em SVG ou PNG transparente e registre a origem. [Protocolo de tipografia e ícones](.agents/skills/editor-ultra-direcao-visual/references/tipografia-e-icones.md).
+3. **Monte e renderize uma receita.** Parta do [manifesto sintético](fixtures/effects-only-synthetic.json) e do [contrato do modo autônomo](.agents/skills/editor-ultra-direcao-visual/references/reconstrucao-autonoma.md). O comando recebe JSON, não o MP4 de referência. O renderizador atual aceita **legenda, painel animado e pulso** em camadas. Tracking, ícones externos, máscaras complexas, 3D, B-roll e áudio exigem outro executor ou precisam ser marcados como não suportados por este comando. Não há extração automática.
+4. **Valide.** Compare a entrada, o pico e a saída dos efeitos com a referência. Em revisão pontual, compare duas versões do mesmo relógio e proteja a área fora do ajuste. [Checklist de revisão](docs/visual-direction-checklist.md).
+
+### Primeiro render local
+
+Execute na raiz do repositório. Use uma pasta de saída nova ou vazia.
+
+```sh
+python -m pip install Pillow
+ffmpeg -version
+ffprobe -version
+python -m editorial_engine.effects_only fixtures/effects-only-synthetic.json --out out/efeitos-sinteticos
+```
+
+A saída contém `effects.mkv` (master FFV1 sem perdas e sem áudio), `manifest.json` e `receipt.json`, com tempos e hashes dos quadros. A prova sintética tem 48 quadros a 24 FPS. Ela prova a composição e a exportação locais, não a fidelidade de uma referência inédita.
+
+### Checar uma revisão pontual
+
+Depois de renderizar duas versões, use `--compare` com as duas pastas. Neste exemplo, só o quadro 17 (numeração desde zero) pode mudar e apenas dentro do retângulo autorizado:
+
+```sh
+python -m editorial_engine.effects_only --compare out/antes out/depois --window 17 18 --region 120 74 215 100
+python -m pytest -q tests/test_effects_only.py
+```
+
+O fim do intervalo é exclusivo. A área usa esquerda, topo, direita e base. A checagem rejeita mudanças fora do intervalo ou da área, incompatibilidade de tempos e arquivos alterados após o registro. Isso não substitui a revisão lado a lado nem garante que um MP4 recomprimido preserve todos os pixels do master. Se a checagem falhar, mantenha a versão estável e relate o que mudou.
 
 ## Projeto Clone: da entrada à entrega
 
