@@ -308,7 +308,7 @@ def occlusion_at(root, spec, index, shape):
     return image
 
 
-def render(picture, destination, resolution, fps, layers, font, root, *, motion_usage=None):
+def render(picture, destination, resolution, fps, layers, font, root, *, motion_usage=None, focus_pulses=()):
     w,h=resolution
     command=['ffmpeg','-v','error','-y','-f','rawvideo','-pixel_format','bgr24','-video_size',
              f'{w}x{h}','-framerate',str(fps),'-i','-','-i',str(picture),'-map','0:v:0',
@@ -317,6 +317,9 @@ def render(picture, destination, resolution, fps, layers, font, root, *, motion_
     cache={}
     with subprocess.Popen(command,stdin=subprocess.PIPE) as encoder:
         for index,frame in enumerate(frames_of(picture)):
+            if focus_pulses:
+                from .focus_pulse import apply_focus_pulses
+                frame=apply_focus_pulses(frame,index,focus_pulses)
             for layer_id, layer in enumerate(layers):
                 if index not in layer.corners:
                     continue
