@@ -1,0 +1,80 @@
+{
+  "schema": "editor-ultra-effects-only/1",
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "fps": 24,
+    "duration_frames": 48,
+    "background": "#192434"
+  },
+  "reference": {
+    "sha256": "450561955246997fc6694a8a22f895e3e5145a7a2a87ecfe9c366ed66de052da",
+    "usage": "analysis_only"
+  },
+  "audio": {
+    "mode": "silent",
+    "provenance": "none"
+  },
+  "effects": [
+    {
+      "id": "slide",
+      "kind": "panel",
+      "start_frame": 0,
+      "end_frame": 20,
+      "z": 2,
+      "provenance": "authored_primitive",
+      "params": {
+        "x": 8,
+        "y": 58,
+        "x_end": 184,
+        "y_end": 58,
+        "width": 112,
+        "height": 45,
+        "color": "#2392a5"
+      }
+    },
+    {
+      "id": "impact",
+      "kind": "pulse",
+      "start_frame": 16,
+      "end_frame": 29,
+      "z": 0,
+      "provenance": "authored_primitive",
+      "params": {
+        "x": 80,
+        "y": 40,
+        "width": 156,
+        "height": 96,
+        "color": "#f79932"
+      }
+    },
+    {
+      "id": "before",
+      "kind": "caption",
+      "start_frame": 17,
+      "end_frame": 18,
+      "z": 3,
+      "provenance": "authored_primitive",
+      "params": {
+        "x": 128,
+        "y": 80,
+        "color": "#ffffff",
+        "text": "ANTES"
+      }
+    },
+    {
+      "id": "complete",
+      "kind": "caption",
+      "start_frame": 18,
+      "end_frame": 43,
+      "z": 3,
+      "provenance": "authored_primitive",
+      "params": {
+        "x": 128,
+        "y": 80,
+        "color": "#ffffff",
+        "text": "ANTES DE VIAJAR"
+      }
+    }
+  ]
+}

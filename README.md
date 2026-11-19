@@ -8,6 +8,20 @@ Abra o repositório no Codex com acesso aos arquivos do projeto. Informe fontes,
 
 O repo usa Python 3.11+ e ffprobe. O piloto requer FFmpeg (libass, zscale e libx264), NumPy e fontes do sistema. Reconstruir o letreiro requer também Blender e Pillow.
 
+## Reconstrução por referência
+
+Use a [skill de direção visual](.agents/skills/editor-ultra-direcao-visual/SKILL.md). Diga qual resultado quer:
+
+- **“Recrie só os efeitos em um vídeo novo.”** Envie uma referência. O Editor Ultra faz o inventário dos efeitos e recria sua linguagem em um vídeo independente, com cenário, objetos e camadas autorais; não precisa de vídeo bruto e não reutiliza pixels, áudio ou pessoas da referência. Veja [o modo autônomo](.agents/skills/editor-ultra-direcao-visual/references/reconstrucao-autonoma.md).
+- **“Aplique esses efeitos ao meu bruto.”** Envie referência e bruto autorizado. Siga [a direção contextual](docs/contextual-editing.md) para preservar ações e sincronizar por evento.
+- **“Só analise.”** Envie a referência para receber inventário e especificação, sem render.
+
+Quando faltar a fonte exata licenciada, crie aqui no chat um arquivo tipográfico ou lockup SVG; faça o mesmo para ícones faltantes (SVG ou PNG transparente). Não substitua em silêncio. [Protocolo de tipografia e ícones](.agents/skills/editor-ultra-direcao-visual/references/tipografia-e-icones.md).
+
+A rotina de auditoria local usa Python 3.11+, NumPy, FFmpeg e FFprobe. Confirme o suporte dos operadores no motor da versão em uso. Compare assinatura dos efeitos com a referência e meça regressões entre dois renders do **mesmo** projeto e relógio; veja [o checklist por versão](docs/visual-direction-checklist.md). Teste sintético não equivale a validação visual com referência inédita. A skill não envia mídia a um provedor nem dispara geração externa por padrão.
+
+A prova local inicial, quando presente na versão do motor, pode ser reproduzida com `python -m editorial_engine.effects_only fixtures/effects-only-synthetic.json --out out/efeitos-sinteticos` (Python 3.11+, Pillow, FFmpeg e FFprobe; destino novo/vazio). Ela gera um master sem perdas e sem áudio com primitivas autorais de tipografia, movimento de painel e pulso. Isso testa a renderização de uma receita independente; **não** implica extração automática ou suporte a tracking, máscaras complexas, 3D ou B-roll.
+
 ## Projeto Clone: da entrada à entrega
 
 `python -m editorial_engine project` conecta os motores em um projeto persistente: entradas com papel explícito, direção, produção de recursos, retorno dos clipes, montagem real, acabamento, revisão e pacote de entrega. O estado aponta a próxima ação e os arquivos que perderam validade quando uma fonte ou decisão muda. As onze entradas incluem editar um bruto, montar vários, adaptar referência, recompor com novas filmagens/pessoas, gerar sem referência, partir de imagens/áudio/roteiro, preencher lacunas, personalizar templates, receber clipes e revisar versões.
