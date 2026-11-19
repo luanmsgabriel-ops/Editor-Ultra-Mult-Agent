@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -312,7 +313,7 @@ def occlusion_at(root, spec, index, shape, *, strict=False):
     return image
 
 
-def render(picture, destination, resolution, fps, layers, font, root, *, motion_usage=None, focus_pulses=()):
+def render(picture, destination, resolution, fps, layers, font, root, *, motion_usage=None, focus_pulses=(), glass_usage=None):
     w,h=resolution
     command=['ffmpeg','-v','error','-y','-f','rawvideo','-pixel_format','bgr24','-video_size',
              f'{w}x{h}','-framerate',str(fps),'-i','-','-i',str(picture),'-map','0:v:0',
@@ -335,7 +336,25 @@ def render(picture, destination, resolution, fps, layers, font, root, *, motion_
                         raise ValueError('Invalid liquid glass parameters')
                     matte = (occlusion_at(root, effect['occlusion'], index, frame.shape[:2], strict=True)
                              if effect.get('occlusion') else None)
-                    composite_liquid_glass(frame, layer.corners[index], protection=matte, **optics)
+                    receipt = None
+                    if effect.get('_planned_glass'):
+                        if glass_usage is None:
+                            raise ValueError('Planned glass requires an execution receipt collector')
+                        x, y, rw, rh = effect['_glass_region']
+                        protection = np.full(frame.shape[:2], 255, np.uint8)
+                        height, width = frame.shape[:2]
+                        protection[math.ceil(y*height):math.floor((y+rh)*height),
+                                   math.ceil(x*width):math.floor((x+rw)*width)] = 0
+                        for x0,y0,x1,y1 in effect['_glass_protected'][index]:
+                            protection[math.floor(y0*height):math.ceil(y1*height),
+                                       math.floor(x0*width):math.ceil(x1*width)] = 255
+                        matte = protection if matte is None else np.maximum(matte, protection)
+                        receipt = {}
+                    composite_liquid_glass(frame, layer.corners[index], protection=matte, receipt=receipt, **optics)
+                    if receipt is not None:
+                        glass_usage.setdefault(effect['id'], []).append({"frame": index, **receipt,
+                            "optics": dict(optics), "protection_applied": True,
+                            "perceptual_review": "unverified"})
                     continue
                 if 'body_depth' in effect:
                     compositor = composite_orbit_context if effect['body_depth']['kind']=='orbit' else composite_hand_context
