@@ -11,6 +11,7 @@ from __future__ import annotations
 from fractions import Fraction
 import json
 import math
+from unicodedata import normalize
 from pathlib import Path
 import shutil
 import subprocess
@@ -351,9 +352,9 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
             if kind == "body_orbit":
                 track = orbit_track(pose, protected, first, last, matte)
                 require(len(track) == last - first, "orbit_unavailable", "Measured scene cannot support the requested orbit over every frame")
-                evidence = verify_orbit(track, resolution, matte, params["title"], str(font), tuple(style["ink"]), float(rate))
+                evidence = verify_orbit(track, resolution, matte, normalize("NFC", params["title"]), str(font), tuple(style["ink"]), float(rate))
                 require(bool(evidence), "orbit_passes", "Orbit did not demonstrate front/rear visibility and occlusion")
-                effect["body_depth"] = {"kind": "orbit", "title": params["title"], "font": str(font),
+                effect["body_depth"] = {"kind": "orbit", "title": normalize("NFC", params["title"]), "font": str(font),
                                         "mattes": str(matte), "ink": style["ink"]}
                 mode = "body_orbit"
             else:
@@ -406,7 +407,8 @@ def render_bundle(bundle: dict, output: str | Path, *, font: str | Path | None =
             if kind == "kinetic_type":
                 require(bool(params["title"].strip()), "empty_title", "Typography requires a nonempty title")
                 effect["editorial_scene"] = {"kind": "kinetic_type",
-                    "cue": {"title": params["title"], "script": params.get("subtitle", "")},
+                    "cue": {"title": normalize("NFC", params["title"]),
+                            "script": normalize("NFC", params.get("subtitle", ""))},
                     "style": style, "condensed": str(font), "script": str(script_font)}
             elif motion_layer is None:
                 receipt = _read_receipt(capabilities[bindings["asset"]])

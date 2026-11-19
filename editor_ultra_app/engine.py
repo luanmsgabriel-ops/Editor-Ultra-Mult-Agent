@@ -33,6 +33,7 @@ from .clone_resources import (
 )
 from editorial_engine.contracts import ValidationError, clone, digest, file_sha256, require, verify_file
 from .scene_bridge import SceneBridgeMixin
+from .font_gate import FontGateError, MAX_FONT_BYTES, select_fonts, typography_texts
 
 
 ROLES = {"ref", "clone", "footage", "identity", "narration", "logo", "result", "shot", "clone_resource"}
@@ -1161,6 +1162,25 @@ class EngineAdapter(SceneBridgeMixin):
             if identifier:
                 resource(identifier, ("font/ttf", "font/otf"))
                 fonts[name] = identifier
+        font_pack_id = spec.font_pack_asset_id
+        if font_pack_id:
+            manifest_path, manifest_item = resource(font_pack_id, ("application/json",))
+            inspect_resource(manifest_path, manifest_item["type"])
+            pack = json.loads(manifest_path.read_text(encoding="utf-8"))
+            styles = pack.get("styles")
+            require(isinstance(styles, dict) and "font" in styles
+                    and set(styles) <= {"font", "script_font"},
+                    "font_styles_invalid", "Provide a headline font and optional script font")
+            def resolve_font(asset_id):
+                path, item = resource(asset_id, ("font/ttf", "font/otf"))
+                require(path.stat().st_size <= MAX_FONT_BYTES,
+                        "font_binary_invalid", "Font exceeds the font-pack size limit")
+                return path.read_bytes()
+            try:
+                verified = select_fonts(pack, dict.fromkeys(styles, ""), resolve_font)
+            except FontGateError as exc:
+                require(False, str(exc).split(":")[0], str(exc))
+            fonts = {key: item["font_asset_id"] for key, item in verified.items()}
         matte_path = (resource(spec.matte_asset_id, ("application/zip",))[0]
                       if spec.matte_asset_id else None)
         directory = self._new_engine(record, "clone", [self._input(base, "footage")], "edit",
@@ -1210,7 +1230,8 @@ class EngineAdapter(SceneBridgeMixin):
         stage = record["engines"]["clone"]
         stage.update(status="awaiting_direction", preview_kind="reconstruction",
                      image_request_digest=digest(request), image_needs=needs, clock=clock,
-                     image_bindings=bindings, fonts=fonts, reference_sha256=reference["sha256"],
+                     image_bindings=bindings, fonts=fonts, font_pack_asset_id=font_pack_id,
+                     reference_sha256=reference["sha256"],
                      no_generated_images_reason=spec.no_generated_images_reason,
                      base_sha256=base["sha256"], base_asset_id=base["id"])
         return {"kind": "clone", "status": "awaiting_direction", "preview_kind": "reconstruction",
@@ -1391,6 +1412,24 @@ class EngineAdapter(SceneBridgeMixin):
                                 not any(d["effect_id"] in {"native.kinetic_type", "native.body_orbit"}
                                         for d in compiled["decisions"]),
                                 "font_missing", "Bind the chosen TTF or OTF before preparing typography")
+                        if stage.get("font_pack_asset_id"):
+                            texts = typography_texts(compiled)
+                            if not texts:
+                                return
+                            if "script_font" in texts and "script_font" not in stage["fonts"]:
+                                texts["font"] += "\n" + texts.pop("script_font")
+                            manifest_path = self.resolve_asset(record["project_id"], stage["font_pack_asset_id"])
+                            pack = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+                            def resolve_font(asset_id):
+                                require(asset_id in stage["fonts"].values(), "font_asset_invalid",
+                                        "Use only fonts verified during clone preparation")
+                                return self.resolve_asset(record["project_id"], asset_id).read_bytes()
+
+                            try:
+                                select_fonts(pack, texts, resolve_font)
+                            except FontGateError as exc:
+                                require(False, str(exc).split(":")[0], str(exc))
                 engine.accept_direction(directory, plan, kind="generation" if kind == "generation" else "edit",
                                         validate_edit_plan=check_plan)
             before = self._clone_binding(record), self._edit_binding(record)
@@ -1444,6 +1483,8 @@ class EngineAdapter(SceneBridgeMixin):
                 require(stage["image_request_digest"] == digest(self._current_clone_images(record)),
                         "clone_images_changed", "Prepare and apply direction for the current image requirements")
                 self.resolve_asset(project_id, stage["base_asset_id"])
+                if stage.get("font_pack_asset_id"):
+                    self.resolve_asset(project_id, stage["font_pack_asset_id"])
                 font_paths = {key: self.resolve_asset(project_id, identifier)
                               for key, identifier in stage["fonts"].items()}
                 for item in stage["image_bindings"].values():
