@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 import cv2
 import numpy as np
 
+from .shot_boundaries import detect_shot_boundaries
 from .anchor_camera import parse_colmap, project
 from .anchor_graphics import composite, composite_shutter, make_art, motion
 from .anchor_tracking import track_planar
@@ -48,16 +49,9 @@ def quad(value):
     return points
 
 
-def shot_starts(frames):
-    cuts=[0]
-    if not len(frames):
-        return cuts
-    mini=[cv2.resize(frame,(72,48),interpolation=cv2.INTER_AREA) for frame in frames]
-    for index,(previous,current) in enumerate(zip(mini,mini[1:]),1):
-        diff=np.mean(cv2.absdiff(previous,current))
-        if diff>32 and np.count_nonzero(np.max(cv2.absdiff(previous,current),axis=2)>38)>.42*72*48:
-            cuts.append(index)
-    return cuts
+def shot_starts(frames, fps=30):
+    mini = (cv2.resize(frame, (72, 48), interpolation=cv2.INTER_AREA) for frame in frames)
+    return detect_shot_boundaries(mini, fps)["tracking_breaks"]
 
 
 def interval(effect, fps):
@@ -460,7 +454,7 @@ def main():
                 raise ValueError('Nenhum quadro decodificado.')
             resolution=original.shape[1::-1]
             frames=list(frames_of(picture,analysis=True))
-            cuts=shot_starts(frames)
+            cuts=shot_starts(frames, args.fps)
             occupied=defaultdict(list)
             ocr=None
             if args.ocr_language:
@@ -493,4 +487,5 @@ def main():
 
 if __name__=='__main__':
     main()
+
 
