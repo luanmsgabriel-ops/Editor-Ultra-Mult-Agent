@@ -7,7 +7,10 @@ seed coordinates. RGB activity is only a diagnostic, never a velocity estimate.
 
 Intervals are [start, end); cuts name the first frame of the new shot. A cut or
 lost track requires a new, explicit seed (normally a new element/measurement).
-No interpolation, frame repetition, re-identification or model download occurs.
+Refinement re-measures original seed features locally after compensation.
+Partial raster exit uses visible support with an original-area floor, never an
+occlusion waiver. No interpolation, frame repetition, re-identification or model
+download occurs.
 """
 from fractions import Fraction
 import hashlib
@@ -24,7 +27,7 @@ from .anchor_tracking import _looks_like_cut
 
 SCHEMA = 'element-motion-observations/1'
 SPEC_SCHEMA = 'element-motion-measurement/1'
-METHOD = 'opencv_lk_forward_backward_ransac_similarity'
+METHOD = 'opencv_lk_seed_local_visible_support_v2'
 _DEFAULTS = {
     'max_corners': 240,
     'min_points': 6,
@@ -236,6 +239,33 @@ def _hull_area(points):
     return cv2.contourArea(cv2.convexHull(np.asarray(points, dtype=np.float32))) if len(points) >= 3 else 0.
 
 
+def _visible_support(seed_points, inlier_points, matrix, size, initial_hull, settings):
+    """Keep the support threshold on the geometrically visible seed, not lost pixels.
+
+    An off-raster portion cannot provide matches. This does NOT excuse occlusion
+    inside the raster: all such seed points remain in the denominator. Absolute
+    feature count, original-hull floor and two-axis spread remain required.
+    """
+    projected = seed_points[:, 0] @ matrix[:, :2].T + matrix[:, 2]
+    visible = np.all((projected >= 0) & (projected < np.asarray(size)), axis=1)
+    visible_hull = _hull_area(seed_points[visible, 0])
+    support_hull = _hull_area(inlier_points[:, 0])
+    visible_fraction = visible_hull / max(initial_hull, 1.)
+    ratio = support_hull / max(visible_hull, 1.)
+    spread = np.ptp(inlier_points[:, 0], axis=0) if len(inlier_points) else np.zeros(2)
+    valid = (len(inlier_points) >= settings['min_points']
+             and visible_fraction >= settings['min_spatial_coverage']
+             and support_hull / max(initial_hull, 1.) >= settings['min_spatial_coverage'] / 3
+             and ratio >= settings['min_spatial_coverage']
+             and np.min(spread) >= 8.)
+    return valid, {'seed_feature_hull_coverage': support_hull / max(initial_hull, 1.),
+                   'visible_seed_hull_fraction': visible_fraction,
+                   'visible_support_coverage': ratio,
+                   'minimum_original_inlier_hull_fraction': settings['min_spatial_coverage'] / 3,
+                   'seed_support_span_px': spread.tolist(),
+                   'support_policy': 'visible_raster_with_original_hull_floor'}
+
+
 def _reanchor(seed_image, current, original, matrix, settings, flow, size):
     """Refine against seed texture after compensating the provisional transform.
 
@@ -246,14 +276,17 @@ def _reanchor(seed_image, current, original, matrix, settings, flow, size):
     """
     aligned = cv2.warpAffine(current, matrix, size,
         flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-    corrected, status, _ = cv2.calcOpticalFlowPyrLK(seed_image, aligned, original, None, **flow)
+    # The provisional transform already removes gross motion. Coarse pyramids
+    # here mix invalid warp borders into small seed ROIs and lose valid texture.
+    local_flow = {**flow, "maxLevel": 0}
+    corrected, status, _ = cv2.calcOpticalFlowPyrLK(seed_image, aligned, original, None, **local_flow)
     if corrected is None or status is None:
         return None
     forward = status.ravel().astype(bool) & np.isfinite(corrected[:, 0]).all(axis=1)
     original, corrected = original[forward], corrected[forward]
     if len(corrected) < settings['min_points']:
         return None
-    backward, status, _ = cv2.calcOpticalFlowPyrLK(aligned, seed_image, corrected, None, **flow)
+    backward, status, _ = cv2.calcOpticalFlowPyrLK(aligned, seed_image, corrected, None, **local_flow)
     if backward is None or status is None:
         return None
     errors = np.linalg.norm((backward - original)[:, 0], axis=1)
@@ -274,7 +307,8 @@ def _reanchor(seed_image, current, original, matrix, settings, flow, size):
     projected = original[:, 0] @ refined[:, :2].T + refined[:, 2]
     residual = np.linalg.norm(projected - current_points[:, 0], axis=1)
     return refined, original[inliers], current_points[inliers], {
-        'seed_reanchored': True, 'seed_reanchor_inliers': int(inliers.sum()),
+        'seed_reanchored': True, 'refinement_pyramid_levels': 0,
+        'refinement_support': 'fresh_original_seed_features', 'seed_reanchor_inliers': int(inliers.sum()),
         'seed_reanchor_inlier_ratio': float(inliers.mean()),
         'seed_reanchor_reprojection_median_px': float(np.median(residual[inliers])),
         'seed_reanchor_reprojection_p90_px': float(np.percentile(residual[inliers], 90)),
@@ -380,7 +414,9 @@ def _track_element(frames, stamps, element, cuts, settings, size):
                             if matrix is not None and accepted is not None and np.isfinite(matrix).all():
                                 inliers = accepted.ravel().astype(bool)
                                 fraction = float(inliers.mean())
-                                coverage = _hull_area(original[inliers, 0]) / initial_hull
+                                support_ok, support_metrics = _visible_support(points, original[inliers], matrix, size, initial_hull, settings)
+                                coverage = support_metrics['seed_feature_hull_coverage']
+                                diagnostics.update(support_metrics)
                                 diagnostics.update(inlier_count=int(inliers.sum()), inlier_ratio=fraction,
                                     seed_feature_hull_coverage=coverage)
                                 if inliers.any():
@@ -389,8 +425,9 @@ def _track_element(frames, stamps, element, cuts, settings, size):
                                     diagnostics['reprojection_error_median_px'] = float(np.median(residual[inliers]))
                                     diagnostics['reprojection_error_p90_px'] = float(np.percentile(residual[inliers], 90))
                                 reason = 'insufficient_ransac_support'
-                                if inliers.sum() >= settings['min_points'] and fraction >= settings['min_inlier_ratio'] and coverage >= settings['min_spatial_coverage']:
-                                    refined = _reanchor(frames[seed], current, original[inliers], matrix,
+                                if inliers.sum() >= settings['min_points'] and fraction >= settings['min_inlier_ratio'] and support_ok:
+                                    # Re-use original seed texture; do not permanently shrink the pool.
+                                    refined = _reanchor(frames[seed], current, points, matrix,
                                         settings, flow, size)
                                     if refined is None:
                                         samples[index] = _missing(index, stamps[index], segment(index),
@@ -399,8 +436,9 @@ def _track_element(frames, stamps, element, cuts, settings, size):
                                         continue
                                     matrix, original, following, refinement = refined
                                     diagnostics.update(refinement)
-                                    diagnostics['seed_feature_hull_coverage'] = _hull_area(original[:, 0]) / initial_hull
-                                    if diagnostics['seed_feature_hull_coverage'] < settings['min_spatial_coverage']:
+                                    support_ok, support_metrics = _visible_support(points, original, matrix, size, initial_hull, settings)
+                                    diagnostics.update(support_metrics)
+                                    if not support_ok:
                                         samples[index] = _missing(index, stamps[index], segment(index),
                                             'insufficient_reanchored_spatial_support', diagnostics)
                                         failure = index
@@ -481,3 +519,4 @@ def measure_video(video_path, spec):
                 'Tracking stops after loss or declared cuts; missing samples require a new seed.',
                 'RANSAC support and LK errors are not calibrated confidence probabilities.',
             ]}}
+
