@@ -27,6 +27,10 @@ Os serviços externos continuam exigindo adaptador ou retorno manual. Um pedido 
 
 A [validação das conexões](docs/validation-clone-project.md) registra o gate desta etapa: 538 testes e 57 subtestes passaram, além da demonstração local de três clipes com duas transições e duração final medida. As simulações de provider permanecem identificadas.
 
+## Biblioteca inteligente no Studio
+
+O **Editor Ultra Studio** analisa uma referência, registra receitas reutilizáveis e sugere aplicações por trecho sobre outra filmagem. O fluxo inclui transição por flash, legenda cinética e cartão flutuante 3D com câmera resolvida e oclusão supervisionada. A escolha feita no chat chega à prévia e ao MP4 com recibos vinculados aos arquivos. [Guia do Studio e do MCP](docs/effect-library-workflow.md)
+
 ## Direção contextual de novos vídeos
 
 O fluxo padrão para escolher efeitos em um novo bruto é `python -m visual_fidelity contextual-edit`. Ele prepara quadros reais, fala e recibos de rastreamento; recebe direção explícita de uma pessoa, do agente no host ou de um modelo multimodal configurado; concilia propostas e executa as operações viáveis. Cada decisão guarda intenção, evidência, intervalo, efeito, âncora, parâmetros e justificativa. Eventos sem decisão bloqueiam o render; preservar também exige justificativa explícita.

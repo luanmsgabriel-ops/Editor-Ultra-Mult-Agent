@@ -353,7 +353,10 @@ class EngineAdapter:
             current = item["binding"] == self._stage_binding(record, stage)
             public_engines[stage] = {"current": current, "status": item.get("status", "prepared") if current else "stale",
                                      "preview_kind": "reference_study" if stage == "clone" else stage}
+        from .effect_workflow import snapshot as effect_snapshot
+
         return {"project_id": record["project_id"], "revision": record["revision"], "state": state,
+                "effect_workflow": effect_snapshot(record),
                 "engine": public_engines, "approval": approvals,
                 "motion_measurements": [self._motion_public(record, item)
                                         for item in record.get("motion_measurements", [])[-20:]],

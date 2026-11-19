@@ -26,7 +26,7 @@ import uuid
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, ImageContent, ResourceLink, TextContent, ToolAnnotations
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from starlette.requests import ClientDisconnect, Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
@@ -36,6 +36,7 @@ from editorial_engine.contracts import ValidationError
 from . import __version__
 from .auth import OwnerAuthGuard, OwnerOAuthProvider
 from .catalog import Catalog
+from .effect_workflow import EffectCommand, execute as execute_effect, library as effect_library
 from .engine import EngineAdapter, MotionMeasurementSpecification, MOTION_LIMITS, stored_bytes
 from .jobs import JobQueue
 from .media import MAX_FILE_BYTES, PreviewSigner, download_attachment
@@ -43,8 +44,8 @@ from .upload_tickets import TICKET_TTL_SECONDS, UploadBinding, UploadTicketError
 from .videoapi import BASE_URL as VIDEOAPI_BASE, VideoAPIClient, VideoAPIJobs, VideoAPIError, build_payload
 
 
-UI_URI = "ui://editor-ultra/studio-v9.html"
-UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in (1, 2, 3, 4, 5, 6, 7, 8))
+UI_URI = "ui://editor-ultra/studio-v10.html"
+UI_ALIASES = tuple(f"ui://editor-ultra/studio-v{version}.html" for version in range(1, 10))
 BRAND_MARK_PATH = "/brand/e-mark-v1.png"
 ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$"
 UPLOAD_HEADERS = {
@@ -111,6 +112,16 @@ class UIVideoAPIGeneration(BaseModel):
     reference_asset_ids: list[str] = Field(default_factory=list, max_length=3)
 
 
+class UIEffectCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ui_action: Literal["effect_workflow"]
+    request_id: str = Field(min_length=8, max_length=120)
+    command: EffectCommand
+
+
+effect_command_adapter = TypeAdapter(EffectCommand)
+
+
 class UIVideoAPICommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ui_action: Literal["videoapi_generate"]
@@ -154,6 +165,11 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
             raise UploadTicketError("revision_conflict", "O projeto mudou. Atualize o painel antes de repetir a ação.", 409)
 
     def execute(job):
+        if job["operation"] == "effect_workflow":
+            command = effect_command_adapter.validate_python(job["command"])
+            if command.action in {"analyze", "publish", "render"}:
+                space_for(48 * 1024 * 1024)
+            return execute_effect(engine, job["project_id"], command, job["expected_revision"])
         with lock:
             project_id = job["project_id"]
             revision(project_id, job["expected_revision"])
@@ -294,6 +310,11 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                       "a direção criativa deve ser autorada no host, depois importada com editor_apply_direction. "
                       "Execute editor_render somente após um plano atual válido. Consulte editor_get_project "
                       "para trabalhos e pendências. "
+                      "Para aprender efeitos de uma referência e editar outro bruto, use editor_effect_workflow. "
+                      "Pesquise referências na web pelo host quando solicitado, registre o link como origem e importe o vídeo autorizado pelo fluxo de anexos. "
+                      "Analise ref/footage, inspecione as evidências, confirme o cadastro das receitas com o usuário, liste e sugira efeitos por trecho. "
+                      "A escolha no chat registra select antes de render. Mostre a prévia e peça conferência da oclusão. "
+                      "Se a câmera não resolver, sinalize a pendência; peça calibração ou uma escolha explícita de outro efeito. "
                       "Use editor_measure_motion com asset_id e janelas/ROIs explícitas para medir movimento; "
                       "o resultado é evidência por elemento, ainda sem aplicar motion ou aprovar render. "
                       "Não chame um pedido ou teste técnico de clonagem pronta, "
@@ -385,6 +406,18 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
         O comando state.ui_action='begin_upload', com upload_request estrito,
         apenas autoriza o envio direto e não salva escolhas ou revisões.
         """
+        if state.get("ui_action") == "effect_library":
+            if set(state) - {"ui_action", "query"}:
+                raise ValueError("Consulta ao catálogo de efeitos inválida.")
+            query = state.get("query", "")
+            if not isinstance(query, str) or len(query) > 160:
+                raise ValueError("Busca inválida.")
+            return result({"effect_library": effect_library(engine, query)}, "Biblioteca de efeitos consultada.")
+        if state.get("ui_action") == "effect_workflow":
+            request = UIEffectCommand.model_validate(state)
+            if not project_id or expected_revision is None:
+                raise ValueError("Informe o projeto e sua revisão atual.")
+            return enqueue_effect(project_id, expected_revision, request.request_id, request.command)
         if state.get("ui_action") == "videoapi_account":
             if set(state) != {"ui_action"}:
                 raise ValueError("Comando de consulta VIDEOAPI inválido.")
@@ -469,6 +502,28 @@ def create_app(*, data_dir: Path | None = None, base_url: str | None = None,
                 space_for(MOTION_LIMITS["max_artifact_bytes"])
             job = queue.enqueue(project_id, operation, arguments, request_id)
             return result(job, "Trabalho registrado. Consulte o projeto para acompanhar a execução e o resultado.")
+
+    def enqueue_effect(project_id, expected_revision, request_id, command):
+        return enqueue(project_id, "effect_workflow", command.action, expected_revision, request_id,
+                       command=command.model_dump(mode="json", exclude_none=True))
+
+    @server.tool(annotations=read, meta=widget)
+    @offload
+    def editor_list_effects(query: Annotated[str, Field(max_length=160)] = "",
+                            include_versions: bool = False) -> CallToolResult:
+        """Consulta os efeitos executáveis da biblioteca privada e seus vídeos de demonstração."""
+        return result({"effect_library": effect_library(engine, query, latest=not include_versions)},
+                      "Biblioteca de efeitos consultada.")
+
+    @server.tool(annotations=write, meta=widget)
+    @offload
+    def editor_effect_workflow(project_id: str, expected_revision: int, request_id: str,
+                               command: EffectCommand) -> CallToolResult:
+        """Analisa arquivos, cadastra efeitos confirmados, sugere por trecho, registra escolhas e renderiza.
+        Use ações analyze, publish, suggest, select, remove, render e review. Intervalos usam quadro inicial
+        inclusivo e quadro final exclusivo da fonte. Use editor_get_project para o resultado e arquivos.
+        """
+        return enqueue_effect(project_id, expected_revision, request_id, command)
 
     @server.tool(annotations=read, meta=widget)
     @offload
