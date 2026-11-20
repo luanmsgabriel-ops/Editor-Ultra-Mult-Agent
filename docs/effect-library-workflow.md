@@ -46,3 +46,25 @@ python -m pytest -q tests/test_effect_workflow.py
 ```
 
 A prova autenticada usa dois arquivos sintéticos. Mede motion da referência, publica três receitas, consulta alternativas, resolve a câmera do bruto, gera a prévia e exporta a edição com áudio. Verifica o recorte e o elemento projetado no MP4 codificado. Uma prova separada resolve uma câmera relativa com paralaxe e verifica a recusa de uma sequência estática.
+
+### Auditoria por cor no MP4 renderizado
+
+Para medir a entrada e a posição de um grafismo de cor conhecida, declare um par de intervalos por efeito. Os limites são quadros no relógio nativo de cada arquivo, com o fim exclusivo. A região de medição usa coordenadas de tela entre zero e um. O seletor `hsv` usa a escala do OpenCV, e `min_area` expressa a fração mínima da tela inteira para considerar o grafismo visível.
+
+```json
+{"effects": [{
+  "id": "titulo",
+  "hsv": [[80, 120, 75], [100, 255, 255]],
+  "min_area": 0.0015,
+  "reference": {"frames": [16, 81], "roi": [0.2, 0.25, 0.8, 0.38]},
+  "render": {"frames": [10, 39], "roi": [0.08, 0.26, 0.92, 0.4]}
+}]}
+```
+
+```bash
+python -m visual_fidelity effect-pixel-audit referencia.mp4 render.mp4 intervalos.json auditoria.json
+```
+
+Use `--clean-render-source bruto.mp4` quando o bruto e a saída compartilham enquadramento, escala, relógio e posição em todos os quadros medidos. Esse filtro elimina pixels do cenário que já tinham a cor selecionada. Se a câmera foi recomposta, use uma renderização idêntica com o efeito oculto ou uma região isolada da composição. Em cada lado, `"mask": "mascaras/{frame:06d}.png"` aceita máscaras por quadro, na resolução exibida do vídeo, relativas ao JSON. O valor 255 inclui o pixel.
+
+A auditoria mede área de tela, centroide, início de visibilidade e fração do intervalo em que o efeito falta ou excede a referência. Ela compara a fase linear dos dois intervalos sem mover os cortes automaticamente. Detecção no primeiro quadro do intervalo indica que o efeito já pode ter começado antes. Confira os resultados de cor contra os quadros. Fonte, contorno, sombras, volume e identidade do objeto exigem evidência visual separada.

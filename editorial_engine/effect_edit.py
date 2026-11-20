@@ -216,15 +216,42 @@ def _world_layer(art, track, frame, canvas, opacity, motion=(0., 0., 1., 0.)):
         raise ValueError("O elemento 3D saiu do campo renderizável.")
     if not np.all((quad >= -.10) & (quad <= 1.1)):
         raise ValueError("A âncora escolhida recorta o elemento 3D durante o trecho.")
-    layer = np.zeros((canvas[1], canvas[0], 4), np.uint8)
-    for side in range(4):
-        after = (side + 1) % 4
-        corners = np.rint(np.array([quad[side], quad[after], back[after], back[side]]) * canvas).astype(np.int32)
-        cv2.fillConvexPoly(layer, corners, (66, 75, 103, round(opacity * 235)), lineType=cv2.LINE_AA)
-    face = render_portal_frame(art, quad, canvas, mapping="projective", opacity=opacity)
-    alpha = face[:, :, 3] > 0
-    layer[alpha] = face[alpha]
-    return layer
+    if not 0 <= opacity <= 1:
+        raise ValueError("A opacidade do elemento 3D deve ficar entre 0 e 1.")
+    if opacity == 0:
+        return render_portal_frame(art, quad, canvas, mapping="projective", opacity=0)
+    face = render_portal_frame(art, quad, canvas, mapping="projective")
+    # Sample the swept alpha silhouette from face to back. Its variation along
+    # a ray gives wall coverage, including the inside edges of holes.
+    front_px, back_px = np.asarray([quad, back]) * canvas - .5
+    corners = np.concatenate([front_px, back_px])
+    lower = np.maximum(np.floor(corners.min(axis=0)).astype(int) - 1, 0)
+    upper = np.minimum(np.ceil(corners.max(axis=0)).astype(int) + 2, canvas)
+    if np.all(upper > lower):
+        x0, y0 = lower
+        x1, y1 = upper
+        target = face[y0:y1, x0:x1]
+        texture_h, texture_w = art.shape[:2]
+        uv = np.float32([[0, 0], [texture_w, 0], [texture_w, texture_h], [0, texture_h]]) - .5
+        minimum = target[:, :, 3].copy()
+        maximum = minimum.copy()
+        travel = np.linalg.norm(back_px - front_px, axis=1).max()
+        steps = min(128, max(1, math.ceil(travel)))
+        for step in range(1, steps + 1):
+            depth = (step / steps) * h * .26
+            section = project(np.asarray(front) + forward * depth, camera)
+            points = (section * canvas - .5 - lower).astype(np.float32)
+            warp = cv2.getPerspectiveTransform(uv, points)
+            coverage = cv2.warpPerspective(art[:, :, 3], warp, (int(x1 - x0), int(y1 - y0)))
+            np.minimum(minimum, coverage, out=minimum)
+            np.maximum(maximum, coverage, out=maximum)
+        sides = np.empty_like(target)
+        sides[:, :, :3] = (66, 75, 103)
+        sides[:, :, 3] = np.rint((maximum - minimum) * (235 / 255)).astype(np.uint8)
+        target[:] = np.asarray(Image.alpha_composite(Image.fromarray(sides), Image.fromarray(target)))
+        target[target[:, :, 3] == 0] = 0
+    face[:, :, 3] = np.rint(face[:, :, 3] * opacity).astype(np.uint8)
+    return face
 
 
 def _seed(frame, polygon):

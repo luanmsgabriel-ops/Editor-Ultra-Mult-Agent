@@ -87,3 +87,24 @@ Um teste automatizado aprova comportamento técnico, não semelhança. `implemen
 Registre cada novo defeito com timecode, causa, componente genérico, configuração local, teste de regressão e evidência exportada. Se um ajuste só existe no script privado, o aprendizado ainda não foi incorporado ao motor. Publique código/documentação no branch do motor, inclua a revisão no projeto e atualize este catálogo.
 
 Fontes técnicas: [Pillow — métricas e kerning](https://pillow.readthedocs.io/en/stable/reference/ImageFont.html), [Blender 4.3 — Principled BSDF](https://docs.blender.org/manual/en/4.3/render/shader_nodes/shader/principled.html), [Adobe — CC Light Sweep](https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/cycore-plugins.html). O efeito CPU implementa composição própria; não executa After Effects.
+
+## Revisão de títulos, números e placas em novos brutos
+
+A auditoria por cor compara a região de um efeito em quadros decodificados de
+dois vídeos em seus respectivos relógios. O guia contém o formato das regiões,
+dos intervalos e das placas limpas. Execute
+`python -m visual_fidelity effect-pixel-audit --help` e consulte
+[as instruções de medição](../docs/effect-library-workflow.md).
+
+| Falha observada | Componente e evidência |
+|---|---|
+| Título no alto do quadro, com entrada e espaçamento diferentes | `glyph_reveal.measure_title` e `BoundTitle` transpõem centro, dispersão e proporção observados. `traced_spacing` ajusta avanços e componentes acentuados depois da substituição de contornos. Teste em `test_glyph_reveal.py`. |
+| Faixa de preço opaca esconde a superfície e perde contraste | `numeral_stage.glass_numeral` usa máscara de glifo e amostras de material. `composite_surface` compõe somente no suporte indicado. Teste em `test_numeral_stage.py`. |
+| A placa deriva apesar de uma reprojeção interna pequena | `spatial_cards.composite_cards` ordena placas, projeta volume e registra a âncora por uma observação independente do fundo. Teste em `test_spatial_cards.py`. |
+| A extrusão pinta pixels transparentes da frente | O compositor 3D do Studio preserva a silhueta alfa. `test_world_card_alpha.py` inclui cantos e furos transparentes. |
+| O anel perde a trajetória e o fechamento revela todas as letras de uma vez | `chroma_reveal.cyan_coverage` separa um acento ciano em fundo neutro. `illuminated_reveal` percorre a máscara da palavra com luz e margem difusa. Teste em `test_chroma_reveal.py`. |
+
+As medidas de cor descrevem só o efeito e o intervalo escolhidos. Para adaptar
+esta composição, o editor fornece os vínculos por tomada, a arte de substituição
+e as máscaras de primeiro plano. O Studio utiliza o compositor 3D corrigido.
+As rotinas de composição adicionais estão disponíveis pela API Python.
